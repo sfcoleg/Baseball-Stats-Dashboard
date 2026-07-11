@@ -56,6 +56,11 @@ def color_for_abbr(abbr: str) -> str:
     return _COLOR_BY_ABBR.get(abbr, "#666666")
 
 
+def all_teams() -> list[tuple[str, str]]:
+    """All 30 teams as (abbreviation, nickname) pairs, sorted by abbreviation."""
+    return sorted(((info[0], info[1]) for info in _BY_CITY_LEAGUE.values()), key=lambda t: t[0])
+
+
 def add_team_abbr(df, tm_col="Tm", lev_col="Lev", out_col="Tm"):
     """Return a copy of df with `out_col` replaced by the disambiguated
     team abbreviation (uses Lev to resolve shared cities like New York)."""
