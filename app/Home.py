@@ -156,8 +156,8 @@ with tcol2:
 st.divider()
 
 style.colored_header("Batting Leaders (min 50 PA)", "batting")
-st.caption(f"Top 100 of {len(qualified_batters)} qualified batters by OPS — see the Batting page for the full filterable list.")
-batting_display = teams.add_team_abbr(qualified_batters.head(100))[
+st.caption(f"Top 50 of {len(qualified_batters)} qualified batters by OPS — see the Batting page for the full filterable list.")
+batting_display = teams.add_team_abbr(qualified_batters.head(50))[
     ["Name", "Age", "Tm", "G", "PA", "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"]
 ].reset_index(drop=True)
 st.dataframe(
@@ -173,8 +173,8 @@ st.dataframe(
 )
 
 style.colored_header("Pitching Leaders (min 20 IP)", "pitching")
-st.caption(f"Top 100 of {len(qualified_pitchers)} qualified pitchers by ERA — see the Pitching page for the full filterable list.")
-pitching_display = teams.add_team_abbr(qualified_pitchers.head(100))[
+st.caption(f"Top 50 of {len(qualified_pitchers)} qualified pitchers by ERA — see the Pitching page for the full filterable list.")
+pitching_display = teams.add_team_abbr(qualified_pitchers.head(50))[
     ["Name", "Age", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO"]
 ].reset_index(drop=True)
 st.dataframe(

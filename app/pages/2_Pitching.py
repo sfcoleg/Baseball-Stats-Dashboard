@@ -38,7 +38,7 @@ ascending = sort_by in ("ERA", "FIP", "WHIP")
 filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
 
 max_rows = st.slider(
-    "Max rows shown in tables below", 25, max(len(filtered), 25), min(150, max(len(filtered), 25)),
+    "Max rows shown in tables below", 25, max(len(filtered), 25), min(75, max(len(filtered), 25)),
     help="Lower this if the dashboard is crashing — rendering large tables is the most memory-intensive thing this app does.",
 )
 table_rows = filtered.head(max_rows)
