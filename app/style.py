@@ -146,21 +146,30 @@ def style_comparison(df, higher_better=None, lower_better=None):
     return df.style.apply(highlight_row, axis=1).format(_fmt_compare_value, na_rep="—")
 
 
+def _hex_to_rgba(hex_color: str, alpha: float) -> str:
+    """Plotly's color validator rejects 8-digit hex (hex + alpha suffix) in
+    some versions — convert to an explicit rgba() string instead, which is
+    always accepted."""
+    hex_color = hex_color.lstrip("#")
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
 def radar_chart(categories, values_a, values_b, name_a, name_b, color_a="#4C9F70", color_b="#3B82F6"):
     """Percentile radar (0-100 scale) comparing two players across `categories`."""
     theta = categories + [categories[0]]
     fig = go.Figure()
     fig.add_trace(go.Scatterpolar(
         r=values_a + [values_a[0]], theta=theta, fill="toself", name=name_a,
-        line_color=color_a, fillcolor=f"{color_a}33",
+        line_color=color_a, fillcolor=_hex_to_rgba(color_a, 0.2),
     ))
     fig.add_trace(go.Scatterpolar(
         r=values_b + [values_b[0]], theta=theta, fill="toself", name=name_b,
-        line_color=color_b, fillcolor=f"{color_b}33",
+        line_color=color_b, fillcolor=_hex_to_rgba(color_b, 0.2),
     ))
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0, 100], color="#FAFAFA", gridcolor="#4A526633"),
+            radialaxis=dict(visible=True, range=[0, 100], color="#FAFAFA", gridcolor=_hex_to_rgba("#4A5266", 0.2)),
             angularaxis=dict(color="#FAFAFA"),
             bgcolor="rgba(0,0,0,0)",
         ),
