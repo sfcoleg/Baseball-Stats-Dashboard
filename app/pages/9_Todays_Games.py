@@ -103,3 +103,25 @@ for _, row in games.iterrows():
 
         if not pred:
             st.caption("Not enough season data yet to generate a prediction for this game.")
+
+        started = row["status"] not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
+        if started:
+            box_key = f"show_box_{row['game_pk']}"
+            if st.button("Show box score", key=f"btn_{row['game_pk']}"):
+                st.session_state[box_key] = not st.session_state.get(box_key, False)
+            if st.session_state.get(box_key):
+                linescore = db.load_linescore(row["game_pk"])
+                if not linescore or "innings" not in linescore:
+                    st.caption("Box score not available yet.")
+                else:
+                    innings = linescore["innings"]
+                    inning_cols = {f"{i['num']}": {"Away": i.get("away", {}).get("runs"), "Home": i.get("home", {}).get("runs")} for i in innings}
+                    box_df = pd.DataFrame(inning_cols).T.rename_axis("Inning").reset_index()
+                    totals = linescore.get("teams", {})
+                    totals_row = {
+                        "Inning": "R/H/E",
+                        "Away": f"{totals.get('away', {}).get('runs', '—')}/{totals.get('away', {}).get('hits', '—')}/{totals.get('away', {}).get('errors', '—')}",
+                        "Home": f"{totals.get('home', {}).get('runs', '—')}/{totals.get('home', {}).get('hits', '—')}/{totals.get('home', {}).get('errors', '—')}",
+                    }
+                    box_df = pd.concat([box_df, pd.DataFrame([totals_row])], ignore_index=True)
+                    st.dataframe(box_df, use_container_width=True, hide_index=True)

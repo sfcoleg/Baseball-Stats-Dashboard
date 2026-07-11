@@ -4,6 +4,7 @@ import unicodedata
 from pathlib import Path
 
 import pandas as pd
+import requests
 import streamlit as st
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
@@ -230,6 +231,51 @@ def load_todays_games(db_mtime_val: float) -> pd.DataFrame:
             return pd.read_sql("SELECT * FROM todays_games", conn)
         except pd.errors.DatabaseError:
             return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, ttl=60, max_entries=20)
+def load_linescore(game_pk) -> dict | None:
+    """Live per-inning box score for one game, fetched on demand (not part
+    of the daily ingest — there's no reason to pre-fetch a box score for
+    every game when only a couple ever get clicked into). Short TTL so an
+    in-progress game's score doesn't go stale for the rest of the session."""
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{int(game_pk)}/linescore", timeout=10)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return None
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_standings(db_mtime_val: float) -> pd.DataFrame:
+    """Current MLB standings from the Stats API (current standings only,
+    not historical — replaced in full on every ingest run)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM standings", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_prediction_history(db_mtime_val: float) -> pd.DataFrame:
+    """Every prediction this app has made for a real game, append-only, with
+    actual_winner/scores/correct filled in once the game finishes (see
+    resolve_pending_predictions() in ingest). Powers the Prediction Accuracy
+    page's track record."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM prediction_history ORDER BY date DESC", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+    # SQLite's boolean-ish `correct = (a = b)` expression comes back as a
+    # string dtype via pandas' Arrow-backed reader — coerce to numeric so
+    # .mean()/aggregate work; NaN (unresolved games) is preserved.
+    for col in ("correct", "away_score", "home_score", "predicted_home_prob"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+    return df
 
 
 # Home teams win ~54% of MLB games historically — this constant folds that
