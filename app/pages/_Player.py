@@ -6,12 +6,10 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
-import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Player | Sabermetrics Dashboard", layout="wide")
-sidebar.render_search()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

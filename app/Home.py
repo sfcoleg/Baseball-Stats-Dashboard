@@ -8,12 +8,10 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent))
 import db
-import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
-sidebar.render_search()
 
 st.title("Sabermetrics Dashboard")
 

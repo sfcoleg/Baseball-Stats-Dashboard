@@ -6,12 +6,10 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
-import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Pitching | Sabermetrics Dashboard", layout="wide")
-sidebar.render_search()
 st.title("Pitching Stats")
 
 if not db.DB_PATH.exists():

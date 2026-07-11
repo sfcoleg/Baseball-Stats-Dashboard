@@ -6,10 +6,10 @@ A Streamlit dashboard for MLB batting/pitching/fielding stats and sabermetrics, 
 
 ```bash
 cd "Sabermetrics Dashboard"
-./venv/bin/streamlit run app/Home.py
+./venv/bin/streamlit run app/main.py
 ```
 
-Opens at `http://localhost:8501`. Streamlit auto-discovers pages in `app/pages/` (numbered prefixes control sidebar order).
+Opens at `http://localhost:8501`. **`app/main.py` is the entry point, not `Home.py`.** It uses `st.navigation()`/`st.Page()` (not Streamlit's classic `pages/`-folder auto-discovery) so it can render the sidebar search box above the page nav and hide the `_Player.py` page from the nav entirely — see "Navigation (`app/main.py`)" below. The Streamlit Community Cloud "Main file path" setting must also point at `app/main.py`.
 
 **Refresh data manually:**
 ```bash
@@ -26,13 +26,14 @@ This also runs automatically every day at 6am via a `launchd` job (`~/Library/La
 **The file watcher is disabled**, so Streamlit does NOT auto-reload on code changes. After editing any `app/*.py` file, you must manually restart the server:
 ```bash
 pkill -f "streamlit run"
-cd "Sabermetrics Dashboard" && ./venv/bin/streamlit run app/Home.py --server.headless true --server.port 8501 > /tmp/streamlit.log 2>&1 &
+cd "Sabermetrics Dashboard" && ./venv/bin/streamlit run app/main.py --server.headless true --server.port 8501 > /tmp/streamlit.log 2>&1 &
 ```
 
 ## Project structure
 
 ```
 app/
+  main.py           # ACTUAL entry point (run via `streamlit run app/main.py`) — see "Navigation" below
   Home.py           # Landing page: milestones, headliner cards, HR chart, team snapshot, leaderboards
   db.py             # All SQLite reads, caching (st.cache_data), search, percentile helpers, prediction model
   sidebar.py         # Persistent player-search box shown in the sidebar on every page (see below)
@@ -50,11 +51,10 @@ app/
     9_Standings.py        # Current MLB division standings (MLB Stats API)
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
-                     # navigated to via st.switch_page("pages/_Player.py"). Still shows up in the sidebar
-                     # nav as "Player" (Streamlit does NOT hide underscore-prefixed pages from nav in this
-                     # version, despite older docs/folklore suggesting it does) — it just sorts last, which
-                     # is an acceptable place for it. Visiting it directly with no prior search shows a
-                     # "use the sidebar search" prompt instead of erroring.
+                     # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar
+                     # nav (see "Navigation" below) — it's registered as a valid destination but has no
+                     # page_link, so it's reachable only via the search box. Visiting it directly with no
+                     # prior search shows a "use the sidebar search" prompt instead of erroring.
 ingest/
   refresh_data.py   # Pulls all data from pybaseball + MLB Stats API, computes sabermetrics, writes to data/stats.db
 data/
@@ -64,17 +64,17 @@ data/
   refresh.log        # launchd job output
 ```
 
+## Navigation (`app/main.py`)
+
+`app/main.py` is the real entry point (`streamlit run app/main.py`), not the classic `pages/`-folder auto-discovery. It uses `st.navigation()`/`st.Page()` with `position="hidden"` (suppresses Streamlit's own auto-rendered nav menu) and then hand-builds the sidebar with `st.sidebar.page_link()` calls, in this order: `sidebar.render_search()` first, then a divider, then one `page_link` per page. This was the only way to get both of these at once — Streamlit's auto-rendered menu (classic system or `st.navigation(position="sidebar")`) always claims the top of the sidebar regardless of script call order:
+1. **Search box above the page nav.**
+2. **`_Player.py` hidden from the nav.** It's still included in the `PAGES` list passed to `st.navigation()` (so it's a valid, routable destination for `st.switch_page`), but the `page_link` loop skips it, so no clickable link is ever rendered for it.
+
+Each individual page script (`Home.py`, everything in `pages/`) still calls its own `st.set_page_config(...)` for its browser-tab title — this doesn't conflict with the one `main.py` also calls. If you add a new page, add it to the `PAGES` list in `main.py` (plus a `page_link` line unless you want it hidden like `_Player.py`) — adding a file to `app/pages/` alone does nothing now, since auto-discovery is off.
+
 ## Sidebar search (`app/sidebar.py`)
 
-Player search is NOT a dedicated page — every page calls `sidebar.render_search()` right after `st.set_page_config()`, which renders a persistent search box in the sidebar (below the page nav). Typing a query shows up to 8 matching players as buttons; clicking one sets `st.session_state["selected_mlbID"]`/`["selected_name"]`/`["selected_season"]` and calls `st.switch_page("pages/_Player.py")` to show the profile. When adding a new page, copy this exact pattern from any existing page:
-```python
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-import db
-import sidebar
-...
-st.set_page_config(page_title="... | Sabermetrics Dashboard", layout="wide")
-sidebar.render_search()
-```
+Player search is NOT a dedicated page — `sidebar.render_search()` is called once, in `app/main.py`, before the nav links are built (see above), so the persistent search box renders at the very top of the sidebar on every page. Typing a query shows up to 8 matching players as buttons; clicking one sets `st.session_state["selected_mlbID"]`/`["selected_name"]`/`["selected_season"]` and calls `st.switch_page("pages/_Player.py")` to show the profile. Individual page scripts do NOT call `render_search()` themselves anymore — only `main.py` does.
 
 ## Data pipeline (`ingest/refresh_data.py`)
 

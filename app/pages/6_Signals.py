@@ -5,12 +5,10 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
-import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Signals | Sabermetrics Dashboard", layout="wide")
-sidebar.render_search()
 st.title("Breakout & Regression Signals")
 st.caption(
     "Compares actual results against quality-of-contact/skill indicators (xwOBA for hitters, "
