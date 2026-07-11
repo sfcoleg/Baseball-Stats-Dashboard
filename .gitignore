@@ -1,0 +1,7 @@
+venv/
+venv-py314-backup/
+__pycache__/
+*.pyc
+.DS_Store
+data/refresh.log
+.claude/
