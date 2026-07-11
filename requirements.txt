@@ -2,3 +2,4 @@ pybaseball
 pandas
 streamlit
 plotly
+requests

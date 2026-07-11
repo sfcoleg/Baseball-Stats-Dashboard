@@ -1,0 +1,35 @@
+name: Daily data refresh
+
+on:
+  schedule:
+    # 11:00 UTC ≈ 6-7am US Eastern depending on daylight saving.
+    # Adjust the hour below if you want a different local time.
+    - cron: "0 11 * * *"
+  workflow_dispatch: {}  # lets you trigger a refresh manually from the Actions tab
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run ingest
+        run: python ingest/refresh_data.py
+
+      - name: Commit updated data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/stats.db
+          git diff --cached --quiet || git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
+          git push
