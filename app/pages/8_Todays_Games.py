@@ -34,6 +34,10 @@ if games.empty:
 
 season = db.get_seasons("batting")[0]
 pitching = db.load_pitching(season, mtime)
+live_scores = db.load_live_scores(games.iloc[0]["date"])
+if st.button("Refresh live scores"):
+    db.load_live_scores.clear()
+    st.rerun()
 
 _ABBR_FIX = {"AZ": "ARI"}
 
@@ -52,6 +56,9 @@ def pitcher_era(mlbID):
 for _, row in games.iterrows():
     pred = db.predict_game(row, pitching)
     away_color, home_color = team_color(row["away_abbr"]), team_color(row["home_abbr"])
+    live = live_scores.get(row["game_pk"], {})
+    status = live.get("status") or row["status"]
+    started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
 
     with st.container(border=True):
         acol, mid, hcol = st.columns([3, 2, 3])
@@ -77,11 +84,30 @@ for _, row in games.iterrows():
                 )
 
         with mid:
-            st.markdown(
-                f"<div style='text-align:center;color:#9AA3B5;padding-top:8px'>@</div>",
-                unsafe_allow_html=True,
-            )
-            st.caption(f"Status: {row['status']}")
+            if started and live.get("away_score") is not None and live.get("home_score") is not None:
+                st.markdown(
+                    f"<div style='text-align:center;font-size:1.8rem;font-weight:700'>"
+                    f"{int(live['away_score'])} - {int(live['home_score'])}</div>",
+                    unsafe_allow_html=True,
+                )
+            else:
+                st.markdown(
+                    "<div style='text-align:center;color:#9AA3B5;padding-top:8px'>@</div>",
+                    unsafe_allow_html=True,
+                )
+            status_line = status
+            if status == "In Progress" and live.get("inning"):
+                status_line = live["inning"]
+            st.caption(f"<div style='text-align:center'>{status_line}</div>", unsafe_allow_html=True)
+            if row.get("venue"):
+                st.caption(f"<div style='text-align:center'>{row['venue']}</div>", unsafe_allow_html=True)
+
+            if started:
+                box_key = f"show_box_{row['game_pk']}"
+                is_shown = st.session_state.get(box_key, False)
+                if st.button("Hide box score" if is_shown else "Show box score", key=f"btn_{row['game_pk']}", use_container_width=True):
+                    st.session_state[box_key] = not is_shown
+                    st.rerun()
 
         with hcol:
             st.markdown(
@@ -106,24 +132,19 @@ for _, row in games.iterrows():
         if not pred:
             st.caption("Not enough season data yet to generate a prediction for this game.")
 
-        started = row["status"] not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
-        if started:
-            box_key = f"show_box_{row['game_pk']}"
-            if st.button("Show box score", key=f"btn_{row['game_pk']}"):
-                st.session_state[box_key] = not st.session_state.get(box_key, False)
-            if st.session_state.get(box_key):
-                linescore = db.load_linescore(row["game_pk"])
-                if not linescore or "innings" not in linescore:
-                    st.caption("Box score not available yet.")
-                else:
-                    innings = linescore["innings"]
-                    inning_cols = {f"{i['num']}": {"Away": i.get("away", {}).get("runs"), "Home": i.get("home", {}).get("runs")} for i in innings}
-                    box_df = pd.DataFrame(inning_cols).T.rename_axis("Inning").reset_index()
-                    totals = linescore.get("teams", {})
-                    totals_row = {
-                        "Inning": "R/H/E",
-                        "Away": f"{totals.get('away', {}).get('runs', '—')}/{totals.get('away', {}).get('hits', '—')}/{totals.get('away', {}).get('errors', '—')}",
-                        "Home": f"{totals.get('home', {}).get('runs', '—')}/{totals.get('home', {}).get('hits', '—')}/{totals.get('home', {}).get('errors', '—')}",
-                    }
-                    box_df = pd.concat([box_df, pd.DataFrame([totals_row])], ignore_index=True)
-                    st.dataframe(box_df, use_container_width=True, hide_index=True)
+        if started and st.session_state.get(f"show_box_{row['game_pk']}", False):
+            linescore = db.load_linescore(row["game_pk"])
+            if not linescore or "innings" not in linescore:
+                st.caption("Box score not available yet.")
+            else:
+                innings = linescore["innings"]
+                inning_cols = {f"{i['num']}": {"Away": i.get("away", {}).get("runs"), "Home": i.get("home", {}).get("runs")} for i in innings}
+                box_df = pd.DataFrame(inning_cols).T.rename_axis("Inning").reset_index()
+                totals = linescore.get("teams", {})
+                totals_row = {
+                    "Inning": "R/H/E",
+                    "Away": f"{totals.get('away', {}).get('runs', '—')}/{totals.get('away', {}).get('hits', '—')}/{totals.get('away', {}).get('errors', '—')}",
+                    "Home": f"{totals.get('home', {}).get('runs', '—')}/{totals.get('home', {}).get('hits', '—')}/{totals.get('home', {}).get('errors', '—')}",
+                }
+                box_df = pd.concat([box_df, pd.DataFrame([totals_row])], ignore_index=True)
+                st.dataframe(box_df, use_container_width=True, hide_index=True)

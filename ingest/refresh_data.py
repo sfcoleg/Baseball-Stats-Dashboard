@@ -34,12 +34,9 @@ from pybaseball import (
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
 CURRENT_SEASON = date.today().year
 
-# Reuse the exact same prediction math the Today's Games page uses, rather
-# than duplicating it — db.py's pure functions (log5/moneyline/predict_game)
-# work fine outside a running Streamlit app, just log a harmless "no runtime
-# found" notice from the @st.cache_data decorators.
+# app/teams.py's nickname->abbreviation lookup, reused here so standings
+# rows get a team_abbr without duplicating the mapping.
 sys.path.append(str(Path(__file__).resolve().parent.parent / "app"))
-import db as app_db  # noqa: E402
 import teams as app_teams  # noqa: E402
 
 # MLB Stats API division IDs -> readable names (not included as a plain
@@ -266,7 +263,7 @@ def fetch_todays_games():
     page's win predictions."""
     today = date.today().isoformat()
     columns = [
-        "date", "game_pk", "game_time", "status",
+        "date", "game_pk", "game_time", "status", "venue",
         "away_team", "away_abbr", "away_wins", "away_losses", "away_pitcher_name", "away_pitcher_mlbID",
         "home_team", "home_abbr", "home_wins", "home_losses", "home_pitcher_name", "home_pitcher_mlbID",
     ]
@@ -274,7 +271,7 @@ def fetch_todays_games():
     try:
         resp = requests.get(
             "https://statsapi.mlb.com/api/v1/schedule",
-            params={"sportId": 1, "date": today, "hydrate": "probablePitcher,team"},
+            params={"sportId": 1, "date": today, "hydrate": "probablePitcher,team,venue"},
             timeout=15,
         )
         resp.raise_for_status()
@@ -298,6 +295,7 @@ def fetch_todays_games():
             "game_pk": g.get("gamePk"),
             "game_time": g.get("gameDate"),
             "status": g.get("status", {}).get("detailedState"),
+            "venue": g.get("venue", {}).get("name"),
             "away_team": away["team"]["name"],
             "away_abbr": away["team"]["abbreviation"],
             "away_wins": away.get("leagueRecord", {}).get("wins"),
@@ -355,80 +353,6 @@ def fetch_standings():
                 "div_rank": tr.get("divisionRank"),
             })
     return pd.DataFrame(rows)
-
-
-def compute_predictions_for_games(games_df, pitching_df):
-    """Predicts each of today's games using the exact same model as the
-    Today's Games page (db.predict_game), and returns rows ready for
-    prediction_history. This is where we 'lock in' a prediction for the
-    record — resolve_pending_predictions() checks it against the real
-    result later, once the game is Final."""
-    if games_df.empty:
-        return pd.DataFrame()
-    rows = []
-    for _, row in games_df.iterrows():
-        pred = app_db.predict_game(row, pitching_df)
-        if pred is None:
-            continue
-        rows.append({
-            "date": row["date"],
-            "game_pk": row["game_pk"],
-            "away_team": row["away_team"],
-            "away_abbr": row["away_abbr"],
-            "home_team": row["home_team"],
-            "home_abbr": row["home_abbr"],
-            "predicted_home_prob": float(pred["home_prob"]),
-            "predicted_winner": "home" if pred["home_prob"] >= 0.5 else "away",
-            "actual_winner": None,
-            "away_score": None,
-            "home_score": None,
-            "correct": None,
-        })
-    return pd.DataFrame(rows)
-
-
-def resolve_pending_predictions(conn):
-    """For any predictions still waiting on a result, re-check that game's
-    date on the schedule API and fill in the actual outcome once it's Final.
-    Only looks at dates that actually have unresolved predictions, so this
-    stays cheap even as prediction_history grows."""
-    try:
-        pending_dates = pd.read_sql(
-            "SELECT DISTINCT date FROM prediction_history WHERE actual_winner IS NULL", conn
-        )["date"].tolist()
-    except (sqlite3.OperationalError, pd.errors.DatabaseError):
-        return
-    if not pending_dates:
-        return
-
-    print(f"Resolving pending predictions for {len(pending_dates)} date(s)...")
-    for date_str in pending_dates:
-        try:
-            resp = requests.get(
-                "https://statsapi.mlb.com/api/v1/schedule",
-                params={"sportId": 1, "date": date_str},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            dates = resp.json().get("dates", [])
-            games = dates[0].get("games", []) if dates else []
-        except Exception as e:
-            print(f"  couldn't check {date_str}: {e}")
-            continue
-
-        for g in games:
-            if g.get("status", {}).get("detailedState") != "Final":
-                continue
-            away, home = g["teams"]["away"], g["teams"]["home"]
-            away_score, home_score = away.get("score"), home.get("score")
-            if away_score is None or home_score is None:
-                continue
-            actual_winner = "home" if home.get("isWinner") else "away"
-            conn.execute(
-                "UPDATE prediction_history SET actual_winner = ?, away_score = ?, home_score = ?, "
-                "correct = (predicted_winner = ?) WHERE game_pk = ? AND actual_winner IS NULL",
-                (actual_winner, away_score, home_score, actual_winner, g.get("gamePk")),
-            )
 
 
 def build_player_history(batting, pitching, recent_batting, recent_pitching):
@@ -502,7 +426,6 @@ def fetch_and_store():
     recent_pitching = fetch_recent_pitching()
     todays_games = fetch_todays_games()
     standings = fetch_standings()
-    predictions = compute_predictions_for_games(todays_games, pitching)
     history = build_player_history(batting, pitching, recent_batting, recent_pitching)
 
     conn = sqlite3.connect(DB_PATH)
@@ -530,21 +453,6 @@ def fetch_and_store():
         todays_games.to_sql("todays_games", conn, if_exists="replace", index=False)
         standings.to_sql("standings", conn, if_exists="replace", index=False)
 
-        # Resolve any past predictions that now have a final result FIRST,
-        # then only insert genuinely new games — never delete-and-reinsert
-        # today's rows, since that would wipe out the actual_winner/score
-        # values resolve_pending_predictions() may have just written for
-        # games from today's date that already finished.
-        resolve_pending_predictions(conn)
-        if not predictions.empty:
-            try:
-                existing_pks = pd.read_sql("SELECT game_pk FROM prediction_history", conn)["game_pk"].tolist()
-            except (sqlite3.OperationalError, pd.errors.DatabaseError):
-                existing_pks = []
-            new_predictions = predictions[~predictions["game_pk"].isin(existing_pks)]
-            if not new_predictions.empty:
-                new_predictions.to_sql("prediction_history", conn, if_exists="append", index=False)
-
         # player_history is append-only (not replaced) so it builds up real
         # day-over-day history; clear today's rows first so re-running the
         # script the same day doesn't create duplicates.
@@ -565,8 +473,7 @@ def fetch_and_store():
         f"Saved {len(batting)} batters, {len(pitching)} pitchers, "
         f"{len(fielding)} fielders, {len(recent_batting)} recent-batting rows, "
         f"{len(recent_pitching)} recent-pitching rows, {len(history)} history rows, "
-        f"{len(todays_games)} today's games, {len(standings)} standings rows, "
-        f"{len(predictions)} new predictions to {DB_PATH}"
+        f"{len(todays_games)} today's games, {len(standings)} standings rows to {DB_PATH}"
     )
 
 

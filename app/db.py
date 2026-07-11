@@ -233,6 +233,43 @@ def load_todays_games(db_mtime_val: float) -> pd.DataFrame:
             return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, ttl=20, max_entries=2)
+def load_live_scores(date_str: str) -> dict:
+    """Live current score + inning state for every game on `date_str`, keyed
+    by game_pk — a single schedule API call (hydrate=linescore), separate
+    from the daily-ingested todays_games table (which only ever has each
+    game's pre-game state: records, probable pitcher). Short TTL so scores
+    actually move as games progress, without hitting the API on literally
+    every script rerun."""
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "date": date_str, "hydrate": "linescore"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        dates = resp.json().get("dates", [])
+        games = dates[0].get("games", []) if dates else []
+    except Exception:
+        return {}
+
+    scores = {}
+    for g in games:
+        away, home = g["teams"]["away"], g["teams"]["home"]
+        linescore = g.get("linescore") or {}
+        inning_text = None
+        if linescore.get("currentInningOrdinal"):
+            half = "Top" if linescore.get("isTopInning") else "Bottom"
+            inning_text = f"{half} {linescore['currentInningOrdinal']}"
+        scores[g.get("gamePk")] = {
+            "away_score": away.get("score"),
+            "home_score": home.get("score"),
+            "status": g.get("status", {}).get("detailedState"),
+            "inning": inning_text,
+        }
+    return scores
+
+
 @st.cache_data(show_spinner=False, ttl=60, max_entries=20)
 def load_linescore(game_pk) -> dict | None:
     """Live per-inning box score for one game, fetched on demand (not part
@@ -256,26 +293,6 @@ def load_standings(db_mtime_val: float) -> pd.DataFrame:
             return pd.read_sql("SELECT * FROM standings", conn)
         except pd.errors.DatabaseError:
             return pd.DataFrame()
-
-
-@st.cache_data(show_spinner=False, max_entries=2)
-def load_prediction_history(db_mtime_val: float) -> pd.DataFrame:
-    """Every prediction this app has made for a real game, append-only, with
-    actual_winner/scores/correct filled in once the game finishes (see
-    resolve_pending_predictions() in ingest). Powers the Prediction Accuracy
-    page's track record."""
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            df = pd.read_sql("SELECT * FROM prediction_history ORDER BY date DESC", conn)
-        except pd.errors.DatabaseError:
-            return pd.DataFrame()
-    # SQLite's boolean-ish `correct = (a = b)` expression comes back as a
-    # string dtype via pandas' Arrow-backed reader — coerce to numeric so
-    # .mean()/aggregate work; NaN (unresolved games) is preserved.
-    for col in ("correct", "away_score", "home_score", "predicted_home_prob"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
 
 
 # Home teams win ~54% of MLB games historically — this constant folds that
