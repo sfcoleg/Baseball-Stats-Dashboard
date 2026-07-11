@@ -33,26 +33,48 @@ cd "Sabermetrics Dashboard" && ./venv/bin/streamlit run app/Home.py --server.hea
 
 ```
 app/
-  Home.py           # Landing page: headliner cards, HR chart, batting/pitching leaderboards
-  db.py             # All SQLite reads, caching (st.cache_data), search, percentile helpers
-  style.py          # pandas Styler helpers: color-graded tables, team badges, comparison highlighting, colored section headers
+  Home.py           # Landing page: milestones, headliner cards, HR chart, team snapshot, leaderboards
+  db.py             # All SQLite reads, caching (st.cache_data), search, percentile helpers, prediction model
+  sidebar.py         # Persistent player-search box shown in the sidebar on every page (see below)
+  style.py          # pandas Styler helpers: color-graded tables, team/milestone/radar-chart widgets, colored section headers
   teams.py          # Team abbreviation/color lookup (disambiguates shared cities like NY/Chicago/LA via the Lev column)
   pages/
-    1_Batting.py    # Filterable batting leaderboard (Standard/Advanced/Statcast tabs)
+    1_Batting.py    # Filterable batting leaderboard (Standard/Advanced/Statcast/Chart Explorer tabs)
     2_Pitching.py   # Filterable pitching leaderboard (same tab structure)
     3_Fielding.py   # Outs Above Average (OAA) leaderboard
-    4_Search.py     # Player search -> full stat profile, season trend, projections, streaks
+    4_Team.py       # Full batting/pitching/fielding roster for one team+season
     5_Compare.py    # Side-by-side two-player comparison with winner highlighting + percentile radar chart
     6_Signals.py    # Breakout/regression flags (xwOBA-wOBA gap for batters, ERA-FIP gap for pitchers)
-    8_Custom_Rankings.py  # Slider-weighted z-score composite leaderboard (page number kept for sidebar order; 7_Watchlist.py was removed)
-    9_Todays_Games.py     # Today's schedule + our own Log5-based win predictions/odds (MLB Stats API, not pybaseball)
+    7_Custom_Rankings.py  # Slider-weighted z-score composite leaderboard
+    8_Todays_Games.py     # Today's schedule + our own Log5-based win predictions/odds + on-demand box scores
+    9_Standings.py        # Current MLB division standings (MLB Stats API)
+    10_Prediction_Accuracy.py  # Track record for this app's own predictions vs. actual results
+    _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
+                     # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
+                     # navigated to via st.switch_page("pages/_Player.py"). Still shows up in the sidebar
+                     # nav as "Player" (Streamlit does NOT hide underscore-prefixed pages from nav in this
+                     # version, despite older docs/folklore suggesting it does) — it just sorts last, which
+                     # is an acceptable place for it. Visiting it directly with no prior search shows a
+                     # "use the sidebar search" prompt instead of erroring.
 ingest/
   refresh_data.py   # Pulls all data from pybaseball + MLB Stats API, computes sabermetrics, writes to data/stats.db
 data/
   stats.db          # SQLite cache: batting, pitching, fielding (multi-season, keyed by `season`),
-                     # recent_batting, recent_pitching, todays_games (current-day only, replaced daily),
-                     # player_history (append-only)
+                     # recent_batting, recent_pitching, todays_games, standings (current-day only, replaced daily),
+                     # player_history (append-only), prediction_history (append-only, see below)
   refresh.log        # launchd job output
+```
+
+## Sidebar search (`app/sidebar.py`)
+
+Player search is NOT a dedicated page — every page calls `sidebar.render_search()` right after `st.set_page_config()`, which renders a persistent search box in the sidebar (below the page nav). Typing a query shows up to 8 matching players as buttons; clicking one sets `st.session_state["selected_mlbID"]`/`["selected_name"]`/`["selected_season"]` and calls `st.switch_page("pages/_Player.py")` to show the profile. When adding a new page, copy this exact pattern from any existing page:
+```python
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+import db
+import sidebar
+...
+st.set_page_config(page_title="... | Sabermetrics Dashboard", layout="wide")
+sidebar.render_search()
 ```
 
 ## Data pipeline (`ingest/refresh_data.py`)
@@ -63,6 +85,8 @@ data/
 - **Recent-performance windows** (`recent_batting` / `recent_pitching` tables): date-range pulls via `batting_stats_range` / `pitching_stats_range` for yesterday / last 7 days / last 30 days, feeding the Home page's "Headliners" cards. Day-window batting ranks by **Total Bases**, not OPS (single-game OPS is noise); week/month rank by OPS. Day-window pitching ranks by **Game Score**; week/month by ERA with a minimum-IP bar.
 - **`player_history`**: the only **append-only** table (all others use `if_exists="replace"` each run). One row per player per day: season-to-date OPS/ERA (powers the Search page's trend chart) plus `day_PA`/`day_H`/`day_IP`/`day_ER` — that single day's line, reused from the recent-performance fetch rather than a new network call (powers hit-streak / scoreless-streak tracking; a day with no game has these as null, which streak logic treats as "skip," not "streak broken"). Today's rows are deleted-then-reinserted first so re-running the script same-day doesn't duplicate. Only has data from whenever each feature shipped onward — no historical backfill. If you add columns to this table later, add a schema-migration check in `fetch_and_store()` (drop-and-recreate if an old copy lacks the new column) since `to_sql(if_exists="append")` requires an exact column match. When querying it with a raw SQL param, always cast `mlbID` to `int()` first — pandas hands back `numpy.int32`, and sqlite3 silently returns zero rows (no error) if you bind that directly instead of a native Python int.
 - **`todays_games`**: fetched from the free public **MLB Stats API** (`statsapi.mlb.com`, no key needed) — the only data source in this app that isn't pybaseball/Baseball-Reference/Statcast. Full replace every run (today's schedule only, not historical); an off day correctly produces an empty table rather than stale games from a prior day. Powers the Today's Games page: `db.predict_game()` computes a win probability via the Log5 method on team win% + a home-field-advantage constant + a starting-pitcher ERA adjustment (using the same cached `pitching` table everything else uses). These are estimates calculated by this app, not real sportsbook odds — no betting-odds API is involved.
+- **`standings`**: also MLB Stats API, current division standings, full replace every run. Division IDs aren't returned as plain strings by the API — `DIVISION_NAMES` in `refresh_data.py` hardcodes the id->name mapping.
+- **`prediction_history`**: append-only track record for this app's own predictions (Prediction Accuracy page). `compute_predictions_for_games()` locks in a prediction for each of today's games using `db.predict_game()` (same model as Today's Games) the first time that `game_pk` is seen — **never** delete-and-reinsert by date here, only insert genuinely new `game_pk`s, or you'll wipe out `actual_winner`/scores that `resolve_pending_predictions()` already wrote for finished games sharing that date (this was a real bug caught during development). `resolve_pending_predictions()` re-checks the schedule for any date with unresolved rows and fills in `actual_winner`/scores/`correct` once a game goes Final. Box scores on the Today's Games page are a separate thing — `db.load_linescore()` is a live, on-demand fetch (button-gated, short TTL cache) not part of the daily ingest, since pre-fetching a box score for every game when only a couple ever get viewed would be wasted work.
 - **Multi-season data**: `batting`/`pitching`/`fielding` are keyed by `season` and written via DELETE-then-append per season (`_store_season_table()`), not a full-table replace — so backfilling historical seasons doesn't wipe the current one. Daily refresh only ever touches `CURRENT_SEASON`; add a historical year with `./venv/bin/python ingest/refresh_data.py --backfill <year>`, one year per invocation (deliberately not batched, to keep peak memory the same as a normal daily run on a memory-constrained machine — see "Known issues"). `recent_batting`/`recent_pitching`/`player_history`/`todays_games` are current-day/current-season concepts only and aren't backfilled.
 - **Known data quirks handled in ingest**: Baseball-Reference leaves W/L/SV blank (not 0) for pitchers with none — filled to 0. Accented names (Acuña, Hernández) and escaped apostrophes (d'Arnaud) sometimes arrive as literal escape text from bref's scraper — fixed via `fix_mojibake_names`. MLB Stats API uses team abbreviation `AZ`; every other source in this app (including `teams.py`) uses `ARI` — remap before doing a color/abbreviation lookup (see `_ABBR_FIX` in `9_Todays_Games.py`).
 
@@ -74,6 +98,8 @@ data/
 - Section headers use `style.colored_header(text, category)` for the colored left-accent bars, not `st.subheader`.
 - No emojis in UI text (explicit user preference).
 - No custom fonts (explicit user preference, as of the last styling pass) — theme customization is limited to colors and `baseRadius`.
+- SQLite boolean-ish expressions (e.g. `correct = (predicted_winner = ?)`) come back through pandas as a **string** dtype, not numeric — `.mean()`/aggregation silently breaks. Coerce with `pd.to_numeric(..., errors="coerce")` after reading (see `load_prediction_history()`).
+- Plotly on the pinned version here rejects 8-digit hex colors (hex + alpha suffix, e.g. `"#4C9F7033"`) — valid CSS, invalid Plotly `fillcolor`/`gridcolor`. Use `style._hex_to_rgba()` instead of string-concatenating an alpha suffix onto a hex color for any Plotly chart.
 
 ## Known issues
 

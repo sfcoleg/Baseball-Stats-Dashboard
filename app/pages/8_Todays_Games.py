@@ -6,10 +6,12 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Today's Games | Sabermetrics Dashboard", layout="wide")
+sidebar.render_search()
 st.title("Today's Games")
 st.caption(
     "Win probabilities and odds are calculated by this dashboard — not real sportsbook lines. "

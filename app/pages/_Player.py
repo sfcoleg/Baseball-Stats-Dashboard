@@ -6,44 +6,39 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import sidebar
 import style
 import teams
 
-st.set_page_config(page_title="Search | Sabermetrics Dashboard", layout="wide")
-st.title("Player Search")
+st.set_page_config(page_title="Player | Sabermetrics Dashboard", layout="wide")
+sidebar.render_search()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
 
+if "selected_mlbID" not in st.session_state:
+    st.title("Player Profile")
+    st.info("Use the search box in the sidebar to find a player.")
+    st.stop()
+
+mlbID = st.session_state["selected_mlbID"]
 mtime = db.db_mtime()
-seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=0)
+season = st.session_state.get("selected_season") or db.get_seasons("batting")[0]
 
-query = st.text_input("Search for a player", placeholder="e.g. Ohtani, Acuña, Judge")
-
-if not query.strip():
-    st.info("Start typing a player's name to search.")
-    st.stop()
-
-with st.spinner("Searching..."):
-    matches = db.search_players(query, season, mtime)
-
-if matches.empty:
-    st.warning(f"No players found matching '{query}'.")
-    st.stop()
-
-if len(matches) == 1:
-    selected = matches.iloc[0]
-else:
-    options = [f"{row.Name} ({row.Tm}) — {row.roles}" for row in matches.itertuples()]
-    choice = st.selectbox(f"{len(matches)} players match — pick one", options)
-    selected = matches.iloc[options.index(choice)]
-
-mlbID = selected["mlbID"]
 batting = db.get_player_batting(mlbID, season, mtime)
 pitching = db.get_player_pitching(mlbID, season, mtime)
 fielding = db.get_player_fielding(mlbID, season, mtime)
+
+if batting is None and pitching is None and fielding.empty:
+    st.title("Player Profile")
+    st.info("No stats found for this player in the selected season.")
+    st.stop()
+
+selected_name = st.session_state.get("selected_name", "")
+selected_roles = " / ".join(
+    role for role, present in [("Batter", batting is not None), ("Pitcher", pitching is not None)] if present
+)
 
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
@@ -56,8 +51,12 @@ team_row = batting if batting is not None else pitching
 if team_row is not None:
     abbr, nickname, color = teams.team_meta_from_city(team_row["Tm"], team_row.get("Lev"))
     age = team_row["Age"]
+elif not fielding.empty:
+    abbr, color = teams.team_meta_from_nickname(fielding.iloc[0]["Tm"])
+    nickname = fielding.iloc[0]["Tm"]
+    age = "—"
 else:
-    abbr, nickname, color = "—", selected["Tm"], "#666666"
+    abbr, nickname, color = "—", "Unknown", "#666666"
     age = "—"
 
 photo_col, header_col = st.columns([1, 6])
@@ -65,12 +64,12 @@ with photo_col:
     st.image(style.headshot_url(mlbID, width=180), width=120)
 with header_col:
     st.markdown(
-        f"# {selected['Name']} "
+        f"# {selected_name} "
         f"<span style='background-color:{color}66;color:#FAFAFA;padding:4px 12px;"
         f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>",
         unsafe_allow_html=True,
     )
-    st.caption(f"{nickname} · Age {age} · {selected['roles']}")
+    st.caption(f"{nickname} · Age {age} · {selected_roles}")
 
 history = db.load_player_history(mlbID, season, mtime)
 streak_badges = []
@@ -232,7 +231,7 @@ if batting is not None or pitching is not None:
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             font_color="#FAFAFA", showlegend=False,
         )
-        st.caption(f"Orange line = {selected['Name']}'s OPS against all qualified batters.")
+        st.caption(f"Orange line = {selected_name}'s OPS against all qualified batters.")
         st.plotly_chart(fig, use_container_width=True)
     if pitching is not None:
         dist_df = qualified_pitching.dropna(subset=["ERA"])
@@ -243,7 +242,7 @@ if batting is not None or pitching is not None:
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             font_color="#FAFAFA", showlegend=False,
         )
-        st.caption(f"Blue line = {selected['Name']}'s ERA against all qualified pitchers.")
+        st.caption(f"Blue line = {selected_name}'s ERA against all qualified pitchers.")
         st.plotly_chart(fig, use_container_width=True)
 
 if batting is None and pitching is None and fielding.empty:

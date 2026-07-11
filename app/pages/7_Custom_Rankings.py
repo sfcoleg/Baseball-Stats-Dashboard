@@ -6,10 +6,12 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import sidebar
 import style
 import teams
 
 st.set_page_config(page_title="Custom Rankings | Sabermetrics Dashboard", layout="wide")
+sidebar.render_search()
 st.title("Custom Rankings")
 st.caption(
     "Build your own leaderboard by weighting the stats you care about. Each stat is converted to a "

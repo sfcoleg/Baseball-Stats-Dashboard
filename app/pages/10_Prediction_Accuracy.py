@@ -6,9 +6,11 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import sidebar
 import style
 
 st.set_page_config(page_title="Prediction Accuracy | Sabermetrics Dashboard", layout="wide")
+sidebar.render_search()
 st.title("Prediction Accuracy")
 st.caption(
     "Track record for this dashboard's own Log5-based win predictions (see the Today's Games page). "
