@@ -143,14 +143,9 @@ for _, row in games.iterrows():
             if not linescore or "innings" not in linescore:
                 st.caption("Box score not available yet.")
             else:
-                innings = linescore["innings"]
-                inning_cols = {f"{i['num']}": {"Away": i.get("away", {}).get("runs"), "Home": i.get("home", {}).get("runs")} for i in innings}
-                box_df = pd.DataFrame(inning_cols).T.rename_axis("Inning").reset_index()
-                totals = linescore.get("teams", {})
-                totals_row = {
-                    "Inning": "R/H/E",
-                    "Away": f"{totals.get('away', {}).get('runs', '—')}/{totals.get('away', {}).get('hits', '—')}/{totals.get('away', {}).get('errors', '—')}",
-                    "Home": f"{totals.get('home', {}).get('runs', '—')}/{totals.get('home', {}).get('hits', '—')}/{totals.get('home', {}).get('errors', '—')}",
-                }
-                box_df = pd.concat([box_df, pd.DataFrame([totals_row])], ignore_index=True)
-                st.dataframe(box_df, use_container_width=True, hide_index=True)
+                st.markdown(
+                    style.box_score_table(
+                        linescore, row["away_abbr"], row["home_abbr"], away_color, home_color,
+                    ),
+                    unsafe_allow_html=True,
+                )

@@ -80,6 +80,55 @@ def milestone_card(mlbID, name, team_abbr, team_color, text):
     )
 
 
+def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> str:
+    """Traditional scoreboard-style box score: one row per team, one column
+    per inning, R/H/E totals set off with a heavier left border — the same
+    layout as the scoreboard at an actual ballpark, rather than a plain
+    innings-as-rows dataframe."""
+    innings = linescore.get("innings", [])
+    totals = linescore.get("teams", {})
+    away_totals, home_totals = totals.get("away", {}), totals.get("home", {})
+
+    def inning_cell(inning, side):
+        val = inning.get(side, {}).get("runs")
+        return "X" if val is None else str(int(val))
+
+    def team_row(abbr, color, side, side_totals):
+        cells = "".join(
+            f"<td style='padding:5px 12px;text-align:center;font-variant-numeric:tabular-nums'>{inning_cell(i, side)}</td>"
+            for i in innings
+        )
+        totals_cells = "".join(
+            f"<td style='padding:5px 14px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;"
+            f"{'border-left:2px solid #4A5266;' if stat == 'runs' else ''}'>{side_totals.get(stat, '—')}</td>"
+            for stat in ("runs", "hits", "errors")
+        )
+        return (
+            "<tr style='border-top:1px solid #4A5266'>"
+            f"<td style='padding:5px 10px;white-space:nowrap'><span style='background-color:{color}66;"
+            f"color:#FAFAFA;padding:2px 9px;border-radius:6px;font-weight:700'>{abbr}</span></td>"
+            f"{cells}{totals_cells}</tr>"
+        )
+
+    inning_headers = "".join(
+        f"<th style='padding:5px 12px;text-align:center;color:#9AA3B5;font-weight:600'>{i['num']}</th>"
+        for i in innings
+    )
+    totals_headers = "".join(
+        f"<th style='padding:5px 14px;text-align:center;color:#9AA3B5;font-weight:600;"
+        f"{'border-left:2px solid #4A5266;' if h == 'R' else ''}'>{h}</th>"
+        for h in ("R", "H", "E")
+    )
+    return (
+        "<table style='width:100%;border-collapse:collapse'>"
+        f"<thead><tr><th style='padding:5px 10px'></th>{inning_headers}{totals_headers}</tr></thead>"
+        "<tbody>"
+        f"{team_row(away_abbr, away_color, 'away', away_totals)}"
+        f"{team_row(home_abbr, home_color, 'home', home_totals)}"
+        "</tbody></table>"
+    )
+
+
 def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
                        team_color_fn=None, team_abbr_fn=None, precision=None):
     """Return a pandas Styler for st.dataframe with:
