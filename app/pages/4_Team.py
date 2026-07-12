@@ -91,6 +91,14 @@ if team_batting.empty and team_pitching.empty and team_fielding.empty:
 
 team_id = teams.team_id_for_abbr(selected_abbr)
 starters = db.load_depth_chart(team_id) if team_id else {}
+if "RP" not in starters:
+    # No CP listed on the live depth chart — common for a team using a
+    # closer-by-committee rather than one set closer. Fall back to this
+    # season's highest-IP reliever (GS == 0) so the RP slot isn't just blank.
+    bullpen = team_pitching[team_pitching["GS"] == 0]
+    if not bullpen.empty:
+        top_rp = bullpen.sort_values("IP", ascending=False).iloc[0]
+        starters["RP"] = {"name": top_rp["Name"], "mlbID": top_rp["mlbID"]}
 if starters:
     style.colored_header("Starting Lineup", "fielding")
     st.caption("Current depth-chart starter at each position, from the MLB Stats API — not specific to the selected season.")
