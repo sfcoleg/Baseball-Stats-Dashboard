@@ -60,22 +60,22 @@ def headliner_card(label, name, team_abbr, team_color, stat_line):
 
 
 def milestone_card(mlbID, name, team_abbr, team_color, text):
-    """Photo + name + team badge + achievement text, for the Home page's
-    Milestones section. Call inside a `with col:` block, same pattern as
-    headliner_card."""
-    st.image(headshot_url(mlbID, width=180), width=110)
+    """Photo on the left, name/badge + the achievement stacked to its
+    right, for the Home page's Milestones section."""
     st.markdown(
-        f"<div style='font-size:1.2rem;font-weight:700;line-height:1.3;"
-        f"overflow-wrap:break-word'>{name} "
+        f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+        f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
+        f"border-radius:10px;object-fit:cover;flex-shrink:0' />"
+        f"<div style='flex:1;min-width:0'>"
+        f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
-        f"</div>",
-        unsafe_allow_html=True,
-    )
-    st.markdown(
+        f"</div>"
         f"<div style='margin-top:6px;'><span style='background-color:#3B4A8244;"
         f"color:#B9C4FF;padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
-        f"{text}</span></div>",
+        f"{text}</span></div>"
+        f"</div>"
+        f"</div>",
         unsafe_allow_html=True,
     )
 
