@@ -66,7 +66,7 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption("ISO = isolated power. BABIP = batting avg on balls in play. K%/BB% = strikeout/walk rate. wOBA = weighted on-base average.")
+    st.caption("ISO = isolated power. BABIP = batting avg on balls in play. wOBA = weighted on-base average.")
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA"]
     ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%"})
@@ -84,7 +84,7 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    st.caption("Exit velocity and barrel rate from Statcast (Baseball Savant). xBA/xSLG = expected stats based on quality of contact.")
+    st.caption("Exit velocity and barrel rate from Statcast. xBA/xSLG = expected stats based on contact quality.")
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct", "xBA", "xSLG"]
     ].rename(columns={

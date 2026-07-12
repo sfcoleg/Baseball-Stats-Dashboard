@@ -12,16 +12,7 @@ import teams
 
 st.set_page_config(page_title="Baserunning | Sabermetrics Dashboard", layout="wide")
 st.title("Baserunning Stats")
-st.caption(
-    "SB/CS are from Baseball-Reference. Sprint Speed (feet per second in a player's fastest "
-    "one-second window), Home-to-1st time, and Baserunning Runs are from Statcast — not every "
-    "player has enough qualifying opportunities to have these on file, especially early in a "
-    "season. Baserunning Runs (BsR) is Statcast's estimate of runs added on the bases beyond "
-    "stealing — taking extra bases on hits, tagging up, avoiding double plays — above what an "
-    "average runner would produce in the same situations; 0 is average, positive is a net asset. "
-    "Baseball Savant's BsR leaderboard only serves the current season (no historical query is "
-    "available through it), so it's blank for past seasons here."
-)
+st.caption("BsR = baserunning runs above average. Sprint Speed/BsR are current-season only.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

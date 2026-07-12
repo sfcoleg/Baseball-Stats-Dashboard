@@ -23,9 +23,8 @@ current_season = available_seasons[0]  # most recent season = the one recent_bat
 
 _COMPOSITE_COLORS = {"all": "#0C2340", "month": "#E3572A"}
 _COMPOSITE_CAPTIONS = {
-    "all": f"Best qualified player at each position across all 30 teams, full-season stats "
-           f"(min {db._COMPOSITE_MIN_PA} PA / {db._COMPOSITE_MIN_IP} IP for starters, {db._COMPOSITE_MIN_RP_IP} IP for relievers).",
-    "month": "Best performer at each position over the trailing 30 days (min PA/IP same as the Home page's \"Hot This Month\" cards).",
+    "all": "Best qualified player at each position across all 30 teams, full-season stats.",
+    "month": "Best performer at each position over the trailing 30 days.",
 }
 
 _COMPOSITE_SCOPES = {"All MLB Team": "all"}
@@ -101,7 +100,7 @@ if "RP" not in starters:
         starters["RP"] = {"name": top_rp["Name"], "mlbID": top_rp["mlbID"]}
 if starters:
     style.colored_header("Starting Lineup", "fielding")
-    st.caption("Current depth-chart starter at each position, from the MLB Stats API — not specific to the selected season.")
+    st.caption("Current depth-chart starter at each position.")
     st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
 
 style.colored_header("Batting", "batting")

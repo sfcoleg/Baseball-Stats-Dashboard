@@ -66,13 +66,7 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption(
-        "FIP = fielding-independent pitching (ERA-scale, strips out defense/luck). K/9, BB/9 = "
-        "per-9-inning rates. K/BB = strikeout-to-walk ratio. BAbip = opponent batting average on "
-        "balls in play (a hitter-independent luck signal, same idea as a batter's own BABIP — high "
-        "value often means bad luck/defense rather than getting hit hard). GB/FB = ground ball to "
-        "fly ball ratio (higher = more of a groundball pitcher, generally allows fewer home runs)."
-    )
+    st.caption("FIP = fielding-independent pitching. BAbip = opponent BABIP. GB/FB = groundball/flyball ratio.")
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB"]
     ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB"})
@@ -90,12 +84,7 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    st.caption(
-        "Contact quality allowed, from Statcast (Baseball Savant). xERA estimates what a pitcher's "
-        "ERA \"should be\" based on the quality of contact allowed (exit velocity, launch angle, "
-        "sprint speed) — the pitching-side counterpart to a batter's xBA/xSLG/xwOBA, and the closest "
-        "thing available here to xFIP/SIERA (those aren't published anywhere this app can pull from)."
-    )
+    st.caption("Contact quality allowed, from Statcast. xERA = expected ERA based on quality of contact.")
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "ERA", "xERA", "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
     ].rename(columns={

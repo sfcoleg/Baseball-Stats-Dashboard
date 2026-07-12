@@ -12,16 +12,7 @@ import teams
 
 st.set_page_config(page_title="Today's Games | Sabermetrics Dashboard", layout="wide")
 st.title("Today's Games")
-st.caption(
-    "Win probabilities and odds are calculated by this dashboard — not real sportsbook lines. "
-    "The model starts from Log5 (each team's season winning percentage) plus a home-field-advantage "
-    "adjustment, then layers on: each probable starter's ERA vs. qualified league-average ERA, each "
-    "team's bullpen ERA vs. league average, each team's lineup wOBA vs. league average, and a platoon-split "
-    "estimate — each lineup's likely handedness mix (from its depth chart) against the opposing starter's "
-    "throwing hand, using the league-average same-handed penalty rather than per-player splits (scraping "
-    "those for every batter in every lineup, every day, isn't practical). There's still no park factors, "
-    "injuries, or weather in this — treat it as a sabermetrics estimate, not a betting recommendation."
-)
+st.caption("Our own win probabilities/odds — not real sportsbook lines. Based on Log5 + starter/bullpen ERA, lineup wOBA, and platoon splits.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

@@ -10,11 +10,7 @@ import teams
 
 st.set_page_config(page_title="Injury Report | Sabermetrics Dashboard", layout="wide")
 st.title("Injury Report")
-st.caption(
-    "Every player currently on a major-league injured list, from the MLB Stats API's 40-man roster "
-    "status codes (7/10/15/60-day IL). Injury descriptions come from matching recent transactions "
-    "when available — a placement older than 45 days may show just the IL tier with no detail."
-)
+st.caption("Every player currently on a major-league injured list.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

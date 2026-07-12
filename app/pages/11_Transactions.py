@@ -9,10 +9,7 @@ import teams
 
 st.set_page_config(page_title="Transactions | Sabermetrics Dashboard", layout="wide")
 st.title("Transactions")
-st.caption(
-    "Recent MLB roster moves — trades, free-agent signings, DFAs, waiver claims, injured-list moves, "
-    "and more — from the MLB Stats API. Handy for keeping an eye on trade deadline activity."
-)
+st.caption("Recent MLB roster moves — trades, signings, DFAs, and more.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

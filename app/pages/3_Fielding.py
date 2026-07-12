@@ -10,11 +10,7 @@ import teams
 
 st.set_page_config(page_title="Fielding | Sabermetrics Dashboard", layout="wide")
 st.title("Fielding Stats")
-st.caption(
-    "Outs Above Average (OAA) is Statcast's range-based defensive metric — "
-    "how many outs a fielder made above/below what an average fielder at "
-    "that position would make. FRP = fielding runs prevented."
-)
+st.caption("OAA = outs above average. FRP = fielding runs prevented.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
