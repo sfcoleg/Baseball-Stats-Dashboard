@@ -56,6 +56,11 @@ app/
     11_Transactions.py    # Recent MLB roster moves (trades, signings, DFAs, IL moves, etc.) from the Stats
                            # API's /transactions endpoint (db.load_transactions()), filterable by lookback
                            # window/type/team — built for keeping an eye on trade deadline activity.
+    12_Prospects.py        # No free Top-100-style prospect rankings exist via the Stats API, so this tracks
+                           # the real thing instead: recent Recalled/Selected transactions (call-ups), plus a
+                           # rookie leaderboard built by cross-referencing the season's batting/pitching pool
+                           # against each player's mlbDebutDate (db.load_player_bio()) to find anyone who
+                           # debuted this season, sorted by debut date then performance.
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar
