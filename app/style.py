@@ -118,12 +118,15 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 
 
 # Field geometry, viewBox 0 0 600 600, home plate at the bottom. Home and 2nd
-# are opposite corners of a square whose diagonal is D=260; the other two
+# are opposite corners of a square whose diagonal is D; the other two
 # corners (1st/3rd) sit at the square's center offset by D/2 each way — NOT
 # D/sqrt(2) (that earlier version put 1st/3rd a full side-length off-center,
-# stretching the shape into a non-square rhombus).
+# stretching the shape into a non-square rhombus). D is smaller than the
+# true home-to-2nd fraction of the field so 2nd base sits lower (closer to
+# home), leaving more outfield room for the dirt cutout at 2nd to flare into
+# without crowding the outfielder cards above it.
 _HOME = (300, 560)
-_D = 260
+_D = 230
 _SECOND = (300, _HOME[1] - _D)
 _FIRST = (_HOME[0] + _D / 2, _HOME[1] - _D / 2)
 _THIRD = (_HOME[0] - _D / 2, _HOME[1] - _D / 2)
@@ -166,7 +169,7 @@ def _rounded_corner_path(points, radii):
 
 # Home/1B/3B corners round modestly; 2nd base — the corner facing the
 # outfield grass — flares out much wider, like a real infield dirt cutout.
-_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radii=[45, 45, 85, 45])
+_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radii=[45, 45, 110, 45])
 
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
 # each card over the field SVG above. Infielders sit on/near their base;
@@ -176,11 +179,11 @@ _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 34),
     ("LF", "LF", 18, 40),
     ("RF", "RF", 82, 40),
-    ("2B", "2B", 61, 61),
-    ("SS", "SS", 39, 61),
-    ("1B", "1B", 75, 73),
-    ("3B", "3B", 25, 73),
-    ("SP", "P", 50, 73),
+    ("2B", "2B", 60, 65),
+    ("SS", "SS", 40, 65),
+    ("1B", "1B", 73, 74),
+    ("3B", "3B", 27, 74),
+    ("SP", "P", 50, 75),
     ("C", "C", 50, 92),
 ]
 
