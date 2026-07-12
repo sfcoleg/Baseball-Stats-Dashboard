@@ -7,6 +7,8 @@ import pandas as pd
 import requests
 import streamlit as st
 
+import teams
+
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
 
 
@@ -314,6 +316,92 @@ def load_depth_chart(team_id: int) -> dict:
         person = entry.get("person", {})
         if person.get("id") and person.get("fullName"):
             starters[pos] = {"name": person["fullName"], "mlbID": person["id"]}
+    return starters
+
+
+# Heuristic proxy for "rookie" — this app has no MLB service-time/PA-IP
+# rookie-eligibility data, so age is what's available. Not an official
+# rookie-status determination.
+_ROOKIE_MAX_AGE = 23
+_COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=5)
+def load_league_catchers(_db_mtime: float) -> pd.DataFrame:
+    """Every team's primary catcher (mlbID/Name/Tm), assembled from each
+    team's live depth chart (see load_depth_chart) — the only source of
+    catcher identity available here, since Statcast Outs Above Average
+    (fielding table, the position source for every other spot) excludes
+    the battery (pitchers/catchers) entirely."""
+    rows = []
+    for abbr, _nickname in teams.all_teams():
+        team_id = teams.team_id_for_abbr(abbr)
+        if not team_id:
+            continue
+        catcher = load_depth_chart(team_id).get("C")
+        if catcher:
+            rows.append({"mlbID": catcher["mlbID"], "Name": catcher["name"], "Tm": abbr})
+    return pd.DataFrame(rows, columns=["mlbID", "Name", "Tm"])
+
+
+def build_composite_team(season: int, mtime: float, scope: str) -> dict:
+    """Best qualified player at each position leaguewide (not tied to one
+    real team), in the same {position: {"name","mlbID","note"}} shape
+    load_depth_chart() returns, ready for style.baseball_diamond().
+
+    scope:
+      "all"    - full-season stats (min 50 PA / 20 IP), no other filter.
+      "rookie" - same, restricted to age <= _ROOKIE_MAX_AGE (see above).
+      "month"  - best performer over the trailing 30 days, from the same
+                 recent_batting/recent_pitching tables and min-PA/IP bars
+                 (RECENT_MIN_PA/RECENT_MIN_IP["month"]) as the Home page's
+                 "Hot This Month" cards.
+    """
+    fielding = load_fielding(season, mtime)[["player_id", "Pos"]].rename(columns={"player_id": "mlbID"})
+
+    if scope == "month":
+        batting = load_recent_batting(season, mtime)
+        batting = batting[(batting["period"] == "month") & (batting["PA"] >= RECENT_MIN_PA["month"])]
+        pitching = load_recent_pitching(season, mtime)
+        pitching = pitching[(pitching["period"] == "month") & (pitching["IP"] >= RECENT_MIN_IP["month"])]
+    else:
+        batting = load_batting(season, mtime)
+        batting = batting[batting["PA"] >= 50]
+        pitching = load_pitching(season, mtime)
+        pitching = pitching[pitching["IP"] >= 20]
+        if scope == "rookie":
+            batting = batting[batting["Age"] <= _ROOKIE_MAX_AGE]
+            pitching = pitching[pitching["Age"] <= _ROOKIE_MAX_AGE]
+
+    starters = {}
+
+    fielders = batting.merge(fielding, on="mlbID", how="inner")
+    for pos in _COMPOSITE_FIELD_POSITIONS:
+        candidates = fielders[fielders["Pos"] == pos]
+        if not candidates.empty:
+            best = candidates.sort_values("OPS", ascending=False).iloc[0]
+            starters[pos] = {
+                "name": best["Name"], "mlbID": int(best["mlbID"]),
+                "note": f"{best['OPS']:.3f} OPS",
+            }
+
+    catchers = load_league_catchers(mtime)
+    if not catchers.empty and not batting.empty:
+        catcher_stats = batting.merge(catchers[["mlbID"]], on="mlbID", how="inner")
+        if not catcher_stats.empty:
+            best_c = catcher_stats.sort_values("OPS", ascending=False).iloc[0]
+            starters["C"] = {
+                "name": best_c["Name"], "mlbID": int(best_c["mlbID"]),
+                "note": f"{best_c['OPS']:.3f} OPS",
+            }
+
+    if not pitching.empty:
+        best_p = pitching.sort_values("ERA", ascending=True).iloc[0]
+        starters["SP"] = {
+            "name": best_p["Name"], "mlbID": int(best_p["mlbID"]),
+            "note": f"{best_p['ERA']:.2f} ERA",
+        }
+
     return starters
 
 

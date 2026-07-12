@@ -152,14 +152,18 @@ _DIAMOND_PHOTO_SIZE = 56
 
 def baseball_diamond(starters: dict, team_color: str) -> str:
     """HTML+SVG baseball diamond showing each defensive position's current
-    starter (photo + name), from db.load_depth_chart(). `starters` maps a
-    depth-chart position code ("SP", "C", "1B", ...) to {"name", "mlbID"};
-    a position with no data just renders as a "TBD" placeholder card."""
+    starter (photo + name), from db.load_depth_chart() or
+    db.build_composite_team(). `starters` maps a depth-chart position code
+    ("SP", "C", "1B", ...) to {"name", "mlbID"}, plus an optional "note"
+    (e.g. "0.950 OPS") shown under the position label when present — used
+    by composite (rookie/all-MLB/hot-month) teams to show why a player was
+    picked. A position with no data just renders as a "TBD" placeholder card."""
     cards = []
     for key, label, x, y in _DIAMOND_POSITIONS:
         player = starters.get(key)
         if player:
             name = player["name"]
+            note = player.get("note")
             photo_html = (
                 f"<img src='{headshot_url(player['mlbID'], width=120)}' "
                 f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;"
@@ -167,11 +171,16 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             )
         else:
             name = "TBD"
+            note = None
             photo_html = (
                 f"<div style='width:56px;height:56px;border-radius:50%;background:#4A5266;"
                 f"border:2px solid {team_color};display:flex;align-items:center;justify-content:center;"
                 f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
             )
+        note_html = (
+            f"<div style='font-size:0.6rem;color:#F5B942;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{note}</div>"
+            if note else ""
+        )
         cards.append(
             f"<div style='position:absolute;left:{x}%;top:{y}%;"
             f"transform:translate(-50%,-{_DIAMOND_PHOTO_SIZE / 2:.0f}px);"
@@ -180,6 +189,7 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:#FAFAFA;"
             f"text-shadow:0 1px 3px rgba(0,0,0,0.8);overflow-wrap:break-word'>{name}</div>"
             f"<div style='font-size:0.65rem;color:#D8DEE9;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{label}</div>"
+            f"{note_html}"
             f"</div>"
         )
     return (

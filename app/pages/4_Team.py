@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import pandas as pd
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -17,6 +18,39 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 season = st.selectbox("Season", db.get_seasons("batting"), index=0)
+
+view = st.radio(
+    "View", ["Real Team", "All Rookie Team", "All MLB Team", "All Month Team"], horizontal=True,
+)
+
+_COMPOSITE_SCOPES = {"All Rookie Team": "rookie", "All MLB Team": "all", "All Month Team": "month"}
+_COMPOSITE_COLORS = {"rookie": "#4C9F70", "all": "#0C2340", "month": "#E3572A"}
+_COMPOSITE_CAPTIONS = {
+    "rookie": (
+        "Best qualified player 23 or younger at each position, full-season stats (min 50 PA / 20 IP). "
+        "This app has no official MLB service-time data, so \"rookie\" here is an age heuristic, "
+        "not an actual rookie-eligibility ruling."
+    ),
+    "all": "Best qualified player at each position across all 30 teams, full-season stats (min 50 PA / 20 IP).",
+    "month": "Best performer at each position over the trailing 30 days (min 50 PA / 20 IP for the month).",
+}
+
+if view != "Real Team":
+    scope = _COMPOSITE_SCOPES[view]
+    style.colored_header(view, "fielding")
+    st.caption(_COMPOSITE_CAPTIONS[scope])
+    starters = db.build_composite_team(season, mtime, scope)
+    if not starters:
+        st.info("Not enough data yet to build this roster.")
+        st.stop()
+    st.markdown(style.baseball_diamond(starters, _COMPOSITE_COLORS[scope]), unsafe_allow_html=True)
+
+    roster_rows = [
+        {"Pos": pos, "Name": player["name"], "Stat": player.get("note", "—")}
+        for pos, player in starters.items()
+    ]
+    st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
+    st.stop()
 
 team_options = teams.all_teams()
 labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options]
