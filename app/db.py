@@ -286,7 +286,7 @@ def load_linescore(game_pk) -> dict | None:
         return None
 
 
-_DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"}
+_DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"}
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
@@ -401,6 +401,18 @@ def build_composite_team(season: int, mtime: float, scope: str) -> dict:
             "name": best_p["Name"], "mlbID": int(best_p["mlbID"]),
             "note": f"{best_p['ERA']:.2f} ERA",
         }
+
+    # DH: best remaining bat by OPS, excluding whoever already has a spot
+    # (a real DH slot goes to the best hitter not needed in the field).
+    if not batting.empty:
+        used_ids = {p["mlbID"] for p in starters.values()}
+        remaining = batting[~batting["mlbID"].isin(used_ids)]
+        if not remaining.empty:
+            best_dh = remaining.sort_values("OPS", ascending=False).iloc[0]
+            starters["DH"] = {
+                "name": best_dh["Name"], "mlbID": int(best_dh["mlbID"]),
+                "note": f"{best_dh['OPS']:.3f} OPS",
+            }
 
     return starters
 

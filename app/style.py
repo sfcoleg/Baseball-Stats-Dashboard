@@ -143,6 +143,7 @@ _DIAMOND_POSITIONS = [
     ("3B", "3B", 26, 60),
     ("SP", "P", 50, 62),
     ("C", "C", 50, 85),
+    ("DH", "DH", 74, 85),  # horizontally aligned with C (same y), vertically with 1B (same x)
 ]
 
 # Photo diameter for _DIAMOND_POSITIONS cards — used to anchor each card by
