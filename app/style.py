@@ -115,30 +115,52 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     return styler
 
 
+# Field geometry, viewBox 0 0 600 600, home plate at the bottom. The infield
+# is a true square rotated 45° off home plate (real baseline geometry — 1B/3B
+# sit exactly on the lines drawn from home through them), not eyeballed
+# coordinates, so the foul lines actually pass through 1st and 3rd base.
+_HOME = (300, 560)
+_SECOND = (300, 300)  # home-to-2nd distance (260) is the square's diagonal
+_FIRST = (483.85, 376.15)
+_THIRD = (116.15, 376.15)
+# Mound sits ~47.5% of the way from home to 2nd (60.5ft of the real 127.28ft).
+_MOUND = (300, 436.5)
+# Foul lines extend the home->1B / home->3B rays out to the edge of the field.
+_FOUL_RIGHT_END = (600, 260)
+_FOUL_LEFT_END = (0, 260)
+
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
-# each card over a same-sized field SVG (viewBox 0 0 600 600), home plate
-# at the bottom, outfield at the top.
+# each card over the field SVG above; infielders sit on/near their base,
+# outfielders are spread out beyond the fence arc.
 _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 8),
-    ("LF", "LF", 18, 18),
-    ("RF", "RF", 82, 18),
-    ("2B", "2B", 60, 42),
-    ("SS", "SS", 40, 42),
-    ("1B", "1B", 77, 63),
-    ("3B", "3B", 23, 63),
-    ("SP", "P", 50, 72),
-    ("C", "C", 50, 93),
+    ("LF", "LF", 15, 20),
+    ("RF", "RF", 85, 20),
+    ("2B", "2B", 65, 56),
+    ("SS", "SS", 35, 56),
+    ("1B", "1B", 83, 62),
+    ("3B", "3B", 17, 62),
+    ("SP", "P", 50, 73),
+    ("C", "C", 50, 92),
 ]
 
 _DIAMOND_FIELD_SVG = (
     "<svg viewBox='0 0 600 600' preserveAspectRatio='none' "
     "style='position:absolute;top:0;left:0;width:100%;height:100%;z-index:0'>"
     "<rect x='0' y='0' width='600' height='600' fill='#2F6B3A' />"
-    "<line x1='300' y1='560' x2='0' y2='0' stroke='#FAFAFA' stroke-width='2' opacity='0.5' />"
-    "<line x1='300' y1='560' x2='600' y2='0' stroke='#FAFAFA' stroke-width='2' opacity='0.5' />"
-    "<polygon points='300,560 460,430 300,300 140,430' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' opacity='0.9' />"
-    "<circle cx='300' cy='460' r='14' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
-    "<rect x='292' y='552' width='16' height='16' fill='#FAFAFA' transform='rotate(45 300 560)' />"
+    f"<path d='M{_FOUL_LEFT_END[0]},{_FOUL_LEFT_END[1]} Q300,-30 {_FOUL_RIGHT_END[0]},{_FOUL_RIGHT_END[1]}' "
+    "fill='none' stroke='#FAFAFA' stroke-width='4' opacity='0.85' />"
+    f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_LEFT_END[0]}' y2='{_FOUL_LEFT_END[1]}' "
+    "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
+    f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
+    "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
+    f"<polygon points='{_HOME[0]},{_HOME[1]} {_FIRST[0]},{_FIRST[1]} {_SECOND[0]},{_SECOND[1]} {_THIRD[0]},{_THIRD[1]}' "
+    "fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
+    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='14' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
+    f"<rect x='{_FIRST[0] - 7}' y='{_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIRST[0]} {_FIRST[1]})' />"
+    f"<rect x='{_SECOND[0] - 7}' y='{_SECOND[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_SECOND[0]} {_SECOND[1]})' />"
+    f"<rect x='{_THIRD[0] - 7}' y='{_THIRD[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_THIRD[0]} {_THIRD[1]})' />"
+    f"<rect x='{_HOME[0] - 8}' y='{_HOME[1] - 8}' width='16' height='16' fill='#FAFAFA' transform='rotate(45 {_HOME[0]} {_HOME[1]})' />"
     "</svg>"
 )
 
