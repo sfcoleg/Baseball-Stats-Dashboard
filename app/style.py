@@ -138,12 +138,16 @@ _DIAMOND_POSITIONS = [
     ("LF", "LF", 24, 35),
     ("RF", "RF", 76, 35),
     ("2B", "2B", 62, 45),
-    ("SS", "SS", 38, 46),
+    ("SS", "SS", 38, 45),
     ("1B", "1B", 76, 62),
     ("3B", "3B", 24, 62),
     ("SP", "P", 50, 62),
-    ("C", "C", 50, 82),
+    ("C", "C", 50, 85),
 ]
+
+# Photo diameter for _DIAMOND_POSITIONS cards — used to anchor each card by
+# the photo's own vertical center (see baseball_diamond), not the block's.
+_DIAMOND_PHOTO_SIZE = 56
 
 
 def baseball_diamond(starters: dict, team_color: str) -> str:
@@ -169,7 +173,8 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
                 f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
             )
         cards.append(
-            f"<div style='position:absolute;left:{x}%;top:{y}%;transform:translate(-50%,-50%);"
+            f"<div style='position:absolute;left:{x}%;top:{y}%;"
+            f"transform:translate(-50%,-{_DIAMOND_PHOTO_SIZE / 2:.0f}px);"
             f"text-align:center;z-index:1;width:90px'>"
             f"{photo_html}"
             f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:#FAFAFA;"
