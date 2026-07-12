@@ -136,70 +136,70 @@ _FOUL_RIGHT_END = (600, 260)
 _FOUL_LEFT_END = (0, 260)
 
 
-def _rounded_corner_path(points, radii):
-    """SVG path for the closed polygon through `points`, with each corner
-    replaced by a quadratic-bezier round (like a rounded-rect, generalized
-    to any polygon, with a per-corner radius) — real infield dirt cutouts
-    curve at the basepath corners instead of coming to a sharp point, and
-    flare out wider on the outfield side (2nd base) than around home.
-
-    A quadratic bezier with its control point AT the corner undershoots —
-    the curve's apex lands inside the true vertex by ~0.354*radius, pulled
-    toward the corner's angle bisector. To keep each base marker centered
-    on its dirt bulge, `points` should already be pre-shifted outward by
-    that same amount (see `_compensate_apex_offset`) before calling this.
+def _build_basepath_dirt(home, first, second, third, narrow_width, wide_width, bulge):
+    """SVG path for the infield dirt as a "track" between two boundaries:
+    an INNER edge that is exactly the straight home->1B->2B->3B baseline
+    (what touches the infield grass), and an OUTER edge offset away from
+    it — narrow along home-1B/3B-home, wide along 1B-2B/2B-3B, flaring out
+    an extra `bulge` at 2nd base (the corner facing the outfield grass).
+    Rendered with fill-rule='evenodd': outer subpath + inner subpath
+    (opposite winding) fills only the ring between them.
     """
-    n = len(points)
 
-    def unit(a, b):
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        length = math.hypot(dx, dy)
-        return dx / length, dy / length
+    def sub(a, b):
+        return (a[0] - b[0], a[1] - b[1])
 
-    before, after = [], []
-    for i in range(n):
-        prev_p, curr, next_p = points[i - 1], points[i], points[(i + 1) % n]
-        r = radii[i]
-        ux, uy = unit(curr, prev_p)
-        before.append((curr[0] + ux * r, curr[1] + uy * r))
-        ux, uy = unit(curr, next_p)
-        after.append((curr[0] + ux * r, curr[1] + uy * r))
+    def add(a, b):
+        return (a[0] + b[0], a[1] + b[1])
 
-    parts = [f"M {before[0][0]:.1f},{before[0][1]:.1f}"]
-    for i in range(n):
-        parts.append(f"Q {points[i][0]:.1f},{points[i][1]:.1f} {after[i][0]:.1f},{after[i][1]:.1f}")
-        parts.append(f"L {before[(i + 1) % n][0]:.1f},{before[(i + 1) % n][1]:.1f}")
-    parts.append("Z")
-    return " ".join(parts)
+    def scale(v, s):
+        return (v[0] * s, v[1] * s)
+
+    def norm(v):
+        length = math.hypot(*v)
+        return (v[0] / length, v[1] / length)
+
+    def dot(a, b):
+        return a[0] * b[0] + a[1] * b[1]
+
+    centroid = tuple(sum(c) / 4 for c in zip(home, first, second, third))
+
+    def outward_normal(p1, p2):
+        d = norm(sub(p2, p1))
+        n = (-d[1], d[0])
+        mid = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
+        return n if dot(n, sub(mid, centroid)) >= 0 else (-n[0], -n[1])
+
+    n_hf = outward_normal(home, first)
+    n_fs = outward_normal(first, second)
+    n_st = outward_normal(second, third)
+    n_th = outward_normal(third, home)
+
+    home_out = add(home, scale(norm(add(n_th, n_hf)), narrow_width))
+    first_narrow = add(first, scale(n_hf, narrow_width))
+    first_wide = add(first, scale(n_fs, wide_width))
+    second_near_first = add(second, scale(n_fs, wide_width))
+    apex_dir = norm(add(n_fs, n_st))
+    second_apex = add(second, scale(apex_dir, wide_width + bulge))
+    second_near_third = add(second, scale(n_st, wide_width))
+    third_wide = add(third, scale(n_st, wide_width))
+    third_narrow = add(third, scale(n_th, narrow_width))
+    ctrl1 = add(second, scale(n_fs, wide_width + bulge * 0.55))
+    ctrl2 = add(second, scale(n_st, wide_width + bulge * 0.55))
+
+    def p(pt):
+        return f"{pt[0]:.1f},{pt[1]:.1f}"
+
+    outer = (
+        f"M {p(home_out)} L {p(first_narrow)} L {p(first_wide)} L {p(second_near_first)} "
+        f"Q {p(ctrl1)} {p(second_apex)} Q {p(ctrl2)} {p(second_near_third)} "
+        f"L {p(third_wide)} L {p(third_narrow)} L {p(home_out)} Z"
+    )
+    inner = f"M {p(home)} L {p(first)} L {p(second)} L {p(third)} Z"
+    return outer + " " + inner
 
 
-def _compensate_apex_offset(points, radii):
-    """Shift each vertex outward (away from its rounded corner's bezier
-    apex) by the ~0.354*radius undershoot described in `_rounded_corner_path`,
-    so the resulting curve's apex lands exactly on the original point."""
-    n = len(points)
-
-    def unit(a, b):
-        dx, dy = b[0] - a[0], b[1] - a[1]
-        length = math.hypot(dx, dy)
-        return dx / length, dy / length
-
-    shifted = []
-    for i in range(n):
-        prev_p, curr, next_p = points[i - 1], points[i], points[(i + 1) % n]
-        r = radii[i]
-        u1x, u1y = unit(curr, prev_p)
-        u2x, u2y = unit(curr, next_p)
-        shifted.append((curr[0] - 0.25 * r * (u1x + u2x), curr[1] - 0.25 * r * (u1y + u2y)))
-    return shifted
-
-
-# Home/1B/3B corners round modestly; 2nd base — the corner facing the
-# outfield grass — flares out much wider, like a real infield dirt cutout.
-_BASEPATH_RADII = [45, 45, 110, 45]
-_BASEPATH_D = _rounded_corner_path(
-    _compensate_apex_offset([_HOME, _FIRST, _SECOND, _THIRD], _BASEPATH_RADII), _BASEPATH_RADII
-)
+_BASEPATH_D = _build_basepath_dirt(_HOME, _FIRST, _SECOND, _THIRD, narrow_width=12, wide_width=40, bulge=95)
 
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
 # each card over the field SVG above. Infielders sit on/near their base;
@@ -238,7 +238,7 @@ _DIAMOND_FIELD_SVG = (
     f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
     f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='48' fill='#B8895F' />"
-    f"<path d='{_BASEPATH_D}' fill='none' stroke='#B8895F' stroke-width='34' stroke-linejoin='round' />"
+    f"<path d='{_BASEPATH_D}' fill='#B8895F' fill-rule='evenodd' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='42' fill='#B8895F' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='13' fill='#C9A578' stroke='#FAFAFA' stroke-width='2' />"
     f"<rect x='{_FIRST[0] - 7}' y='{_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIRST[0]} {_FIRST[1]})' />"
