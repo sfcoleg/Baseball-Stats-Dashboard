@@ -129,6 +129,41 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
     )
 
 
+def standings_table(div_standings, team_color_fn) -> str:
+    """One division's standings as a plain HTML table, with each team's
+    abbreviation rendered as a colored badge that's also a link to
+    `?team=ABBR` — clicking the team name itself (not a checkbox/selector
+    column, which is all st.dataframe's row-selection offers) is what
+    navigates. The Standings page reads that query param on load, stashes
+    the team in session_state, and st.switch_page()s to the Team page."""
+    rows = ""
+    for _, row in div_standings.iterrows():
+        color = team_color_fn(row["Team"])
+        streak = row["Streak"] if pd.notna(row["Streak"]) else "—"
+        gb = row["GB"] if pd.notna(row["GB"]) else "—"
+        rows += (
+            "<tr style='border-top:1px solid #4A5266'>"
+            f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
+            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a></td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['PCT']}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{gb}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{streak}</td>"
+            "</tr>"
+        )
+    headers = "".join(
+        f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
+        f"color:#9AA3B5;font-weight:600'>{h}</th>"
+        for h in ("Team", "W", "L", "PCT", "GB", "Streak")
+    )
+    return (
+        "<table style='width:100%;border-collapse:collapse'>"
+        f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
 def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
                        team_color_fn=None, team_abbr_fn=None, precision=None):
     """Return a pandas Styler for st.dataframe with:

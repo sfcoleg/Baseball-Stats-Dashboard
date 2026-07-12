@@ -67,7 +67,14 @@ app/
                            # the Stats API sits in each placeholder div's data-utc attribute; a setInterval poll keeps
                            # re-applying the conversion since Streamlit reruns (e.g. "Show box score") recreate those
                            # divs with fresh unconverted text.
-    9_Standings.py        # Current MLB division standings (MLB Stats API)
+    9_Standings.py        # Current MLB division standings (MLB Stats API). Each team's abbreviation is a
+                           # clickable colored badge (style.standings_table() — a hand-built HTML table, not
+                           # st.dataframe, since st.dataframe's row-selection only offers a checkbox/radio
+                           # selector column, not click-the-cell-itself) linking to `?team=ABBR`. The page
+                           # checks st.query_params for that on load, stashes it in session_state, and
+                           # st.switch_page()s to the Team page, which pre-selects it (then pops the
+                           # session_state key so a later manual selectbox change isn't overridden on a
+                           # subsequent visit).
     10_Injury_Report.py   # Every player on a major-league IL across all 30 teams (db.load_injury_report()) —
                            # 40-man roster status codes (D7/D10/D15/D60) give the authoritative current list;
                            # cross-referenced against the last 45 days of transactions for the injury detail text.

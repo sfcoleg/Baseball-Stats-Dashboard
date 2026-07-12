@@ -9,8 +9,14 @@ import style
 import teams
 
 st.set_page_config(page_title="Standings | Sabermetrics Dashboard", layout="wide")
+
+clicked_team = st.query_params.get("team")
+if clicked_team:
+    st.session_state["team_page_selected_team"] = clicked_team
+    st.switch_page("pages/4_Team.py")
+
 st.title("Standings")
-st.caption("Current MLB division standings, from the MLB Stats API. Click a team's row to jump to its Team page.")
+st.caption("Current MLB division standings, from the MLB Stats API. Click a team's name to jump to its Team page.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -36,15 +42,7 @@ for league in ["AL", "NL"]:
             display = div_standings[["team_abbr", "wins", "losses", "pct", "games_back", "streak"]].rename(columns={
                 "team_abbr": "Team", "wins": "W", "losses": "L", "pct": "PCT", "games_back": "GB", "streak": "Streak",
             })
-            event = st.dataframe(
-                style.style_stats_table(display, team_col="Team", team_color_fn=teams.color_for_abbr),
-                use_container_width=True,
-                hide_index=True,
-                on_select="rerun",
-                selection_mode="single-row",
-                key=f"standings_{division}",
+            st.markdown(
+                style.standings_table(display, teams.color_for_abbr),
+                unsafe_allow_html=True,
             )
-            if event.selection.rows:
-                selected_abbr = display.iloc[event.selection.rows[0]]["Team"]
-                st.session_state["team_page_selected_team"] = selected_abbr
-                st.switch_page("pages/4_Team.py")
