@@ -1,7 +1,5 @@
 """Reusable pandas Styler helpers for dashboard tables: color-coded stat
 columns (green = better, red = worse) and team-color badges."""
-import math
-
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -117,136 +115,50 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     return styler
 
 
-# Field geometry, viewBox 0 0 600 600, home plate at the bottom. Home and 2nd
-# sit on the vertical center line; 1st/3rd are out along the 45° foul lines,
-# at their own distance from home (not forced to match a perfect square —
-# pushed further out than a true square would place them, matching the
-# actual base positions the white base markers are drawn at).
-_HOME = (300, 560)
-_D = 245
-_SECOND = (300, _HOME[1] - _D)
-_CORNER_DIST = 200  # home-to-1B / home-to-3B distance along the foul line
-_FOUL_UNIT = (0.7071, -0.7071)
-_FIRST = (_HOME[0] + _CORNER_DIST * _FOUL_UNIT[0], _HOME[1] + _CORNER_DIST * _FOUL_UNIT[1])
-_THIRD = (_HOME[0] - _CORNER_DIST * _FOUL_UNIT[0], _HOME[1] + _CORNER_DIST * _FOUL_UNIT[1])
-# Mound sits ~47.5% of the way from home to 2nd (60.5ft of the real 127.28ft).
-_MOUND = (300, _HOME[1] - 0.475 * _D)
-# Foul lines extend the home->1B / home->3B rays out to the edge of the field.
-_FOUL_RIGHT_END = (600, 260)
-_FOUL_LEFT_END = (0, 260)
-
-
-def _build_basepath_dirt(home, first, second, third, narrow_width, wide_width, bulge):
-    """SVG path for the infield dirt as a "track" between two boundaries:
-    an INNER edge that is exactly the straight home->1B->2B->3B baseline
-    (what touches the infield grass), and an OUTER edge offset away from
-    it — narrow along home-1B/3B-home, wide along 1B-2B/2B-3B, flaring out
-    an extra `bulge` at 2nd base (the corner facing the outfield grass).
-    Rendered with fill-rule='evenodd': outer subpath + inner subpath
-    (opposite winding) fills only the ring between them.
-    """
-
-    def sub(a, b):
-        return (a[0] - b[0], a[1] - b[1])
-
-    def add(a, b):
-        return (a[0] + b[0], a[1] + b[1])
-
-    def scale(v, s):
-        return (v[0] * s, v[1] * s)
-
-    def norm(v):
-        length = math.hypot(*v)
-        return (v[0] / length, v[1] / length)
-
-    def dot(a, b):
-        return a[0] * b[0] + a[1] * b[1]
-
-    centroid = tuple(sum(c) / 4 for c in zip(home, first, second, third))
-
-    def outward_normal(p1, p2):
-        d = norm(sub(p2, p1))
-        n = (-d[1], d[0])
-        mid = ((p1[0] + p2[0]) / 2, (p1[1] + p2[1]) / 2)
-        return n if dot(n, sub(mid, centroid)) >= 0 else (-n[0], -n[1])
-
-    n_hf = outward_normal(home, first)
-    n_fs = outward_normal(first, second)
-    n_st = outward_normal(second, third)
-    n_th = outward_normal(third, home)
-
-    home_out = add(home, scale(norm(add(n_th, n_hf)), narrow_width))
-    first_narrow = add(first, scale(n_hf, narrow_width))
-    first_wide = add(first, scale(n_fs, wide_width))
-    second_near_first = add(second, scale(n_fs, wide_width))
-    apex_dir = norm(add(n_fs, n_st))
-    second_apex = add(second, scale(apex_dir, wide_width + bulge))
-    second_near_third = add(second, scale(n_st, wide_width))
-    third_wide = add(third, scale(n_st, wide_width))
-    third_narrow = add(third, scale(n_th, narrow_width))
-    ctrl1 = add(second, scale(n_fs, wide_width + bulge * 0.55))
-    ctrl2 = add(second, scale(n_st, wide_width + bulge * 0.55))
-
-    def p(pt):
-        return f"{pt[0]:.1f},{pt[1]:.1f}"
-
-    outer = (
-        f"M {p(home_out)} L {p(first_narrow)} L {p(first_wide)} L {p(second_near_first)} "
-        f"Q {p(ctrl1)} {p(second_apex)} Q {p(ctrl2)} {p(second_near_third)} "
-        f"L {p(third_wide)} L {p(third_narrow)} L {p(home_out)} Z"
-    )
-    inner = f"M {p(home)} L {p(first)} L {p(second)} L {p(third)} Z"
-    return outer + " " + inner
-
-
-_BASEPATH_D = _build_basepath_dirt(_HOME, _FIRST, _SECOND, _THIRD, narrow_width=12, wide_width=40, bulge=95)
-
-# (depth-chart position code, on-field label, x%, y%) — coordinates place
-# each card over the field SVG above. Infielders sit on/near their base;
-# outfielders are pulled in close to the infield, still inside the fence
-# arc (the arc dips as low as y=115 in straightaway center).
-_DIAMOND_POSITIONS = [
-    ("CF", "CF", 50, 34),
-    ("LF", "LF", 18, 46),
-    ("RF", "RF", 82, 46),
-    ("2B", "2B", 62, 61),
-    ("SS", "SS", 38, 61),
-    ("1B", "1B", 74, 70),
-    ("3B", "3B", 26, 70),
-    ("SP", "P", 50, 74),
-    ("C", "C", 50, 92),
-]
-
-# Alternating light/dark stripes (mowed-grass texture), tiled behind the
-# field markings.
-_GRASS_PATTERN = (
-    "<pattern id='grassStripes' patternUnits='userSpaceOnUse' width='600' height='48' patternTransform='rotate(45)'>"
-    "<rect width='600' height='48' fill='#2F6B3A' />"
-    "<rect width='600' height='24' fill='#336F3D' />"
-    "</pattern>"
-)
+# Flat-icon field: a "fan" shape (straight foul-line edges, arced outfield
+# top) with an orange rounded-diamond infield — recreated to match a
+# reference icon the user supplied, viewBox 0 0 280 280.
+_FIELD_HOME = (140, 235)
+_FIELD_SECOND = (140, 120)
+_FIELD_FIRST = (195, 175)
+_FIELD_THIRD = (85, 175)
+_FIELD_MOUND = (140, 178)
+_FIELD_LEFT_SHOULDER = (14, 108)
+_FIELD_RIGHT_SHOULDER = (266, 108)
 
 _DIAMOND_FIELD_SVG = (
-    "<svg viewBox='0 0 600 600' preserveAspectRatio='none' "
+    "<svg viewBox='0 0 280 280' preserveAspectRatio='none' "
     "style='position:absolute;top:0;left:0;width:100%;height:100%;z-index:0'>"
-    f"<defs>{_GRASS_PATTERN}</defs>"
-    "<rect x='0' y='0' width='600' height='600' fill='url(#grassStripes)' />"
-    f"<path d='M{_FOUL_LEFT_END[0]},{_FOUL_LEFT_END[1]} Q300,-30 {_FOUL_RIGHT_END[0]},{_FOUL_RIGHT_END[1]}' "
-    "fill='none' stroke='#FAFAFA' stroke-width='4' opacity='0.85' />"
-    f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_LEFT_END[0]}' y2='{_FOUL_LEFT_END[1]}' "
-    "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
-    f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
-    "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
-    f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='48' fill='#B8895F' />"
-    f"<path d='{_BASEPATH_D}' fill='#B8895F' fill-rule='evenodd' />"
-    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='42' fill='#B8895F' />"
-    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='13' fill='#C9A578' stroke='#FAFAFA' stroke-width='2' />"
-    f"<rect x='{_FIRST[0] - 7}' y='{_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIRST[0]} {_FIRST[1]})' />"
-    f"<rect x='{_SECOND[0] - 7}' y='{_SECOND[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_SECOND[0]} {_SECOND[1]})' />"
-    f"<rect x='{_THIRD[0] - 7}' y='{_THIRD[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_THIRD[0]} {_THIRD[1]})' />"
-    f"<rect x='{_HOME[0] - 8}' y='{_HOME[1] - 8}' width='16' height='16' fill='#FAFAFA' transform='rotate(45 {_HOME[0]} {_HOME[1]})' />"
+    f"<path d='M{_FIELD_HOME[0]},{_FIELD_HOME[1]} L{_FIELD_LEFT_SHOULDER[0]},{_FIELD_LEFT_SHOULDER[1]} "
+    f"Q140,-10 {_FIELD_RIGHT_SHOULDER[0]},{_FIELD_RIGHT_SHOULDER[1]} Z' "
+    "fill='#5EA646' stroke='#17422A' stroke-width='6' stroke-linejoin='round' />"
+    f"<line x1='{_FIELD_HOME[0]}' y1='{_FIELD_HOME[1]}' x2='24' y2='118' stroke='#FAFAFA' stroke-width='3' opacity='0.9' />"
+    f"<line x1='{_FIELD_HOME[0]}' y1='{_FIELD_HOME[1]}' x2='256' y2='118' stroke='#FAFAFA' stroke-width='3' opacity='0.9' />"
+    f"<path d='M{_FIELD_SECOND[0]},{_FIELD_SECOND[1]} L{_FIELD_FIRST[0]},{_FIELD_FIRST[1]} "
+    f"L{_FIELD_HOME[0]},{_FIELD_HOME[1] - 8} L{_FIELD_THIRD[0]},{_FIELD_THIRD[1]} Z' "
+    "fill='#EFA043' stroke='#C97F2E' stroke-width='2' stroke-linejoin='round' />"
+    f"<circle cx='{_FIELD_MOUND[0]}' cy='{_FIELD_MOUND[1]}' r='18' fill='#E0922E' />"
+    f"<circle cx='{_FIELD_MOUND[0]}' cy='{_FIELD_MOUND[1]}' r='6' fill='#FAFAFA' />"
+    f"<rect x='{_FIELD_SECOND[0] - 7}' y='{_FIELD_SECOND[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_SECOND[0]} {_FIELD_SECOND[1]})' />"
+    f"<rect x='{_FIELD_FIRST[0] - 7}' y='{_FIELD_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_FIRST[0]} {_FIELD_FIRST[1]})' />"
+    f"<rect x='{_FIELD_THIRD[0] - 7}' y='{_FIELD_THIRD[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_THIRD[0]} {_FIELD_THIRD[1]})' />"
+    f"<rect x='{_FIELD_HOME[0] - 9}' y='{_FIELD_HOME[1] - 12}' width='18' height='18' rx='4' fill='#FAFAFA' />"
     "</svg>"
 )
+
+# (depth-chart position code, on-field label, x%, y%) — coordinates place
+# each card over the field SVG above, matched to its 280x280 viewBox.
+_DIAMOND_POSITIONS = [
+    ("CF", "CF", 50, 27),
+    ("LF", "LF", 25, 42),
+    ("RF", "RF", 75, 42),
+    ("2B", "2B", 60, 53),
+    ("SS", "SS", 40, 53),
+    ("1B", "1B", 73, 64),
+    ("3B", "3B", 27, 64),
+    ("SP", "P", 50, 64),
+    ("C", "C", 50, 89),
+]
 
 
 def baseball_diamond(starters: dict, team_color: str) -> str:
