@@ -1,5 +1,8 @@
 """Reusable pandas Styler helpers for dashboard tables: color-coded stat
 columns (green = better, red = worse) and team-color badges."""
+import base64
+from pathlib import Path
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -115,49 +118,31 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     return styler
 
 
-# Flat-icon field: a "fan" shape (straight foul-line edges, arced outfield
-# top) with an orange rounded-diamond infield — recreated to match a
-# reference icon the user supplied, viewBox 0 0 280 280.
-_FIELD_HOME = (140, 235)
-_FIELD_SECOND = (140, 120)
-_FIELD_FIRST = (195, 175)
-_FIELD_THIRD = (85, 175)
-_FIELD_MOUND = (140, 178)
-_FIELD_LEFT_SHOULDER = (14, 108)
-_FIELD_RIGHT_SHOULDER = (266, 108)
+# The field itself is the user-supplied image (app/assets/baseballfield.png),
+# embedded as a data URI so it's self-contained HTML — Streamlit has no route
+# to serve a plain local file path into markdown/HTML. Player cards are
+# positioned as x%/y% over it, measured directly from the image's pixels
+# (a 265x265 PNG) so each card lines up with that image's actual bases.
+_FIELD_IMAGE_PATH = Path(__file__).resolve().parent / "assets" / "baseballfield.png"
+_FIELD_IMAGE_B64 = base64.b64encode(_FIELD_IMAGE_PATH.read_bytes()).decode() if _FIELD_IMAGE_PATH.exists() else ""
 
 _DIAMOND_FIELD_SVG = (
-    "<svg viewBox='0 0 280 280' preserveAspectRatio='none' "
-    "style='position:absolute;top:0;left:0;width:100%;height:100%;z-index:0'>"
-    f"<path d='M{_FIELD_HOME[0]},{_FIELD_HOME[1]} L{_FIELD_LEFT_SHOULDER[0]},{_FIELD_LEFT_SHOULDER[1]} "
-    f"Q140,-10 {_FIELD_RIGHT_SHOULDER[0]},{_FIELD_RIGHT_SHOULDER[1]} Z' "
-    "fill='#5EA646' stroke='#17422A' stroke-width='6' stroke-linejoin='round' />"
-    f"<line x1='{_FIELD_HOME[0]}' y1='{_FIELD_HOME[1]}' x2='24' y2='118' stroke='#FAFAFA' stroke-width='3' opacity='0.9' />"
-    f"<line x1='{_FIELD_HOME[0]}' y1='{_FIELD_HOME[1]}' x2='256' y2='118' stroke='#FAFAFA' stroke-width='3' opacity='0.9' />"
-    f"<path d='M{_FIELD_SECOND[0]},{_FIELD_SECOND[1]} L{_FIELD_FIRST[0]},{_FIELD_FIRST[1]} "
-    f"L{_FIELD_HOME[0]},{_FIELD_HOME[1] - 8} L{_FIELD_THIRD[0]},{_FIELD_THIRD[1]} Z' "
-    "fill='#EFA043' stroke='#C97F2E' stroke-width='2' stroke-linejoin='round' />"
-    f"<circle cx='{_FIELD_MOUND[0]}' cy='{_FIELD_MOUND[1]}' r='18' fill='#E0922E' />"
-    f"<circle cx='{_FIELD_MOUND[0]}' cy='{_FIELD_MOUND[1]}' r='6' fill='#FAFAFA' />"
-    f"<rect x='{_FIELD_SECOND[0] - 7}' y='{_FIELD_SECOND[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_SECOND[0]} {_FIELD_SECOND[1]})' />"
-    f"<rect x='{_FIELD_FIRST[0] - 7}' y='{_FIELD_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_FIRST[0]} {_FIELD_FIRST[1]})' />"
-    f"<rect x='{_FIELD_THIRD[0] - 7}' y='{_FIELD_THIRD[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIELD_THIRD[0]} {_FIELD_THIRD[1]})' />"
-    f"<rect x='{_FIELD_HOME[0] - 9}' y='{_FIELD_HOME[1] - 12}' width='18' height='18' rx='4' fill='#FAFAFA' />"
-    "</svg>"
+    f"<img src='data:image/png;base64,{_FIELD_IMAGE_B64}' "
+    "style='position:absolute;top:0;left:0;width:100%;height:100%;object-fit:contain;z-index:0' />"
 )
 
-# (depth-chart position code, on-field label, x%, y%) — coordinates place
-# each card over the field SVG above, matched to its 280x280 viewBox.
+# (depth-chart position code, on-field label, x%, y%) — measured from the
+# actual base/mound pixel positions in app/assets/baseballfield.png (265x265).
 _DIAMOND_POSITIONS = [
-    ("CF", "CF", 50, 27),
-    ("LF", "LF", 25, 42),
-    ("RF", "RF", 75, 42),
-    ("2B", "2B", 60, 53),
-    ("SS", "SS", 40, 53),
-    ("1B", "1B", 73, 64),
-    ("3B", "3B", 27, 64),
-    ("SP", "P", 50, 64),
-    ("C", "C", 50, 89),
+    ("CF", "CF", 50, 17),
+    ("LF", "LF", 28, 30),
+    ("RF", "RF", 72, 30),
+    ("2B", "2B", 62, 44),
+    ("SS", "SS", 38, 44),
+    ("1B", "1B", 76, 62),
+    ("3B", "3B", 24, 62),
+    ("SP", "P", 50, 62),
+    ("C", "C", 50, 82),
 ]
 
 
