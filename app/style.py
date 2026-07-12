@@ -134,11 +134,12 @@ _FOUL_RIGHT_END = (600, 260)
 _FOUL_LEFT_END = (0, 260)
 
 
-def _rounded_corner_path(points, radius):
+def _rounded_corner_path(points, radii):
     """SVG path for the closed polygon through `points`, with each corner
     replaced by a quadratic-bezier round (like a rounded-rect, generalized
-    to any polygon) — real infield dirt cutouts curve at the basepath
-    corners instead of coming to a sharp point."""
+    to any polygon, with a per-corner radius) — real infield dirt cutouts
+    curve at the basepath corners instead of coming to a sharp point, and
+    flare out wider on the outfield side (2nd base) than around home."""
     n = len(points)
 
     def unit(a, b):
@@ -149,10 +150,11 @@ def _rounded_corner_path(points, radius):
     before, after = [], []
     for i in range(n):
         prev_p, curr, next_p = points[i - 1], points[i], points[(i + 1) % n]
+        r = radii[i]
         ux, uy = unit(curr, prev_p)
-        before.append((curr[0] + ux * radius, curr[1] + uy * radius))
+        before.append((curr[0] + ux * r, curr[1] + uy * r))
         ux, uy = unit(curr, next_p)
-        after.append((curr[0] + ux * radius, curr[1] + uy * radius))
+        after.append((curr[0] + ux * r, curr[1] + uy * r))
 
     parts = [f"M {before[0][0]:.1f},{before[0][1]:.1f}"]
     for i in range(n):
@@ -162,7 +164,9 @@ def _rounded_corner_path(points, radius):
     return " ".join(parts)
 
 
-_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radius=45)
+# Home/1B/3B corners round modestly; 2nd base — the corner facing the
+# outfield grass — flares out much wider, like a real infield dirt cutout.
+_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radii=[45, 45, 85, 45])
 
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
 # each card over the field SVG above. Infielders sit on/near their base;
@@ -170,8 +174,8 @@ _BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radius=45)
 # arc (the arc dips as low as y=115 in straightaway center).
 _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 34),
-    ("LF", "LF", 28, 40),
-    ("RF", "RF", 72, 40),
+    ("LF", "LF", 18, 40),
+    ("RF", "RF", 82, 40),
     ("2B", "2B", 61, 61),
     ("SS", "SS", 39, 61),
     ("1B", "1B", 75, 73),
@@ -200,7 +204,7 @@ _DIAMOND_FIELD_SVG = (
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
     f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
-    f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='70' fill='#B8895F' />"
+    f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='48' fill='#B8895F' />"
     f"<path d='{_BASEPATH_D}' fill='none' stroke='#B8895F' stroke-width='34' stroke-linejoin='round' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='42' fill='#B8895F' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='13' fill='#C9A578' stroke='#FAFAFA' stroke-width='2' />"
