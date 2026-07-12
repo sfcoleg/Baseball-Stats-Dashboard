@@ -1,5 +1,7 @@
 """Reusable pandas Styler helpers for dashboard tables: color-coded stat
 columns (green = better, red = worse) and team-color badges."""
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
@@ -131,14 +133,45 @@ _MOUND = (300, _HOME[1] - 0.475 * _D)
 _FOUL_RIGHT_END = (600, 260)
 _FOUL_LEFT_END = (0, 260)
 
+
+def _rounded_corner_path(points, radius):
+    """SVG path for the closed polygon through `points`, with each corner
+    replaced by a quadratic-bezier round (like a rounded-rect, generalized
+    to any polygon) — real infield dirt cutouts curve at the basepath
+    corners instead of coming to a sharp point."""
+    n = len(points)
+
+    def unit(a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dy)
+        return dx / length, dy / length
+
+    before, after = [], []
+    for i in range(n):
+        prev_p, curr, next_p = points[i - 1], points[i], points[(i + 1) % n]
+        ux, uy = unit(curr, prev_p)
+        before.append((curr[0] + ux * radius, curr[1] + uy * radius))
+        ux, uy = unit(curr, next_p)
+        after.append((curr[0] + ux * radius, curr[1] + uy * radius))
+
+    parts = [f"M {before[0][0]:.1f},{before[0][1]:.1f}"]
+    for i in range(n):
+        parts.append(f"Q {points[i][0]:.1f},{points[i][1]:.1f} {after[i][0]:.1f},{after[i][1]:.1f}")
+        parts.append(f"L {before[(i + 1) % n][0]:.1f},{before[(i + 1) % n][1]:.1f}")
+    parts.append("Z")
+    return " ".join(parts)
+
+
+_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radius=45)
+
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
 # each card over the field SVG above. Infielders sit on/near their base;
-# outfielders are pulled in well inside the fence arc (the arc dips as low
-# as y=115 in straightaway center), not past it.
+# outfielders are pulled in close to the infield, still inside the fence
+# arc (the arc dips as low as y=115 in straightaway center).
 _DIAMOND_POSITIONS = [
-    ("CF", "CF", 50, 28),
-    ("LF", "LF", 25, 35),
-    ("RF", "RF", 75, 35),
+    ("CF", "CF", 50, 34),
+    ("LF", "LF", 28, 40),
+    ("RF", "RF", 72, 40),
     ("2B", "2B", 61, 61),
     ("SS", "SS", 39, 61),
     ("1B", "1B", 75, 73),
@@ -147,10 +180,20 @@ _DIAMOND_POSITIONS = [
     ("C", "C", 50, 92),
 ]
 
+# Alternating light/dark stripes (mowed-grass texture), tiled behind the
+# field markings.
+_GRASS_PATTERN = (
+    "<pattern id='grassStripes' patternUnits='userSpaceOnUse' width='600' height='48' patternTransform='rotate(45)'>"
+    "<rect width='600' height='48' fill='#2F6B3A' />"
+    "<rect width='600' height='24' fill='#336F3D' />"
+    "</pattern>"
+)
+
 _DIAMOND_FIELD_SVG = (
     "<svg viewBox='0 0 600 600' preserveAspectRatio='none' "
     "style='position:absolute;top:0;left:0;width:100%;height:100%;z-index:0'>"
-    "<rect x='0' y='0' width='600' height='600' fill='#2F6B3A' />"
+    f"<defs>{_GRASS_PATTERN}</defs>"
+    "<rect x='0' y='0' width='600' height='600' fill='url(#grassStripes)' />"
     f"<path d='M{_FOUL_LEFT_END[0]},{_FOUL_LEFT_END[1]} Q300,-30 {_FOUL_RIGHT_END[0]},{_FOUL_RIGHT_END[1]}' "
     "fill='none' stroke='#FAFAFA' stroke-width='4' opacity='0.85' />"
     f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_LEFT_END[0]}' y2='{_FOUL_LEFT_END[1]}' "
@@ -158,8 +201,7 @@ _DIAMOND_FIELD_SVG = (
     f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
     f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='70' fill='#B8895F' />"
-    f"<polygon points='{_HOME[0]},{_HOME[1]} {_FIRST[0]},{_FIRST[1]} {_SECOND[0]},{_SECOND[1]} {_THIRD[0]},{_THIRD[1]}' "
-    "fill='none' stroke='#B8895F' stroke-width='34' stroke-linejoin='round' />"
+    f"<path d='{_BASEPATH_D}' fill='none' stroke='#B8895F' stroke-width='34' stroke-linejoin='round' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='42' fill='#B8895F' />"
     f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='13' fill='#C9A578' stroke='#FAFAFA' stroke-width='2' />"
     f"<rect x='{_FIRST[0] - 7}' y='{_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIRST[0]} {_FIRST[1]})' />"
