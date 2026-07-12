@@ -444,6 +444,7 @@ def load_transactions(days: int) -> pd.DataFrame:
         if not desc:
             continue
         rows.append({
+            "id": t.get("id"),
             "date": t.get("date"),
             "type": t.get("typeDesc"),
             "to_abbr": teams.abbr_for_team_id((t.get("toTeam") or {}).get("id")),
@@ -452,7 +453,11 @@ def load_transactions(days: int) -> pd.DataFrame:
         })
     if not rows:
         return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description"])
-    return pd.DataFrame(rows).sort_values("date", ascending=False, kind="stable").reset_index(drop=True)
+    # The API emits one entry per team on each side of a trade (e.g. a 1-for-1
+    # trade yields two rows sharing the same "id" with an identical
+    # description) — keep just one per transaction id.
+    df = pd.DataFrame(rows).drop_duplicates(subset="id").drop(columns="id")
+    return df.sort_values("date", ascending=False, kind="stable").reset_index(drop=True)
 
 
 _COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]
