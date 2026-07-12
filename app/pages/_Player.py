@@ -109,6 +109,8 @@ if batting is not None:
     qualified_attempts = qualified_batting["SB"] + qualified_batting["CS"]
     qualified_sb_pct = (qualified_batting["SB"] / qualified_attempts.replace(0, pd.NA) * 100)
     br_metrics = [
+        ("BsR", f"{batting['baserunning_runs']:+.1f}" if pd.notna(batting.get("baserunning_runs")) else "—",
+         db.percentile_rank(qualified_batting["baserunning_runs"], batting.get("baserunning_runs")) if pd.notna(batting.get("baserunning_runs")) else None),
         ("SB", int(sb) if pd.notna(sb) else "—", db.percentile_rank(qualified_batting["SB"], sb) if pd.notna(sb) else None),
         ("CS", int(cs) if pd.notna(cs) else "—", None),
         ("SB%", f"{sb_pct_val:.0f}%" if sb_pct_val is not None else "—",

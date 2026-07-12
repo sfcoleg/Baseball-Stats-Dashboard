@@ -12,6 +12,7 @@ Run this once a day to keep the dashboard up to date:
     ./venv/bin/python ingest/refresh_data.py
 """
 import codecs
+import io
 import re
 import sqlite3
 import sys
@@ -115,6 +116,16 @@ def add_pitching_sabermetrics(df):
     return df
 
 
+def fetch_savant_leaderboard_csv(path, year):
+    """Fetch a Baseball Savant leaderboard CSV directly — some leaderboards
+    (e.g. baserunning run value) aren't wrapped by pybaseball, but follow
+    the same csv=true convention as the ones that are."""
+    url = f"https://baseballsavant.mlb.com/leaderboard/{path}?year={year}&csv=true"
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    return pd.read_csv(io.StringIO(resp.content.decode("utf-8")))
+
+
 def fetch_batting(season=CURRENT_SEASON):
     print(f"Fetching {season} batting stats (Baseball-Reference)...")
     batting = batting_stats_bref(season)
@@ -146,8 +157,23 @@ def fetch_batting(season=CURRENT_SEASON):
         ["player_id", "sprint_speed", "hp_to_1b"]
     ]
 
+    # Unlike sprint_speed, Baseball Savant's baserunning-run-value leaderboard
+    # ignores the year param entirely and always returns the CURRENT season
+    # (verified: requesting year=2022 and year=2026 return identical rows,
+    # both stamped start_year/end_year=2026) — there's no historical query
+    # available through this endpoint. Only fetch it when actually backfilling
+    # the current season; a historical season gets an all-NaN column instead
+    # of silently-wrong current-season values.
+    if season == CURRENT_SEASON:
+        print(f"Fetching {season} Statcast baserunning run value...")
+        baserunning_value = fetch_savant_leaderboard_csv("baserunning-run-value", season)[
+            ["player_id", "runner_runs_tot"]
+        ].rename(columns={"runner_runs_tot": "baserunning_runs"})
+    else:
+        baserunning_value = pd.DataFrame({"player_id": pd.Series(dtype="float64"), "baserunning_runs": pd.Series(dtype="float64")})
+
     batting["mlbID"] = pd.to_numeric(batting["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, sprint):
+    for stats_df in (exitvelo, expected, sprint, baserunning_value):
         batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
         batting = batting.drop(columns="player_id")
 

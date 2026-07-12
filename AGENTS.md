@@ -43,10 +43,17 @@ app/
     1_Batting.py    # Filterable batting leaderboard (Standard/Advanced/Statcast/Chart Explorer tabs)
     2_Pitching.py   # Filterable pitching leaderboard (same tab structure)
     3_Fielding.py   # Outs Above Average (OAA) leaderboard
-    6_Baserunning.py       # SB/CS (Baseball-Reference) + Statcast sprint speed/home-to-1st leaderboard,
-                           # with a computed SB% and a sprint-speed-vs-SB scatter chart. Filename number is
-                           # a leftover from the deleted Signals page's slot — nav ORDER is controlled by
-                           # the PAGES list in main.py, not the filename, and this sits right after Fielding.
+    6_Baserunning.py       # SB/CS (Baseball-Reference) + Statcast sprint speed/home-to-1st/baserunning
+                           # runs (BsR) leaderboard, with a computed SB% and a sprint-speed-vs-BsR scatter
+                           # chart. Filename number is a leftover from the deleted Signals page's slot —
+                           # nav ORDER is controlled by the PAGES list in main.py, not the filename, and
+                           # this sits right after Fielding. BsR only has real values for the CURRENT
+                           # season — Baseball Savant's baserunning-run-value leaderboard ignores the year
+                           # param and always serves the current season's data, so
+                           # ingest.fetch_batting() only calls it when season == CURRENT_SEASON and fills
+                           # an all-NaN column otherwise (verified: requesting year=2022 vs year=2026
+                           # returns byte-identical rows both stamped 2026 — there's no historical query
+                           # available through this endpoint at all).
     4_Team.py       # Full batting/pitching/fielding roster for one team+season, plus a starting-
                      # lineup baseball diamond (live MLB Stats API depth chart, see db.load_depth_chart).
                      # "View" selector also offers two stats-driven composite rosters in place of a
