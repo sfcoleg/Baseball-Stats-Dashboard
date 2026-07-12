@@ -7,7 +7,6 @@ import db
 
 
 def render_search():
-    st.sidebar.divider()
     st.sidebar.caption("Player Search")
     query = st.sidebar.text_input(
         "Search players", key="sidebar_search_query", placeholder="e.g. Ohtani, Judge",

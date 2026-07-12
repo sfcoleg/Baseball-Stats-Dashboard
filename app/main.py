@@ -26,7 +26,6 @@ import sidebar
 st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
 
 sidebar.render_search()
-st.sidebar.divider()
 
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
