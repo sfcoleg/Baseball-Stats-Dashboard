@@ -292,6 +292,9 @@ def fetch_recent_pitching():
         if df.empty:
             continue
         df["Name"] = fix_mojibake_names(df["Name"])
+        # Baseball-Reference leaves SV blank instead of 0 for pitchers with
+        # no saves in the window (same quirk as the season pitching table).
+        df["SV"] = df["SV"].fillna(0).astype(int)
         df["period"] = period
         df["season"] = CURRENT_SEASON
         frames.append(df)

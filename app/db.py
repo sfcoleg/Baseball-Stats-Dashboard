@@ -60,7 +60,7 @@ PITCHING_COLS = [
 ]
 FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "season"]
 RECENT_BATTING_COLS = ["mlbID", "Name", "Tm", "Lev", "PA", "H", "2B", "3B", "HR", "RBI", "OPS", "period", "season"]
-RECENT_PITCHING_COLS = ["mlbID", "Name", "Tm", "Lev", "IP", "ERA", "GSc", "SO", "BB", "HBP", "H", "period", "season"]
+RECENT_PITCHING_COLS = ["mlbID", "Name", "Tm", "Lev", "IP", "ERA", "GSc", "SO", "BB", "HBP", "H", "SV", "period", "season"]
 
 
 def _select(cols: list[str]) -> str:
@@ -163,15 +163,24 @@ def top_recent_pitcher(recent_pitching: pd.DataFrame, period: str) -> pd.Series 
 # rare enough to be worth a special callout, not just another leaderboard.
 HR_MILESTONE_THRESHOLDS = [30, 40, 50, 60, 70]
 
+# Same idea, for pitchers: saves, strikeouts, innings pitched.
+SV_MILESTONE_THRESHOLDS = [40, 50]
+SO_MILESTONE_THRESHOLDS = [200]
+IP_MILESTONE_THRESHOLDS = [200]
+
 # Sort priority for display when multiple milestones happen on the same day
 # (rarer first).
-_MILESTONE_PRIORITY = {"Perfect Game": 0, "No-Hitter": 1, "Cycle": 2, "HR Milestone": 3}
+_MILESTONE_PRIORITY = {
+    "Perfect Game": 0, "No-Hitter": 1, "Cycle": 2, "HR Milestone": 3,
+    "SV Milestone": 4, "SO Milestone": 5, "IP Milestone": 6,
+}
 
 
 def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
     """Detects notable single-day achievements from yesterday's games:
     hitting for the cycle, throwing a no-hitter or perfect game, and crossing
-    a season home-run milestone. Built entirely from data already fetched
+    a season home-run/save/strikeout/innings-pitched milestone. Built entirely
+    from data already fetched
     daily (recent_batting/recent_pitching day-window rows + season totals) —
     no extra network calls. Returns an empty list on a day with nothing
     notable, which is the common case.
@@ -183,8 +192,8 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
     - Perfect game detection checks 0 H / 0 BB / 0 HBP over 9+ IP, which
       doesn't rule out reaching base via a fielding error — the closest
       approximation available from box-score-level stats.
-    - HR milestones are season totals only, not career totals (this app
-      only caches the current season's cumulative stats)."""
+    - HR/SV/SO/IP milestones are season totals only, not career totals
+      (this app only caches the current season's cumulative stats)."""
     recent_batting = load_recent_batting(season, db_mtime_val)
     recent_pitching = load_recent_pitching(season, db_mtime_val)
     milestones = []
@@ -212,6 +221,9 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
                         })
 
     if not recent_pitching.empty:
+        # recent_pitching.mlbID is stored as text in SQLite (unlike every
+        # other table's mlbID) — cast before merging on it or pandas raises.
+        recent_pitching = recent_pitching.assign(mlbID=recent_pitching["mlbID"].astype(int))
         day_pitching = recent_pitching[recent_pitching["period"] == "day"]
         no_hit_bids = day_pitching[(day_pitching["IP"] >= 9) & (day_pitching["H"] == 0)]
         for _, row in no_hit_bids.iterrows():
@@ -221,6 +233,39 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
                 "category": "Perfect Game" if is_perfect else "No-Hitter",
                 "text": "Threw a perfect game" if is_perfect else "Threw a no-hitter",
             })
+
+        season_pitching = load_pitching(season, db_mtime_val)[["mlbID", "SV", "SO", "IP"]].rename(
+            columns={"SV": "season_SV", "SO": "season_SO", "IP": "season_IP"}
+        )
+        day_pitching = day_pitching.merge(season_pitching, on="mlbID", how="left")
+
+        for _, row in day_pitching.iterrows():
+            if row["SV"] >= 1 and pd.notna(row.get("season_SV")):
+                before = row["season_SV"] - row["SV"]
+                for threshold in SV_MILESTONE_THRESHOLDS:
+                    if before < threshold <= row["season_SV"]:
+                        milestones.append({
+                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
+                            "category": "SV Milestone", "text": f"Reached {threshold} saves this season",
+                        })
+
+            if row["SO"] >= 1 and pd.notna(row.get("season_SO")):
+                before = row["season_SO"] - row["SO"]
+                for threshold in SO_MILESTONE_THRESHOLDS:
+                    if before < threshold <= row["season_SO"]:
+                        milestones.append({
+                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
+                            "category": "SO Milestone", "text": f"Reached {threshold} strikeouts this season",
+                        })
+
+            if row["IP"] > 0 and pd.notna(row.get("season_IP")):
+                before = row["season_IP"] - row["IP"]
+                for threshold in IP_MILESTONE_THRESHOLDS:
+                    if before < threshold <= row["season_IP"]:
+                        milestones.append({
+                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
+                            "category": "IP Milestone", "text": f"Reached {threshold} innings pitched this season",
+                        })
 
     milestones.sort(key=lambda m: _MILESTONE_PRIORITY.get(m["category"], 99))
     return milestones
