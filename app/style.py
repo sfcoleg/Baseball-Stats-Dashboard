@@ -134,11 +134,11 @@ _DIAMOND_FIELD_SVG = (
 # (depth-chart position code, on-field label, x%, y%) — measured from the
 # actual base/mound pixel positions in app/assets/baseballfield.png (265x265).
 _DIAMOND_POSITIONS = [
-    ("CF", "CF", 50, 17),
-    ("LF", "LF", 26, 32),
-    ("RF", "RF", 74, 32),
+    ("CF", "CF", 50, 20),
+    ("LF", "LF", 24, 35),
+    ("RF", "RF", 76, 35),
     ("2B", "2B", 62, 45),
-    ("SS", "SS", 38, 45),
+    ("SS", "SS", 38, 46),
     ("1B", "1B", 76, 62),
     ("3B", "3B", 24, 62),
     ("SP", "P", 50, 62),
