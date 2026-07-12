@@ -81,6 +81,15 @@ app/
     11_Transactions.py    # Recent MLB roster moves (trades, signings, DFAs, IL moves, etc.) from the Stats
                            # API's /transactions endpoint (db.load_transactions()), filterable by lookback
                            # window/type/team — built for keeping an eye on trade deadline activity.
+    12_Daily_Digest.py     # "Everything that happened yesterday" in one scroll — the differentiator is
+                           # bundling data this app already computes separately elsewhere, not new data:
+                           # milestones (db.get_milestones), top 5 day-window batting/pitching performances
+                           # (db.top_n_recent_batters()/top_n_recent_pitchers(), new — top_recent_performer()/
+                           # top_recent_pitcher() only return the single best), yesterday's transactions
+                           # (db.load_transactions(2) filtered to date == yesterday), and new injured-list
+                           # placements carved out of that same transactions pull (Status Change + "injured
+                           # list" in the description, minus "activated" ones). Placed second in nav, right
+                           # after Home, in main.py's PAGES list.
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar

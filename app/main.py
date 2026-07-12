@@ -36,6 +36,7 @@ sidebar.render_search()
 
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
+    st.Page("pages/12_Daily_Digest.py", title="Daily Digest"),
     st.Page("pages/1_Batting.py", title="Batting"),
     st.Page("pages/2_Pitching.py", title="Pitching"),
     st.Page("pages/3_Fielding.py", title="Fielding"),

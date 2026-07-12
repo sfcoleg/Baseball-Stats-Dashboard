@@ -157,6 +157,35 @@ def top_recent_pitcher(recent_pitching: pd.DataFrame, period: str) -> pd.Series 
     return qualified.sort_values("ERA", ascending=True).iloc[0]
 
 
+def top_n_recent_batters(recent_batting: pd.DataFrame, period: str, n: int = 5) -> pd.DataFrame:
+    """Same ranking as top_recent_performer(), but the top `n` rows instead
+    of just the single best — for a digest-style list rather than one card."""
+    if recent_batting.empty:
+        return recent_batting
+    subset = recent_batting[recent_batting["period"] == period]
+    qualified = subset[subset["PA"] >= RECENT_MIN_PA.get(period, 1)].copy()
+    if qualified.empty:
+        return qualified
+    if period == "day":
+        qualified["TB"] = qualified["H"] + qualified["2B"] + 2 * qualified["3B"] + 3 * qualified["HR"]
+        return qualified.sort_values("TB", ascending=False).head(n)
+    return qualified.sort_values("OPS", ascending=False).head(n)
+
+
+def top_n_recent_pitchers(recent_pitching: pd.DataFrame, period: str, n: int = 5) -> pd.DataFrame:
+    """Same ranking as top_recent_pitcher(), but the top `n` rows instead of
+    just the single best — for a digest-style list rather than one card."""
+    if recent_pitching.empty:
+        return recent_pitching
+    subset = recent_pitching[recent_pitching["period"] == period]
+    qualified = subset[subset["IP"] >= RECENT_MIN_IP.get(period, 1)]
+    if qualified.empty:
+        return qualified
+    if period == "day" and "GSc" in qualified.columns:
+        return qualified.sort_values("GSc", ascending=False).head(n)
+    return qualified.sort_values("ERA", ascending=True).head(n)
+
+
 # Season home-run totals worth calling out when a player's most recent game
 # pushed them past one. Deliberately limited to "notable" round numbers
 # (not 20/25) so this doesn't fire constantly — the whole point is that it's
