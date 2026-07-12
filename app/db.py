@@ -53,7 +53,7 @@ BATTING_COLS = [
 ]
 PITCHING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP",
-    "SO", "BB", "HR", "mlbID", "K_9", "BB_9", "K_BB", "FIP",
+    "SO", "BB", "HR", "mlbID", "K_9", "BB_9", "K_BB", "FIP", "xERA", "BAbip", "GB_FB",
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against", "season",
 ]
 FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "season"]
@@ -295,13 +295,15 @@ def load_depth_chart(team_id: int) -> dict:
     starting pitcher and the closer, as "RP") for one team, from the MLB
     Stats API's depth chart roster — a live lookup, not part of the daily
     ingest, since depth charts shift with trades/call-ups more often than
-    once a day. Returns {position_code: {"name", "mlbID"}}, e.g.
-    {"SS": {"name": "...", ...}}; a position is simply absent if the API
-    has no one listed there."""
+    once a day. Returns {position_code: {"name", "mlbID", "bats"}}, e.g.
+    {"SS": {"name": "...", "mlbID": ..., "bats": "L"|"R"|"S"}}; a position
+    is simply absent if the API has no one listed there. "bats" (batting
+    side) doubles as the lineup-composition input for predict_game()'s
+    platoon-split adjustment."""
     try:
         resp = requests.get(
             f"https://statsapi.mlb.com/api/v1/teams/{int(team_id)}/roster",
-            params={"rosterType": "depthChart"},
+            params={"rosterType": "depthChart", "hydrate": "person(batSide)"},
             timeout=10,
         )
         resp.raise_for_status()
@@ -316,10 +318,34 @@ def load_depth_chart(team_id: int) -> dict:
             continue
         person = entry.get("person", {})
         if person.get("id") and person.get("fullName"):
-            starters[pos] = {"name": person["fullName"], "mlbID": person["id"]}
+            starters[pos] = {
+                "name": person["fullName"], "mlbID": person["id"],
+                "bats": person.get("batSide", {}).get("code"),
+            }
     if "CP" in starters:
         starters["RP"] = starters.pop("CP")
     return starters
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=10)
+def load_pitcher_handedness(mlbIDs: tuple) -> dict:
+    """Throwing hand for each mlbID, via a single batched MLB Stats API call
+    (handedness never changes, so this is cached for a full day). Returns
+    {mlbID: "L"|"R"}; an id the API doesn't recognize is simply absent."""
+    ids = [str(int(i)) for i in mlbIDs if i is not None and not pd.isna(i)]
+    if not ids:
+        return {}
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/people",
+            params={"personIds": ",".join(ids)},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        people = resp.json().get("people", [])
+    except Exception:
+        return {}
+    return {p["id"]: p["pitchHand"]["code"] for p in people if p.get("pitchHand", {}).get("code")}
 
 
 _COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]
@@ -453,6 +479,28 @@ HOME_FIELD_ADVANTAGE = 0.04
 # a tiny-sample ERA (e.g. a starter's first outing) can't swing things wildly.
 STARTER_ERA_PROB_PER_RUN = 0.03
 STARTER_ERA_MAX_SHIFT = 0.10
+# Same idea, for each team's bullpen (relievers = GS==0, min 5 IP so a single
+# mop-up outing can't swing it). Weighted lower than the starter since one
+# pitcher (thrown well over half the game) still matters more than the pen.
+BULLPEN_ERA_PROB_PER_RUN = 0.02
+BULLPEN_ERA_MAX_SHIFT = 0.05
+BULLPEN_MIN_IP = 5
+# Team lineup strength, by PA-weighted team wOBA (min 20 PA so a September
+# call-up's 3-PA sample doesn't skew it). wOBA sits on a ~.300-.340 scale, so
+# a typical best-vs-worst-lineup gap (~.020-.030) yields a modest shift.
+LINEUP_WOBA_PROB_PER_POINT = 3.0
+LINEUP_WOBA_MAX_SHIFT = 0.05
+LINEUP_MIN_PA = 20
+# Platoon-split adjustment: rather than scraping per-player vs-LHP/vs-RHP
+# splits (hundreds of Baseball-Reference requests a day — not viable), this
+# uses each team's likely lineup handedness mix (from the depth chart's 9
+# position-player slots) against the opposing starter's throwing hand, and
+# the well-documented *league-average* same-handed platoon penalty. A lineup
+# that's entirely opposite-handed vs. the opposing starter gets the full
+# shift; an entirely same-handed lineup gets the full penalty; a 50/50 mix
+# is neutral. Switch hitters always bat opposite the pitcher, so they never
+# count as a same-handed matchup.
+PLATOON_MAX_SHIFT = 0.03
 
 
 def log5_win_prob(pct_a: float, pct_b: float) -> float:
@@ -474,12 +522,64 @@ def moneyline_odds(prob: float) -> str:
     return f"+{round(100 * (1 - prob) / prob):d}"
 
 
-def predict_game(row: pd.Series, pitching: pd.DataFrame) -> dict | None:
+def _clamp(value, max_abs):
+    return max(-max_abs, min(max_abs, value))
+
+
+def team_bullpen_era(pitching: pd.DataFrame, team_abbr: str) -> float | None:
+    """IP-weighted ERA of a team's relievers (GS==0). `pitching` must already
+    have team-abbreviated Tm (see teams.add_team_abbr)."""
+    bullpen = pitching[(pitching["Tm"] == team_abbr) & (pitching["GS"] == 0) & (pitching["IP"] >= BULLPEN_MIN_IP)]
+    total_ip = bullpen["IP"].sum()
+    if total_ip <= 0:
+        return None
+    return (bullpen["ERA"] * bullpen["IP"]).sum() / total_ip
+
+
+def team_lineup_woba(batting: pd.DataFrame, team_abbr: str) -> float | None:
+    """PA-weighted wOBA of a team's batters. `batting` must already have
+    team-abbreviated Tm (see teams.add_team_abbr)."""
+    lineup = batting[(batting["Tm"] == team_abbr) & (batting["PA"] >= LINEUP_MIN_PA)]
+    total_pa = lineup["PA"].sum()
+    if total_pa <= 0 or lineup["wOBA"].isna().all():
+        return None
+    weighted = lineup.dropna(subset=["wOBA"])
+    total_pa = weighted["PA"].sum()
+    if total_pa <= 0:
+        return None
+    return (weighted["wOBA"] * weighted["PA"]).sum() / total_pa
+
+
+def _platoon_shift(lineup_starters: dict, opposing_pitcher_hand: str | None) -> float:
+    if not lineup_starters or opposing_pitcher_hand not in ("L", "R"):
+        return 0.0
+    bats = [p.get("bats") for p in lineup_starters.values() if p.get("bats") in ("L", "R", "S")]
+    if not bats:
+        return 0.0
+    share_same_handed = sum(1 for b in bats if b == opposing_pitcher_hand) / len(bats)
+    return (0.5 - share_same_handed) * 2 * PLATOON_MAX_SHIFT
+
+
+def predict_game(
+    row: pd.Series,
+    pitching: pd.DataFrame,
+    batting: pd.DataFrame | None = None,
+    pitcher_hands: dict | None = None,
+) -> dict | None:
     """Predicts a home/away win probability for one row of todays_games,
-    using Log5 (team win%) + home-field advantage + a starting-pitcher ERA
-    adjustment against qualified league-average ERA (using our own cached
-    season pitching stats). This is our own sabermetric estimate, not a real
-    betting line — no external odds provider involved."""
+    using Log5 (team win%) + home-field advantage, then layering on:
+      - starting-pitcher ERA vs. qualified league-average ERA
+      - bullpen ERA vs. league-average bullpen ERA (team_bullpen_era)
+      - lineup wOBA vs. league-average lineup wOBA (team_lineup_woba)
+      - a platoon-split estimate from each lineup's handedness mix vs. the
+        opposing starter's throwing hand (see PLATOON_MAX_SHIFT)
+    `pitching` must be season pitching stats; pass team-abbreviated
+    `pitching`/`batting` (teams.add_team_abbr) to get the bullpen/lineup/
+    platoon factors — they're skipped (Log5 + home field + starter only) if
+    omitted. `pitcher_hands` is {mlbID: "L"|"R"} (see load_pitcher_handedness).
+    This is our own sabermetric estimate, not a real betting line, and still
+    has no park factors, injuries, or weather — no external odds provider
+    involved."""
     away_g, home_g = row["away_wins"] + row["away_losses"], row["home_wins"] + row["home_losses"]
     if not away_g or not home_g:
         return None
@@ -501,8 +601,30 @@ def predict_game(row: pd.Series, pitching: pd.DataFrame) -> dict | None:
             era = match.iloc[0]["ERA"]
             if pd.isna(era):
                 continue
-            shift = max(-STARTER_ERA_MAX_SHIFT, min(STARTER_ERA_MAX_SHIFT, (league_era - era) * STARTER_ERA_PROB_PER_RUN))
+            shift = _clamp((league_era - era) * STARTER_ERA_PROB_PER_RUN, STARTER_ERA_MAX_SHIFT)
             home_prob += sign * shift
+
+    home_abbr = teams.normalize_mlb_abbr(row.get("home_abbr", ""))
+    away_abbr = teams.normalize_mlb_abbr(row.get("away_abbr", ""))
+
+    if batting is not None and "Tm" in pitching.columns:
+        home_bullpen, away_bullpen = team_bullpen_era(pitching, home_abbr), team_bullpen_era(pitching, away_abbr)
+        if home_bullpen is not None and away_bullpen is not None:
+            home_prob += _clamp((away_bullpen - home_bullpen) * BULLPEN_ERA_PROB_PER_RUN, BULLPEN_ERA_MAX_SHIFT)
+
+    if batting is not None and "Tm" in batting.columns:
+        home_woba, away_woba = team_lineup_woba(batting, home_abbr), team_lineup_woba(batting, away_abbr)
+        if home_woba is not None and away_woba is not None:
+            home_prob += _clamp((home_woba - away_woba) * LINEUP_WOBA_PROB_PER_POINT, LINEUP_WOBA_MAX_SHIFT)
+
+    if pitcher_hands is not None:
+        home_team_id, away_team_id = teams.team_id_for_abbr(home_abbr), teams.team_id_for_abbr(away_abbr)
+        home_starters = load_depth_chart(home_team_id) if home_team_id else {}
+        away_starters = load_depth_chart(away_team_id) if away_team_id else {}
+        away_pitcher_hand = pitcher_hands.get(int(row["away_pitcher_mlbID"])) if pd.notna(row.get("away_pitcher_mlbID")) else None
+        home_pitcher_hand = pitcher_hands.get(int(row["home_pitcher_mlbID"])) if pd.notna(row.get("home_pitcher_mlbID")) else None
+        home_prob += _platoon_shift(home_starters, away_pitcher_hand)
+        home_prob -= _platoon_shift(away_starters, home_pitcher_hand)
 
     home_prob = min(max(home_prob, 0.05), 0.95)
     return {
@@ -595,6 +717,140 @@ def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> 
     else:
         pct = (clean <= value).mean() * 100
     return int(round(pct))
+
+
+# Percentile -> scouting grade word. Template-generated, not AI — just
+# threshold buckets mapped onto percentile_rank() output.
+_GRADE_WORDS = [
+    (85, "elite"),
+    (70, "plus"),
+    (55, "above-average"),
+    (45, "average"),
+    (30, "below-average"),
+    (15, "well below-average"),
+    (0, "poor"),
+]
+
+
+def _grade_word(pct: float) -> str:
+    for threshold, word in _GRADE_WORDS:
+        if pct >= threshold:
+            return word
+    return "poor"
+
+
+def _top_traits(trait_pcts: list[tuple[str, float]], n: int) -> list[tuple[str, float]]:
+    """The `n` traits whose percentile is furthest from average (50) — a
+    player's most defining tools this season, not just the first N checked."""
+    return sorted(trait_pcts, key=lambda t: abs(t[1] - 50), reverse=True)[:n]
+
+
+def batter_scouting_report(row: pd.Series, qualified: pd.DataFrame, brief: bool = False) -> str | None:
+    """Template-generated scouting blurb from a batter's percentile ranks
+    vs. `qualified` (other batters at the same min-PA bar this season).
+    `brief=True` returns a short comma-separated tool list (for tight
+    spaces like a milestone card); otherwise a couple of full sentences."""
+    ops_pct = percentile_rank(qualified["OPS"], row["OPS"])
+    if ops_pct is None:
+        return None
+
+    traits = []
+    power_pct = percentile_rank(qualified["ISO"], row["ISO"])
+    if power_pct is not None:
+        traits.append(("power", power_pct))
+    contact_pct = percentile_rank(qualified["K_PCT"], row["K_PCT"], lower_is_better=True)
+    if contact_pct is not None:
+        traits.append(("contact", contact_pct))
+    eye_pct = percentile_rank(qualified["BB_PCT"], row["BB_PCT"])
+    if eye_pct is not None:
+        traits.append(("eye", eye_pct))
+    if pd.notna(row.get("SB")) and row["SB"] > 0:
+        speed_pct = percentile_rank(qualified["SB"], row["SB"])
+        if speed_pct is not None:
+            traits.append(("speed", speed_pct))
+
+    labels = {
+        "power": lambda p: f"{_grade_word(p)} power",
+        "contact": lambda p: f"{_grade_word(p)} contact skills",
+        "eye": lambda p: f"{_grade_word(p)} plate discipline",
+        "speed": lambda p: f"{_grade_word(p)} speed",
+    }
+    top = _top_traits(traits, 2 if brief else 3)
+    phrases = [labels[key](pct) for key, pct in top]
+
+    if brief:
+        return ", ".join(p[0].upper() + p[1:] for p in phrases) if phrases else None
+
+    tier = (
+        "an elite, middle-of-the-order caliber bat" if ops_pct >= 85 else
+        "a strong everyday regular" if ops_pct >= 65 else
+        "an average, roster-caliber bat" if ops_pct >= 35 else
+        "a bat that has struggled to produce" if ops_pct >= 15 else
+        "a bat producing well below replacement level"
+    )
+    report = f"{row['Name']} profiles as {tier} this season"
+    if phrases:
+        joined = phrases[0] if len(phrases) == 1 else ", ".join(phrases[:-1]) + f" and {phrases[-1]}"
+        report += f", carrying {joined}."
+    else:
+        report += "."
+    return report
+
+
+def pitcher_scouting_report(row: pd.Series, qualified: pd.DataFrame, brief: bool = False) -> str | None:
+    """Same idea as batter_scouting_report(), for pitchers. When xERA is
+    available and diverges meaningfully from actual ERA, adds a one-line
+    regression note (the full-report version only) — xERA is a contact-
+    quality-based expected outcome, so a big gap flags likely good/bad luck."""
+    era_pct = percentile_rank(qualified["ERA"], row["ERA"], lower_is_better=True)
+    if era_pct is None:
+        return None
+
+    traits = []
+    k_pct = percentile_rank(qualified["K_9"], row["K_9"])
+    if k_pct is not None:
+        traits.append(("stuff", k_pct))
+    bb_pct = percentile_rank(qualified["BB_9"], row["BB_9"], lower_is_better=True)
+    if bb_pct is not None:
+        traits.append(("control", bb_pct))
+
+    labels = {
+        "stuff": lambda p: f"{_grade_word(p)} strikeout stuff",
+        "control": lambda p: f"{_grade_word(p)} control",
+    }
+    top = _top_traits(traits, 2)
+    phrases = [labels[key](pct) for key, pct in top]
+
+    if brief:
+        return ", ".join(p[0].upper() + p[1:] for p in phrases) if phrases else None
+
+    tier = (
+        "an elite, front-of-the-rotation caliber arm" if era_pct >= 85 else
+        "a solid, reliable arm" if era_pct >= 65 else
+        "an average, roster-caliber arm" if era_pct >= 35 else
+        "an arm that has struggled to prevent runs" if era_pct >= 15 else
+        "an arm producing well below replacement level"
+    )
+    report = f"{row['Name']} profiles as {tier} this season"
+    if phrases:
+        joined = phrases[0] if len(phrases) == 1 else f"{phrases[0]} and {phrases[1]}"
+        report += f", showing {joined}."
+    else:
+        report += "."
+
+    if "xERA" in row.index and pd.notna(row.get("xERA")):
+        gap = row["ERA"] - row["xERA"]
+        if gap >= 0.75:
+            report += (
+                f" His {row['xERA']:.2f} xERA is well below his {row['ERA']:.2f} ERA — the underlying "
+                f"contact quality suggests better results may be coming."
+            )
+        elif gap <= -0.75:
+            report += (
+                f" His {row['xERA']:.2f} xERA is well above his {row['ERA']:.2f} ERA — some regression "
+                f"may be coming."
+            )
+    return report
 
 
 def get_player_batting(mlbID, season: int, db_mtime_val: float) -> pd.Series | None:

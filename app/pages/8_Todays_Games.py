@@ -13,10 +13,13 @@ st.set_page_config(page_title="Today's Games | Sabermetrics Dashboard", layout="
 st.title("Today's Games")
 st.caption(
     "Win probabilities and odds are calculated by this dashboard — not real sportsbook lines. "
-    "The model uses the Log5 method (each team's season winning percentage) plus a home-field-advantage "
-    "adjustment, then nudges the prediction based on how each probable starter's ERA compares to "
-    "qualified league-average ERA. There's no park factors, bullpen strength, injuries, or weather in this — "
-    "treat it as a sabermetrics estimate, not a betting recommendation."
+    "The model starts from Log5 (each team's season winning percentage) plus a home-field-advantage "
+    "adjustment, then layers on: each probable starter's ERA vs. qualified league-average ERA, each "
+    "team's bullpen ERA vs. league average, each team's lineup wOBA vs. league average, and a platoon-split "
+    "estimate — each lineup's likely handedness mix (from its depth chart) against the opposing starter's "
+    "throwing hand, using the league-average same-handed penalty rather than per-player splits (scraping "
+    "those for every batter in every lineup, every day, isn't practical). There's still no park factors, "
+    "injuries, or weather in this — treat it as a sabermetrics estimate, not a betting recommendation."
 )
 
 if not db.DB_PATH.exists():
@@ -31,17 +34,23 @@ if games.empty:
     st.stop()
 
 season = db.get_seasons("batting")[0]
-pitching = db.load_pitching(season, mtime)
+pitching_raw = db.load_pitching(season, mtime)
+pitching = teams.add_team_abbr(pitching_raw)
+batting = teams.add_team_abbr(db.load_batting(season, mtime))
 live_scores = db.load_live_scores(games.iloc[0]["date"])
 if st.button("Refresh live scores"):
     db.load_live_scores.clear()
     st.rerun()
 
-_ABBR_FIX = {"AZ": "ARI"}
+_pitcher_ids = tuple(sorted({
+    int(v) for col in ("away_pitcher_mlbID", "home_pitcher_mlbID")
+    for v in games[col].dropna().tolist()
+}))
+pitcher_hands = db.load_pitcher_handedness(_pitcher_ids)
 
 
 def team_color(abbr):
-    return teams.color_for_abbr(_ABBR_FIX.get(abbr, abbr))
+    return teams.color_for_abbr(teams.normalize_mlb_abbr(abbr))
 
 
 def pitcher_era(mlbID):
@@ -52,7 +61,7 @@ def pitcher_era(mlbID):
 
 
 for _, row in games.iterrows():
-    pred = db.predict_game(row, pitching)
+    pred = db.predict_game(row, pitching, batting, pitcher_hands)
     away_color, home_color = team_color(row["away_abbr"]), team_color(row["home_abbr"])
     live = live_scores.get(row["game_pk"], {})
     status = live.get("status") or row["status"]
