@@ -186,6 +186,169 @@ def top_n_recent_pitchers(recent_pitching: pd.DataFrame, period: str, n: int = 5
     return qualified.sort_values("ERA", ascending=True).head(n)
 
 
+def _batting_narrative(top_batter: pd.Series, season_batting: pd.DataFrame) -> dict | None:
+    """Template-generated write-up of the day's best batting performance.
+    Not AI-written — fixed sentence templates chosen by stat magnitude,
+    reusing data already computed elsewhere (the day-window top performer,
+    season percentile). Returns None if the day's best line isn't loud
+    enough to bother writing up (fewer than 2 hits and no multi-HR game)."""
+    hits, hr, rbi = int(top_batter["H"]), int(top_batter["HR"]), int(top_batter["RBI"])
+    tb = int(hits + top_batter["2B"] + 2 * top_batter["3B"] + 3 * top_batter["HR"])
+    if hits < 2 and hr < 1:
+        return None
+
+    qualified = season_batting[season_batting["PA"] >= 50]
+    season_row = season_batting[season_batting["mlbID"] == top_batter["mlbID"]]
+    pct = percentile_rank(qualified["OPS"], season_row.iloc[0]["OPS"]) if not season_row.empty else None
+
+    if hr >= 3:
+        lede = f"{top_batter['Name']} put on a show, going deep {hr} times"
+    elif hr == 2:
+        lede = f"{top_batter['Name']} had one of the loudest lines of the night, homering twice"
+    elif tb >= 7:
+        lede = f"{top_batter['Name']} paced yesterday's hitters with a monster day at the plate"
+    else:
+        lede = f"{top_batter['Name']} led yesterday's hitters"
+
+    if pct is not None and pct >= 80:
+        context = f" — the latest big night from a hitter who's been elite all season ({pct}th percentile OPS)."
+    elif pct is not None and pct <= 30:
+        context = f" — a rare spike for a hitter having a quiet season so far ({pct}th percentile OPS)."
+    else:
+        context = "."
+
+    body = f"{lede}: {hits} hit{'s' if hits != 1 else ''}, {tb} total bases, {rbi} RBI{context}"
+    abbr, _, color = teams.team_meta_from_city(top_batter["Tm"], top_batter.get("Lev"))
+    return {
+        "headline": f"{top_batter['Name']}'s big night",
+        "body": body, "mlbID": top_batter["mlbID"], "Tm": abbr, "color": color,
+    }
+
+
+def _pitching_narrative(top_pitcher: pd.Series, season_pitching: pd.DataFrame) -> dict | None:
+    """Same idea as _batting_narrative(), for the day's best pitching line.
+    Returns None if it's not a standout outing (Game Score under 65 and
+    fewer than 8 strikeouts)."""
+    era, ip, so = top_pitcher["ERA"], top_pitcher["IP"], int(top_pitcher["SO"])
+    # GSc is stored as text in SQLite (unlike every other numeric column here).
+    gsc = pd.to_numeric(top_pitcher.get("GSc"), errors="coerce")
+    if (pd.isna(gsc) or gsc < 65) and so < 8:
+        return None
+
+    qualified = season_pitching[season_pitching["IP"] >= 20]
+    season_row = season_pitching[season_pitching["mlbID"] == top_pitcher["mlbID"]]
+    pct = percentile_rank(qualified["ERA"], season_row.iloc[0]["ERA"], lower_is_better=True) if not season_row.empty else None
+
+    if pd.notna(gsc) and gsc >= 85:
+        lede = f"{top_pitcher['Name']} was nearly untouchable"
+    elif so >= 10:
+        lede = f"{top_pitcher['Name']} blew hitters away, racking up {so} strikeouts"
+    else:
+        lede = f"{top_pitcher['Name']} turned in the best start of the night"
+
+    if pct is not None and pct >= 80:
+        context = f" — right in line with a season that's been elite from the start ({pct}th percentile ERA)."
+    elif pct is not None and pct <= 30:
+        context = f" — a bright spot in an otherwise rough season ({pct}th percentile ERA)."
+    else:
+        context = "."
+
+    body = f"{lede}: {ip:.1f} innings, {era:.2f} ERA, {so} strikeout{'s' if so != 1 else ''}{context}"
+    abbr, _, color = teams.team_meta_from_city(top_pitcher["Tm"], top_pitcher.get("Lev"))
+    return {
+        "headline": f"{top_pitcher['Name']} deals",
+        "body": body, "mlbID": top_pitcher["mlbID"], "Tm": abbr, "color": color,
+    }
+
+
+def _injury_narrative(il_moves: pd.DataFrame, season_batting: pd.DataFrame, season_pitching: pd.DataFrame) -> dict | None:
+    """Picks the single most notable injured-list placement from yesterday's
+    `il_moves` (a Transactions-page-style DataFrame already filtered to new
+    IL placements — see the Daily Digest page) and writes it up, using each
+    candidate's season stats to judge how big a deal the injury is. A
+    'key player' here means an above-average season (60th+ percentile) or
+    clearly an everyday player/rotation piece by playing time — a September
+    call-up's IL trip isn't a story. Returns None if no placement clears
+    that bar, or if the transaction has no mlbID to match against (some
+    older Stats API entries don't)."""
+    qualified_batting = season_batting[season_batting["PA"] >= 50]
+    qualified_pitching = season_pitching[season_pitching["IP"] >= 20]
+
+    candidates = []
+    for _, row in il_moves.iterrows():
+        mlbID = row.get("mlbID")
+        if mlbID is None or pd.isna(mlbID):
+            continue
+        mlbID = int(mlbID)
+        b_row = season_batting[season_batting["mlbID"] == mlbID]
+        p_row = season_pitching[season_pitching["mlbID"] == mlbID]
+        if not b_row.empty and b_row.iloc[0]["PA"] >= 50:
+            pct = percentile_rank(qualified_batting["OPS"], b_row.iloc[0]["OPS"])
+            key = (pct is not None and pct >= 60) or b_row.iloc[0]["PA"] >= 300
+            if key:
+                candidates.append((pct or 0, row, b_row.iloc[0], "batting"))
+        elif not p_row.empty and p_row.iloc[0]["IP"] >= 20:
+            pct = percentile_rank(qualified_pitching["ERA"], p_row.iloc[0]["ERA"], lower_is_better=True)
+            key = (pct is not None and pct >= 60) or p_row.iloc[0]["IP"] >= 60
+            if key:
+                candidates.append((pct or 0, row, p_row.iloc[0], "pitching"))
+
+    if not candidates:
+        return None
+    candidates.sort(key=lambda c: c[0], reverse=True)
+    pct, tx_row, season_row, kind = candidates[0]
+
+    parts = tx_row["description"].split(". ")
+    detail = f" {parts[-1].strip().rstrip('.')}." if len(parts) > 1 else ""
+    tier = "60-day" if "60-day" in tx_row["description"] else (
+        "15-day" if "15-day" in tx_row["description"] else (
+        "10-day" if "10-day" in tx_row["description"] else "7-day"))
+
+    if kind == "batting":
+        stat_line = f"hitting {season_row['BA']:.3f}/{season_row['OBP']:.3f}/{season_row['SLG']:.3f} with {int(season_row['HR'])} home runs this season"
+    else:
+        stat_line = f"carrying a {season_row['ERA']:.2f} ERA over {season_row['IP']:.1f} innings this season"
+
+    abbr = tx_row["to_abbr"] if isinstance(tx_row["to_abbr"], str) else tx_row["from_abbr"]
+    body = f"{season_row['Name']} went on the {tier} injured list.{detail} {season_row['Name']} was {stat_line} — a real loss for {abbr}."
+    return {
+        "headline": f"Injury Watch: {season_row['Name']}",
+        "body": body, "mlbID": int(season_row["mlbID"]), "Tm": abbr, "color": teams.color_for_abbr(abbr),
+    }
+
+
+def daily_articles(season: int, db_mtime_val: float, il_moves: pd.DataFrame) -> list[dict]:
+    """Assembles the Daily Digest page's "Today's Storylines" — up to three
+    template-generated write-ups (batting, pitching, injury) about
+    yesterday's most notable happenings. See _batting_narrative(),
+    _pitching_narrative(), _injury_narrative() for the actual generation
+    logic; this just calls each and drops the Nones. Not AI-written."""
+    recent_batting = load_recent_batting(season, db_mtime_val)
+    recent_pitching = load_recent_pitching(season, db_mtime_val)
+    season_batting = load_batting(season, db_mtime_val)
+    season_pitching = load_pitching(season, db_mtime_val)
+
+    articles = []
+    top_batter = top_recent_performer(recent_batting, "day")
+    if top_batter is not None:
+        article = _batting_narrative(top_batter, season_batting)
+        if article:
+            articles.append(article)
+
+    top_pitcher = top_recent_pitcher(recent_pitching, "day")
+    if top_pitcher is not None:
+        article = _pitching_narrative(top_pitcher, season_pitching)
+        if article:
+            articles.append(article)
+
+    if not il_moves.empty:
+        article = _injury_narrative(il_moves, season_batting, season_pitching)
+        if article:
+            articles.append(article)
+
+    return articles
+
+
 # Season home-run totals worth calling out when a player's most recent game
 # pushed them past one. Deliberately limited to "notable" round numbers
 # (not 20/25) so this doesn't fire constantly — the whole point is that it's
@@ -511,7 +674,7 @@ def load_transactions(days: int) -> pd.DataFrame:
         resp.raise_for_status()
         txs = resp.json().get("transactions", [])
     except Exception:
-        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description"])
+        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description", "mlbID"])
 
     rows = []
     for t in txs:
@@ -525,9 +688,10 @@ def load_transactions(days: int) -> pd.DataFrame:
             "to_abbr": teams.abbr_for_team_id((t.get("toTeam") or {}).get("id")),
             "from_abbr": teams.abbr_for_team_id((t.get("fromTeam") or {}).get("id")),
             "description": desc,
+            "mlbID": (t.get("person") or {}).get("id"),
         })
     if not rows:
-        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description"])
+        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description", "mlbID"])
     # The API emits one entry per team on each side of a trade (e.g. a 1-for-1
     # trade yields two rows sharing the same "id" with an identical
     # description) — keep just one per transaction id.

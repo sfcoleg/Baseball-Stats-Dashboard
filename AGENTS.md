@@ -90,6 +90,20 @@ app/
                            # placements carved out of that same transactions pull (Status Change + "injured
                            # list" in the description, minus "activated" ones). Placed second in nav, right
                            # after Home, in main.py's PAGES list.
+                           #
+                           # "Today's Storylines" (top of the page) is db.daily_articles() — a few sentences
+                           # of template-generated prose (fixed sentence variants chosen by stat magnitude,
+                           # NOT an LLM call — this app has no AI text generation anywhere) covering: the
+                           # day's best batting line, best pitching line, and (when one clears the bar) an
+                           # injury to a "key player". Each is its own private helper
+                           # (_batting_narrative()/_pitching_narrative()/_injury_narrative()) that returns
+                           # None rather than force a write-up on a quiet day — daily_articles() just calls
+                           # all three and drops the Nones. The injury piece needed a new "mlbID" column on
+                           # load_transactions()'s output (from the raw API's `person.id`, previously
+                           # discarded) to join a placement's description back to that player's season stats
+                           # and judge whether they're actually notable (60th+ percentile, or clearly an
+                           # everyday player/rotation piece by playing time) — a September call-up's IL trip
+                           # isn't a story.
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar

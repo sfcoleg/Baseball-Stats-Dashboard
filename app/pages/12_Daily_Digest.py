@@ -26,6 +26,35 @@ recent_batting = db.load_recent_batting(season, mtime)
 recent_pitching = db.load_recent_pitching(season, mtime)
 milestones = db.get_milestones(season, mtime)
 
+txs = db.load_transactions(2)
+txs_yesterday = txs[txs["date"] == yesterday.isoformat()] if not txs.empty else txs
+il_moves = txs_yesterday[
+    (txs_yesterday["type"] == "Status Change")
+    & txs_yesterday["description"].str.contains("injured list", case=False, na=False)
+    & ~txs_yesterday["description"].str.contains("activated", case=False, na=False)
+] if not txs_yesterday.empty else txs_yesterday
+
+style.colored_header("Today's Storylines", "headliners")
+st.caption("Template-generated recaps, not AI-written — a few sentences on the day's most notable performance and injury.")
+articles = db.daily_articles(season, mtime, il_moves)
+if not articles:
+    st.caption("Nothing stood out enough to write up yesterday.")
+else:
+    for a in articles:
+        with st.container(border=True):
+            st.markdown(
+                f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+                f"<img src='{style.headshot_url(a['mlbID'], width=180)}' style='width:80px;height:80px;"
+                f"border-radius:10px;object-fit:cover;flex-shrink:0' />"
+                f"<div style='flex:1;min-width:0'>"
+                f"<div style='font-size:1.1rem;font-weight:700;margin-bottom:4px'>{a['headline']} "
+                f"<span style='background-color:{a['color']}66;color:#FAFAFA;padding:2px 9px;"
+                f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{a['Tm']}</span></div>"
+                f"<div style='color:#DCE1EA'>{a['body']}</div>"
+                f"</div></div>",
+                unsafe_allow_html=True,
+            )
+
 style.colored_header("Milestones", "headliners")
 if milestones:
     for m in milestones:
@@ -62,8 +91,6 @@ else:
             style.milestone_card(row["mlbID"], row["Name"], abbr, color, text)
 
 style.colored_header("Transactions", "fielding")
-txs = db.load_transactions(2)
-txs_yesterday = txs[txs["date"] == yesterday.isoformat()] if not txs.empty else txs
 if txs_yesterday.empty:
     st.caption("No transactions logged for this date.")
 else:
@@ -85,11 +112,6 @@ else:
         )
 
 style.colored_header("New Injured List Moves", "pitching")
-il_moves = txs_yesterday[
-    (txs_yesterday["type"] == "Status Change")
-    & txs_yesterday["description"].str.contains("injured list", case=False, na=False)
-    & ~txs_yesterday["description"].str.contains("activated", case=False, na=False)
-] if not txs_yesterday.empty else txs_yesterday
 if il_moves.empty:
     st.caption("No new injured-list placements for this date.")
 else:
