@@ -19,10 +19,6 @@ if not db.DB_PATH.exists():
 mtime = db.db_mtime()
 season = st.selectbox("Season", db.get_seasons("batting"), index=0)
 
-view = st.radio(
-    "View", ["Real Team", "All MLB Team", "All Month Team"], horizontal=True,
-)
-
 _COMPOSITE_SCOPES = {"All MLB Team": "all", "All Month Team": "month"}
 _COMPOSITE_COLORS = {"all": "#0C2340", "month": "#E3572A"}
 _COMPOSITE_CAPTIONS = {
@@ -31,9 +27,13 @@ _COMPOSITE_CAPTIONS = {
     "month": "Best performer at each position over the trailing 30 days (min PA/IP same as the Home page's \"Hot This Month\" cards).",
 }
 
-if view != "Real Team":
-    scope = _COMPOSITE_SCOPES[view]
-    style.colored_header(view, "fielding")
+team_options = teams.all_teams()
+labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES)
+choice = st.selectbox("Team", labels)
+
+if choice in _COMPOSITE_SCOPES:
+    scope = _COMPOSITE_SCOPES[choice]
+    style.colored_header(choice, "fielding")
     st.caption(_COMPOSITE_CAPTIONS[scope])
     starters = db.build_composite_team(season, mtime, scope)
     if not starters:
@@ -48,9 +48,6 @@ if view != "Real Team":
     st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
     st.stop()
 
-team_options = teams.all_teams()
-labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options]
-choice = st.selectbox("Team", labels)
 selected_abbr = team_options[labels.index(choice)][0]
 color = teams.color_for_abbr(selected_abbr)
 
