@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -109,6 +110,26 @@ if batting is not None:
             f"color:#DCE1EA'>{batting_report}</div>",
             unsafe_allow_html=True,
         )
+
+    style.colored_header("Baserunning", "batting")
+    sb, cs = batting.get("SB"), batting.get("CS")
+    attempts = (sb or 0) + (cs or 0)
+    sb_pct_val = (sb / attempts * 100) if attempts and pd.notna(sb) and pd.notna(cs) else None
+    qualified_attempts = qualified_batting["SB"] + qualified_batting["CS"]
+    qualified_sb_pct = (qualified_batting["SB"] / qualified_attempts.replace(0, pd.NA) * 100)
+    br_metrics = [
+        ("SB", int(sb) if pd.notna(sb) else "—", db.percentile_rank(qualified_batting["SB"], sb) if pd.notna(sb) else None),
+        ("CS", int(cs) if pd.notna(cs) else "—", None),
+        ("SB%", f"{sb_pct_val:.0f}%" if sb_pct_val is not None else "—",
+         db.percentile_rank(qualified_sb_pct, sb_pct_val) if sb_pct_val is not None else None),
+        ("Sprint Speed", f"{batting['sprint_speed']:.1f} ft/s" if pd.notna(batting.get("sprint_speed")) else "—",
+         db.percentile_rank(qualified_batting["sprint_speed"], batting.get("sprint_speed")) if pd.notna(batting.get("sprint_speed")) else None),
+        ("Home-to-1st", f"{batting['hp_to_1b']:.2f}s" if pd.notna(batting.get("hp_to_1b")) else "—",
+         db.percentile_rank(qualified_batting["hp_to_1b"], batting.get("hp_to_1b"), lower_is_better=True) if pd.notna(batting.get("hp_to_1b")) else None),
+    ]
+    br_cols = st.columns(len(br_metrics))
+    for col, (label, value, pct) in zip(br_cols, br_metrics):
+        col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
     std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
     with std_tab:

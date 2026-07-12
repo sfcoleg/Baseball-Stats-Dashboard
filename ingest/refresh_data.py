@@ -30,6 +30,7 @@ from pybaseball import (
     statcast_pitcher_exitvelo_barrels,
     statcast_pitcher_expected_stats,
     statcast_outs_above_average,
+    statcast_sprint_speed,
 )
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
@@ -140,10 +141,15 @@ def fetch_batting(season=CURRENT_SEASON):
         "est_slg": "xSLG",
     })
 
+    print(f"Fetching {season} Statcast sprint speed...")
+    sprint = statcast_sprint_speed(season, min_opp=1)[
+        ["player_id", "sprint_speed", "hp_to_1b"]
+    ]
+
     batting["mlbID"] = pd.to_numeric(batting["mlbID"], errors="coerce")
-    batting = batting.merge(exitvelo, left_on="mlbID", right_on="player_id", how="left")
-    batting = batting.merge(expected, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
-    batting = batting.drop(columns=[c for c in batting.columns if c.endswith("_dup") or c == "player_id"])
+    for stats_df in (exitvelo, expected, sprint):
+        batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
+        batting = batting.drop(columns="player_id")
 
     batting["season"] = season
     return batting
