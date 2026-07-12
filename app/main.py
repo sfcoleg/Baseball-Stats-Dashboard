@@ -25,6 +25,13 @@ import sidebar
 
 st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
 
+# Shrink the sidebar's built-in header bar (which only holds the collapse
+# arrow) so the search box sits higher, closer to the top of the sidebar.
+st.markdown(
+    "<style>[data-testid='stSidebarHeader'] { height: 1.5rem; }</style>",
+    unsafe_allow_html=True,
+)
+
 sidebar.render_search()
 
 PAGES = [
