@@ -126,7 +126,7 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 # home), leaving more outfield room for the dirt cutout at 2nd to flare into
 # without crowding the outfielder cards above it.
 _HOME = (300, 560)
-_D = 230
+_D = 245
 _SECOND = (300, _HOME[1] - _D)
 _FIRST = (_HOME[0] + _D / 2, _HOME[1] - _D / 2)
 _THIRD = (_HOME[0] - _D / 2, _HOME[1] - _D / 2)
@@ -177,13 +177,13 @@ _BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radii=[45, 
 # arc (the arc dips as low as y=115 in straightaway center).
 _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 34),
-    ("LF", "LF", 18, 40),
-    ("RF", "RF", 82, 40),
-    ("2B", "2B", 60, 65),
-    ("SS", "SS", 40, 65),
-    ("1B", "1B", 73, 74),
-    ("3B", "3B", 27, 74),
-    ("SP", "P", 50, 75),
+    ("LF", "LF", 18, 46),
+    ("RF", "RF", 82, 46),
+    ("2B", "2B", 60, 63),
+    ("SS", "SS", 40, 63),
+    ("1B", "1B", 71, 73),
+    ("3B", "3B", 29, 73),
+    ("SP", "P", 50, 74),
     ("C", "C", 50, 92),
 ]
 
