@@ -41,10 +41,10 @@ PAGES = [
     st.Page("pages/3_Fielding.py", title="Fielding"),
     st.Page("pages/4_Team.py", title="Team"),
     st.Page("pages/5_Compare.py", title="Compare"),
-    st.Page("pages/6_Signals.py", title="Signals"),
-    st.Page("pages/7_Custom_Rankings.py", title="Custom Rankings"),
     st.Page("pages/8_Todays_Games.py", title="Today's Games"),
     st.Page("pages/9_Standings.py", title="Standings"),
+    st.Page("pages/10_Injury_Report.py", title="Injury Report"),
+    st.Page("pages/11_Transactions.py", title="Transactions"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
 ]
 

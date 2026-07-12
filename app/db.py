@@ -1,6 +1,7 @@
 """Shared helpers for reading the cached stats database."""
 import sqlite3
 import unicodedata
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -346,6 +347,112 @@ def load_pitcher_handedness(mlbIDs: tuple) -> dict:
     except Exception:
         return {}
     return {p["id"]: p["pitchHand"]["code"] for p in people if p.get("pitchHand", {}).get("code")}
+
+
+_INJURY_STATUS_CODES = {"D7": "7-Day IL", "D10": "10-Day IL", "D15": "15-Day IL", "D60": "60-Day IL"}
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=3)
+def load_injury_report() -> pd.DataFrame:
+    """Every player currently on a major-league injured list, across all 30
+    teams. The Stats API has no direct "give me the IL" endpoint, so this
+    pulls each team's 40-man roster and keeps entries whose status code is
+    an IL tier (D7/D10/D15/D60 — "D" is the API's historical "Disabled
+    List" code, still used for today's injured list). That gives the
+    authoritative current status but no injury description, so it's cross-
+    referenced against the last 45 days of transactions (typeCode "SC" /
+    Status Change) to pull in the actual injury text (e.g. "Left elbow
+    soreness") when a matching recent placement exists; older placements
+    outside that window just show the IL tier with no detail."""
+    rows = []
+    for abbr, team_id in teams._TEAM_IDS.items():
+        try:
+            resp = requests.get(
+                f"https://statsapi.mlb.com/api/v1/teams/{team_id}/roster",
+                params={"rosterType": "40Man"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            roster = resp.json().get("roster", [])
+        except Exception:
+            continue
+        for entry in roster:
+            code = entry.get("status", {}).get("code")
+            if code not in _INJURY_STATUS_CODES:
+                continue
+            person = entry.get("person", {})
+            if not person.get("id"):
+                continue
+            rows.append({
+                "mlbID": person["id"],
+                "Name": person.get("fullName"),
+                "Tm": abbr,
+                "Position": entry.get("position", {}).get("abbreviation"),
+                "Status": _INJURY_STATUS_CODES[code],
+            })
+    if not rows:
+        return pd.DataFrame(columns=["mlbID", "Name", "Tm", "Position", "Status", "Detail"])
+
+    detail_by_id = {}
+    try:
+        end, start = datetime.now(), datetime.now() - timedelta(days=45)
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/transactions",
+            params={"sportId": 1, "startDate": start.strftime("%m/%d/%Y"), "endDate": end.strftime("%m/%d/%Y")},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        txs = sorted(resp.json().get("transactions", []), key=lambda t: t.get("date") or "")
+        for t in txs:
+            desc = t.get("description") or ""
+            if t.get("typeCode") != "SC" or "injured list" not in desc.lower() or "activated" in desc.lower():
+                continue
+            pid = t.get("person", {}).get("id")
+            if not pid:
+                continue
+            parts = desc.split(". ")
+            detail_by_id[pid] = parts[-1].strip().rstrip(".") if len(parts) > 1 else None
+    except Exception:
+        pass
+
+    df = pd.DataFrame(rows)
+    df["Detail"] = df["mlbID"].map(detail_by_id)
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=5)
+def load_transactions(days: int) -> pd.DataFrame:
+    """Recent MLB transactions (trades, signings, DFAs, injured-list moves,
+    etc.) from the Stats API, most recent first. `days` is part of the
+    cache key so switching the lookback window in the UI doesn't have to
+    wait out an old entry's TTL."""
+    end, start = datetime.now(), datetime.now() - timedelta(days=days)
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/transactions",
+            params={"sportId": 1, "startDate": start.strftime("%m/%d/%Y"), "endDate": end.strftime("%m/%d/%Y")},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        txs = resp.json().get("transactions", [])
+    except Exception:
+        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description"])
+
+    rows = []
+    for t in txs:
+        desc = t.get("description")
+        if not desc:
+            continue
+        rows.append({
+            "date": t.get("date"),
+            "type": t.get("typeDesc"),
+            "to_abbr": teams.abbr_for_team_id((t.get("toTeam") or {}).get("id")),
+            "from_abbr": teams.abbr_for_team_id((t.get("fromTeam") or {}).get("id")),
+            "description": desc,
+        })
+    if not rows:
+        return pd.DataFrame(columns=["date", "type", "to_abbr", "from_abbr", "description"])
+    return pd.DataFrame(rows).sort_values("date", ascending=False, kind="stable").reset_index(drop=True)
 
 
 _COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]

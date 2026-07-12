@@ -122,6 +122,13 @@ def team_id_for_abbr(abbr: str) -> int | None:
     return _TEAM_IDS.get(abbr)
 
 
+_ID_TO_ABBR = {v: k for k, v in _TEAM_IDS.items()}
+
+
+def abbr_for_team_id(team_id) -> str | None:
+    return _ID_TO_ABBR.get(team_id)
+
+
 # The MLB Stats API's own team-abbreviation field uses "AZ" for Arizona;
 # every other source in this app (Baseball-Reference-derived abbreviations,
 # _TEAM_IDS above) uses "ARI". Normalize before looking anything up by
