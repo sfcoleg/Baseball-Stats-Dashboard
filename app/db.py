@@ -786,38 +786,6 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     return grouped.sort_values("Name").reset_index(drop=True)
 
 
-SEASON_GAMES = 162
-
-
-def project_rest_of_season(row: pd.Series, count_cols: list[str], games_played) -> dict | None:
-    """Naive rest-of-season projection: holds the player's current per-team-
-    game rate constant and extrapolates counting stats out to a 162-game
-    season. This is NOT a real projection system (no aging curve, regression
-    to the mean, or matchup context like ZiPS/Steamer) — just a simple what-if
-    based on the pace they're currently on.
-
-    `games_played` must be TEAM games played so far, not the player's own `G` —
-    a pitcher's own G (starts/appearances) is a small fraction of the team's
-    schedule (5-man rotation, bullpen usage), so using it directly as the
-    denominator wildly overprojects innings/strikeouts. For batters, who play
-    in most team games, their own G is a fine stand-in for team games.
-    Returns None once/if games_played is already at or past 162."""
-    if games_played is None or pd.isna(games_played) or games_played <= 0:
-        return None
-    games_played = float(games_played)
-    remaining_games = SEASON_GAMES - games_played
-    if remaining_games <= 0:
-        return None
-    projected = {}
-    for col in count_cols:
-        val = row.get(col)
-        if val is None or pd.isna(val):
-            continue
-        per_team_game = val / games_played
-        projected[col] = val + per_team_game * remaining_games
-    return projected
-
-
 def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
     """Percentile of `value` within `series` (0-100). For lower_is_better
     stats (ERA, WHIP, ...) a lower value yields a higher percentile."""

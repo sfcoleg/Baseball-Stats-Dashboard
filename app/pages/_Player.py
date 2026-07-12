@@ -110,16 +110,6 @@ if batting is not None:
             unsafe_allow_html=True,
         )
 
-    projected = db.project_rest_of_season(batting, ["H", "HR", "RBI", "R", "SB"], batting["G"])
-    if projected:
-        st.caption(
-            "On pace over a 162-game season (holding current per-game rate steady — "
-            "a simple what-if, not a real projection system):"
-        )
-        pcols = st.columns(len(projected))
-        for pcol, (stat, val) in zip(pcols, projected.items()):
-            pcol.metric(stat, f"{int(round(val))}")
-
     std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
     with std_tab:
         st.dataframe(
@@ -170,17 +160,6 @@ if pitching is not None:
             f"color:#DCE1EA'>{pitching_report}</div>",
             unsafe_allow_html=True,
         )
-
-    team_games_so_far = all_batting["G"].max()
-    projected = db.project_rest_of_season(pitching, ["IP", "SO", "W", "SV"], team_games_so_far)
-    if projected:
-        st.caption(
-            "On pace over a 162-game season, based on team games played so far — "
-            "a simple what-if, not a real projection system:"
-        )
-        pcols = st.columns(len(projected))
-        for pcol, (stat, val) in zip(pcols, projected.items()):
-            pcol.metric(stat, f"{int(round(val))}")
 
     std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
     with std_tab:
