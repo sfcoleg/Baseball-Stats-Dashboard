@@ -51,9 +51,17 @@ _BY_NICKNAME["D-backs"] = _BY_NICKNAME["Diamondbacks"]
 # re-resolve the city/league ambiguity per cell.
 _COLOR_BY_ABBR = {info[0]: info[2] for info in _BY_CITY_LEAGUE.values()}
 
+# abbreviation -> nickname, for prose that needs "the Pirates" rather than
+# "the PIT" (grammatically fine for a table cell, not for a sentence).
+_NICKNAME_BY_ABBR = {info[0]: info[1] for info in _BY_CITY_LEAGUE.values()}
+
 
 def color_for_abbr(abbr: str) -> str:
     return _COLOR_BY_ABBR.get(abbr, "#666666")
+
+
+def nickname_for_abbr(abbr: str) -> str:
+    return _NICKNAME_BY_ABBR.get(abbr, abbr)
 
 
 def all_teams() -> list[tuple[str, str]]:

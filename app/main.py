@@ -48,12 +48,13 @@ PAGES = [
     st.Page("pages/10_Injury_Report.py", title="Injury Report"),
     st.Page("pages/11_Transactions.py", title="Transactions"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
+    st.Page("pages/_Article.py", title="Article"),  # same deal — reached via Daily Digest's "Read more" buttons
 ]
 
 pg = st.navigation(PAGES, position="hidden")
 
 for p in PAGES:
-    if p.title != "Player":
+    if p.title not in ("Player", "Article"):
         st.sidebar.page_link(p, label=p.title)
 
 pg.run()

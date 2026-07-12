@@ -91,25 +91,38 @@ app/
                            # list" in the description, minus "activated" ones). Placed second in nav, right
                            # after Home, in main.py's PAGES list.
                            #
-                           # "Today's Storylines" (top of the page) is db.daily_articles() — a few sentences
-                           # of template-generated prose (fixed sentence variants chosen by stat magnitude,
-                           # NOT an LLM call — this app has no AI text generation anywhere) covering: the
-                           # day's best batting line, best pitching line, and (when one clears the bar) an
-                           # injury to a "key player". Each is its own private helper
-                           # (_batting_narrative()/_pitching_narrative()/_injury_narrative()) that returns
-                           # None rather than force a write-up on a quiet day — daily_articles() just calls
-                           # all three and drops the Nones. The injury piece needed a new "mlbID" column on
-                           # load_transactions()'s output (from the raw API's `person.id`, previously
-                           # discarded) to join a placement's description back to that player's season stats
-                           # and judge whether they're actually notable (60th+ percentile, or clearly an
-                           # everyday player/rotation piece by playing time) — a September call-up's IL trip
-                           # isn't a story.
+                           # "Today's Storylines" (top of the page) is db.daily_articles() — up to three
+                           # template-generated multi-paragraph articles (fixed sentence variants chosen by
+                           # stat magnitude, NOT an LLM call — this app has no AI text generation anywhere)
+                           # covering: the day's best batting line, best pitching line, and (when one clears
+                           # the bar) an injury to a "key player". Each is its own private helper
+                           # (_batting_narrative()/_pitching_narrative()/_injury_narrative()) returning
+                           # {"headline", "teaser", "paragraphs" (list of 3 strings), "mlbID", "Tm" (already
+                           # an abbreviation), "color"} or None to skip a quiet day — daily_articles() just
+                           # calls all three and drops the Nones. The injury piece needed a new "mlbID"
+                           # column on load_transactions()'s output (from the raw API's `person.id`,
+                           # previously discarded) to join a placement's description back to that player's
+                           # season stats and judge whether they're actually notable (60th+ percentile, or
+                           # clearly an everyday player/rotation piece by playing time) — a September
+                           # call-up's IL trip isn't a story. Prose that needs a team name in running text
+                           # (not a table-cell badge) uses `teams.nickname_for_abbr()` — "the Pirates", not
+                           # "the PIT" or "the Pittsburgh".
+                           #
+                           # Each storyline card shows only the "teaser" with a "Read more →" button; clicking
+                           # it stashes the full article dict in st.session_state["selected_article"] and
+                           # st.switch_page()s to pages/_Article.py (hidden from nav, same pattern as
+                           # _Player.py) to render the full multi-paragraph piece.
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar
                      # nav (see "Navigation" below) — it's registered as a valid destination but has no
                      # page_link, so it's reachable only via the search box. Visiting it directly with no
                      # prior search shows a "use the sidebar search" prompt instead of erroring.
+    _Article.py      # Full-article view for one Daily Digest storyline — same hidden-page pattern as
+                     # _Player.py. Reads st.session_state["selected_article"] (the whole article dict, not
+                     # just an id — nothing to re-fetch/re-generate) and renders headline/photo/team badge
+                     # plus each of the 3 paragraphs. A "← Back to Daily Digest" button switches back.
+                     # Visiting it directly with nothing selected shows a prompt instead of erroring.
 ingest/
   refresh_data.py   # Pulls all data from pybaseball + MLB Stats API, computes sabermetrics, writes to data/stats.db
 data/

@@ -35,12 +35,12 @@ il_moves = txs_yesterday[
 ] if not txs_yesterday.empty else txs_yesterday
 
 style.colored_header("Today's Storylines", "headliners")
-st.caption("Template-generated recaps, not AI-written — a few sentences on the day's most notable performance and injury.")
+st.caption("Template-generated recaps, not AI-written — click into a storyline for the full write-up.")
 articles = db.daily_articles(season, mtime, il_moves)
 if not articles:
     st.caption("Nothing stood out enough to write up yesterday.")
 else:
-    for a in articles:
+    for i, a in enumerate(articles):
         with st.container(border=True):
             st.markdown(
                 f"<div style='display:flex;align-items:flex-start;gap:12px'>"
@@ -50,10 +50,13 @@ else:
                 f"<div style='font-size:1.1rem;font-weight:700;margin-bottom:4px'>{a['headline']} "
                 f"<span style='background-color:{a['color']}66;color:#FAFAFA;padding:2px 9px;"
                 f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{a['Tm']}</span></div>"
-                f"<div style='color:#DCE1EA'>{a['body']}</div>"
+                f"<div style='color:#DCE1EA'>{a['teaser']}</div>"
                 f"</div></div>",
                 unsafe_allow_html=True,
             )
+            if st.button("Read more →", key=f"read_more_{i}"):
+                st.session_state["selected_article"] = a
+                st.switch_page("pages/_Article.py")
 
 style.colored_header("Milestones", "headliners")
 if milestones:
