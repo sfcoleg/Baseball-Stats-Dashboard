@@ -20,19 +20,15 @@ mtime = db.db_mtime()
 season = st.selectbox("Season", db.get_seasons("batting"), index=0)
 
 view = st.radio(
-    "View", ["Real Team", "All Rookie Team", "All MLB Team", "All Month Team"], horizontal=True,
+    "View", ["Real Team", "All MLB Team", "All Month Team"], horizontal=True,
 )
 
-_COMPOSITE_SCOPES = {"All Rookie Team": "rookie", "All MLB Team": "all", "All Month Team": "month"}
-_COMPOSITE_COLORS = {"rookie": "#4C9F70", "all": "#0C2340", "month": "#E3572A"}
+_COMPOSITE_SCOPES = {"All MLB Team": "all", "All Month Team": "month"}
+_COMPOSITE_COLORS = {"all": "#0C2340", "month": "#E3572A"}
 _COMPOSITE_CAPTIONS = {
-    "rookie": (
-        "Best qualified player 23 or younger at each position, full-season stats (min 50 PA / 20 IP). "
-        "This app has no official MLB service-time data, so \"rookie\" here is an age heuristic, "
-        "not an actual rookie-eligibility ruling."
-    ),
-    "all": "Best qualified player at each position across all 30 teams, full-season stats (min 50 PA / 20 IP).",
-    "month": "Best performer at each position over the trailing 30 days (min 50 PA / 20 IP for the month).",
+    "all": f"Best qualified player at each position across all 30 teams, full-season stats "
+           f"(min {db._COMPOSITE_MIN_PA} PA / {db._COMPOSITE_MIN_IP} IP for starters, {db._COMPOSITE_MIN_RP_IP} IP for relievers).",
+    "month": "Best performer at each position over the trailing 30 days (min PA/IP same as the Home page's \"Hot This Month\" cards).",
 }
 
 if view != "Real Team":

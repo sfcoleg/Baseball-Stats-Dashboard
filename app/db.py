@@ -286,17 +286,18 @@ def load_linescore(game_pk) -> dict | None:
         return None
 
 
-_DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH"}
+_DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
 def load_depth_chart(team_id: int) -> dict:
     """Current starter at each defensive position (plus the rotation's #1
-    starting pitcher) for one team, from the MLB Stats API's depth chart
-    roster — a live lookup, not part of the daily ingest, since depth
-    charts shift with trades/call-ups more often than once a day. Returns
-    {position_code: {"name", "mlbID"}}, e.g. {"SS": {"name": "...", ...}};
-    a position is simply absent if the API has no one listed there."""
+    starting pitcher and the closer, as "RP") for one team, from the MLB
+    Stats API's depth chart roster — a live lookup, not part of the daily
+    ingest, since depth charts shift with trades/call-ups more often than
+    once a day. Returns {position_code: {"name", "mlbID"}}, e.g.
+    {"SS": {"name": "...", ...}}; a position is simply absent if the API
+    has no one listed there."""
     try:
         resp = requests.get(
             f"https://statsapi.mlb.com/api/v1/teams/{int(team_id)}/roster",
@@ -316,14 +317,15 @@ def load_depth_chart(team_id: int) -> dict:
         person = entry.get("person", {})
         if person.get("id") and person.get("fullName"):
             starters[pos] = {"name": person["fullName"], "mlbID": person["id"]}
+    if "CP" in starters:
+        starters["RP"] = starters.pop("CP")
     return starters
 
 
-# Heuristic proxy for "rookie" — this app has no MLB service-time/PA-IP
-# rookie-eligibility data, so age is what's available. Not an official
-# rookie-status determination.
-_ROOKIE_MAX_AGE = 23
 _COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]
+_COMPOSITE_MIN_PA = 150
+_COMPOSITE_MIN_IP = 20
+_COMPOSITE_MIN_RP_IP = 15
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=5)
@@ -350,28 +352,37 @@ def build_composite_team(season: int, mtime: float, scope: str) -> dict:
     load_depth_chart() returns, ready for style.baseball_diamond().
 
     scope:
-      "all"    - full-season stats (min 50 PA / 20 IP), no other filter.
-      "rookie" - same, restricted to age <= _ROOKIE_MAX_AGE (see above).
-      "month"  - best performer over the trailing 30 days, from the same
-                 recent_batting/recent_pitching tables and min-PA/IP bars
-                 (RECENT_MIN_PA/RECENT_MIN_IP["month"]) as the Home page's
-                 "Hot This Month" cards.
+      "all"   - full-season stats (min _COMPOSITE_MIN_PA PA / _COMPOSITE_MIN_IP IP).
+      "month" - best performer over the trailing 30 days, from the same
+                recent_batting/recent_pitching tables and min-PA/IP bars
+                (RECENT_MIN_PA/RECENT_MIN_IP["month"]) as the Home page's
+                "Hot This Month" cards.
+
+    SP and RP are picked separately so a low-IP reliever can't take the SP
+    spot: season pitching has a Games-Started column to split on directly;
+    recent_pitching (month) doesn't, so it's joined against the season
+    table's GS just to classify each pitcher as starter/reliever, IP filters
+    still keyed to the trailing-30-days IP.
     """
     fielding = load_fielding(season, mtime)[["player_id", "Pos"]].rename(columns={"player_id": "mlbID"})
+    season_roles = load_pitching(season, mtime)[["mlbID", "GS"]]
 
     if scope == "month":
         batting = load_recent_batting(season, mtime)
         batting = batting[(batting["period"] == "month") & (batting["PA"] >= RECENT_MIN_PA["month"])]
         pitching = load_recent_pitching(season, mtime)
-        pitching = pitching[(pitching["period"] == "month") & (pitching["IP"] >= RECENT_MIN_IP["month"])]
+        # recent_pitching.mlbID is stored as text in SQLite (unlike every
+        # other table's mlbID) — cast before merging on it or pandas raises.
+        pitching = pitching.assign(mlbID=pitching["mlbID"].astype(int))
+        pitching = pitching[pitching["period"] == "month"].merge(season_roles, on="mlbID", how="inner")
+        sp_pool = pitching[(pitching["GS"] > 0) & (pitching["IP"] >= RECENT_MIN_IP["month"])]
+        rp_pool = pitching[(pitching["GS"] == 0) & (pitching["IP"] >= max(RECENT_MIN_IP["month"] / 2, 1))]
     else:
         batting = load_batting(season, mtime)
-        batting = batting[batting["PA"] >= 50]
+        batting = batting[batting["PA"] >= _COMPOSITE_MIN_PA]
         pitching = load_pitching(season, mtime)
-        pitching = pitching[pitching["IP"] >= 20]
-        if scope == "rookie":
-            batting = batting[batting["Age"] <= _ROOKIE_MAX_AGE]
-            pitching = pitching[pitching["Age"] <= _ROOKIE_MAX_AGE]
+        sp_pool = pitching[(pitching["GS"] > 0) & (pitching["IP"] >= _COMPOSITE_MIN_IP)]
+        rp_pool = pitching[(pitching["GS"] == 0) & (pitching["IP"] >= _COMPOSITE_MIN_RP_IP)]
 
     starters = {}
 
@@ -395,11 +406,17 @@ def build_composite_team(season: int, mtime: float, scope: str) -> dict:
                 "note": f"{best_c['OPS']:.3f} OPS",
             }
 
-    if not pitching.empty:
-        best_p = pitching.sort_values("ERA", ascending=True).iloc[0]
+    if not sp_pool.empty:
+        best_sp = sp_pool.sort_values("ERA", ascending=True).iloc[0]
         starters["SP"] = {
-            "name": best_p["Name"], "mlbID": int(best_p["mlbID"]),
-            "note": f"{best_p['ERA']:.2f} ERA",
+            "name": best_sp["Name"], "mlbID": int(best_sp["mlbID"]),
+            "note": f"{best_sp['ERA']:.2f} ERA",
+        }
+    if not rp_pool.empty:
+        best_rp = rp_pool.sort_values("ERA", ascending=True).iloc[0]
+        starters["RP"] = {
+            "name": best_rp["Name"], "mlbID": int(best_rp["mlbID"]),
+            "note": f"{best_rp['ERA']:.2f} ERA",
         }
 
     # DH: best remaining bat by OPS, excluding whoever already has a spot
