@@ -112,6 +112,19 @@ app/
                            # it stashes the full article dict in st.session_state["selected_article"] and
                            # st.switch_page()s to pages/_Article.py (hidden from nav, same pattern as
                            # _Player.py) to render the full multi-paragraph piece.
+    13_Following.py        # Follow teams/players, get a personalized feed: today's games for followed teams
+                           # (todays_games filtered to rows where either side's normalized abbr is followed,
+                           # same predict_game()/live_scores rendering as 8_Todays_Games.py, just simplified)
+                           # plus yesterday's day-window performances for followed players (recent_batting/
+                           # recent_pitching filtered to followed mlbIDs, rendered via style.milestone_card()
+                           # — the same helper the Daily Digest uses). Backed by a new `following` SQLite
+                           # table (db.follow_team()/unfollow_team()/follow_player()/unfollow_player()/
+                           # get_followed_teams()/get_followed_players()) — the ONLY table the app itself
+                           # writes to; every other table is written exclusively by ingest/refresh_data.py.
+                           # Important caveat: this write is NOT committed to git like the rest of
+                           # data/stats.db, so a Streamlit Community Cloud redeploy (which rebuilds the
+                           # container from the repo) resets it — fine for a personal single-user dashboard's
+                           # day-to-day use, just not durable across deploys.
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar
