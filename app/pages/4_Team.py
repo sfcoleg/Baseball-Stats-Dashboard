@@ -37,7 +37,18 @@ if season == current_season:
 
 team_options = teams.all_teams()
 labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES)
-choice = st.selectbox("Team", labels)
+
+# Set by clicking a team's row on the Standings page (st.switch_page) — one-shot,
+# so a manual selectbox change afterward isn't overridden on a later visit.
+default_abbr = st.session_state.pop("team_page_selected_team", None)
+default_index = 0
+if default_abbr:
+    for i, label in enumerate(labels):
+        if label.startswith(f"{default_abbr} —"):
+            default_index = i
+            break
+
+choice = st.selectbox("Team", labels, index=default_index)
 
 if choice in _COMPOSITE_SCOPES:
     scope = _COMPOSITE_SCOPES[choice]
