@@ -349,41 +349,6 @@ def load_pitcher_handedness(mlbIDs: tuple) -> dict:
     return {p["id"]: p["pitchHand"]["code"] for p in people if p.get("pitchHand", {}).get("code")}
 
 
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=10)
-def load_player_bio(mlbIDs: tuple) -> dict:
-    """Debut date, age, position, and birth country for each mlbID, via
-    batched MLB Stats API calls (chunked at 300 ids/request to stay well
-    under the API's URL length limits; a full-season player pool is
-    ~500-900 ids). None of this changes intra-day, so it's cached for a
-    full day. Returns {mlbID: {"debut": "YYYY-MM-DD"|None, "age": int|None,
-    "position": str|None, "country": str|None}}; an id the API doesn't
-    recognize is simply absent."""
-    ids = [str(int(i)) for i in mlbIDs if i is not None and not pd.isna(i)]
-    if not ids:
-        return {}
-    bio = {}
-    for i in range(0, len(ids), 300):
-        chunk = ids[i:i + 300]
-        try:
-            resp = requests.get(
-                "https://statsapi.mlb.com/api/v1/people",
-                params={"personIds": ",".join(chunk)},
-                timeout=15,
-            )
-            resp.raise_for_status()
-            people = resp.json().get("people", [])
-        except Exception:
-            continue
-        for p in people:
-            bio[p["id"]] = {
-                "debut": p.get("mlbDebutDate"),
-                "age": p.get("currentAge"),
-                "position": p.get("primaryPosition", {}).get("abbreviation"),
-                "country": p.get("birthCountry"),
-            }
-    return bio
-
-
 _INJURY_STATUS_CODES = {"D7": "7-Day IL", "D10": "10-Day IL", "D15": "15-Day IL", "D60": "60-Day IL"}
 
 
