@@ -28,6 +28,7 @@ from pybaseball import (
     statcast_batter_exitvelo_barrels,
     statcast_batter_expected_stats,
     statcast_pitcher_exitvelo_barrels,
+    statcast_pitcher_expected_stats,
     statcast_outs_above_average,
 )
 
@@ -155,6 +156,9 @@ def fetch_pitching(season=CURRENT_SEASON):
     # Baseball-Reference leaves W/L/SV blank instead of 0 when a pitcher has
     # no decisions/saves, which pandas reads in as NaN ("None" in the UI).
     pitching[["W", "L", "SV"]] = pitching[["W", "L", "SV"]].fillna(0).astype(int)
+    # "GB/FB" has a slash, which is awkward as a bare column name elsewhere
+    # (SQL, dict keys, URLs) — rename now rather than special-case it later.
+    pitching = pitching.rename(columns={"GB/FB": "GB_FB"})
     pitching = add_pitching_sabermetrics(pitching)
 
     print(f"Fetching {season} Statcast batted-ball data (pitchers)...")
@@ -166,9 +170,20 @@ def fetch_pitching(season=CURRENT_SEASON):
         "brl_percent": "barrel_pct_against",
     })
 
+    # xERA: Statcast's contact-quality-based expected ERA — the closest
+    # equivalent this data source has to xFIP/SIERA. True xFIP needs a raw
+    # fly-ball count and league HR/FB rate that neither Baseball-Reference
+    # nor Statcast expose here (bref only gives a GB/FB *ratio*), so xERA is
+    # used instead of trying to approximate xFIP from incomplete inputs.
+    print(f"Fetching {season} Statcast expected stats (pitchers)...")
+    expected = statcast_pitcher_expected_stats(season, minPA=1)[
+        ["player_id", "xera"]
+    ].rename(columns={"xera": "xERA"})
+
     pitching["mlbID"] = pd.to_numeric(pitching["mlbID"], errors="coerce")
     pitching = pitching.merge(exitvelo, left_on="mlbID", right_on="player_id", how="left")
-    pitching = pitching.drop(columns=[c for c in pitching.columns if c == "player_id"])
+    pitching = pitching.merge(expected, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
+    pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
 
     pitching["season"] = season
     return pitching
@@ -407,9 +422,22 @@ def _store_season_table(conn, table_name, df, season):
     """Write one season's worth of a table without touching other seasons'
     rows — DELETE that season, then append. This is what makes multi-season
     data possible: the old approach (`if_exists='replace'`) wiped the whole
-    table on every run, so only the current season could ever be cached."""
+    table on every run, so only the current season could ever be cached.
+
+    Schema migration: `to_sql(if_exists="append")` requires the dataframe's
+    columns to exactly match the existing table's, so adding/renaming/
+    removing a column in a fetch_*() function breaks every other season's
+    already-stored rows. Drop and let to_sql recreate the table if the
+    incoming columns don't match — this loses other seasons' rows for that
+    table, so after a schema change, re-run --backfill for every season
+    you care about (batting/pitching/fielding are cheap, network-bound
+    re-fetches, not expensive local computation)."""
     try:
-        conn.execute(f"DELETE FROM {table_name} WHERE season = ?", (season,))
+        existing_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table_name})")}
+        if existing_cols and existing_cols != set(df.columns):
+            conn.execute(f"DROP TABLE {table_name}")
+        else:
+            conn.execute(f"DELETE FROM {table_name} WHERE season = ?", (season,))
     except sqlite3.OperationalError:
         pass  # table doesn't exist yet on first run
     df.to_sql(table_name, conn, if_exists="append", index=False)

@@ -101,6 +101,15 @@ if batting is not None:
     for col, (label, value, pct) in zip(cols, metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
+    batting_report = db.batter_scouting_report(batting, qualified_batting)
+    if batting_report:
+        st.markdown(
+            f"<div style='background-color:#1B243866;border-left:4px solid #4C9F70;"
+            f"padding:10px 14px;border-radius:6px;margin:8px 0;font-size:0.95rem;"
+            f"color:#DCE1EA'>{batting_report}</div>",
+            unsafe_allow_html=True,
+        )
+
     projected = db.project_rest_of_season(batting, ["H", "HR", "RBI", "R", "SB"], batting["G"])
     if projected:
         st.caption(
@@ -152,6 +161,15 @@ if pitching is not None:
     cols = st.columns(6)
     for col, (label, value, pct) in zip(cols, metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
+
+    pitching_report = db.pitcher_scouting_report(pitching, qualified_pitching)
+    if pitching_report:
+        st.markdown(
+            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;"
+            f"padding:10px 14px;border-radius:6px;margin:8px 0;font-size:0.95rem;"
+            f"color:#DCE1EA'>{pitching_report}</div>",
+            unsafe_allow_html=True,
+        )
 
     team_games_so_far = all_batting["G"].max()
     projected = db.project_rest_of_season(pitching, ["IP", "SO", "W", "SV"], team_games_so_far)

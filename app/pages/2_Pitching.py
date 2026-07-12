@@ -28,13 +28,13 @@ with col2:
     min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
 with col3:
     sort_by = st.selectbox(
-        "Sort by", ["ERA", "FIP", "WHIP", "SO", "W", "SV", "IP", "K_9"], index=0
+        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9"], index=0
     )
 
 filtered = pitching[pitching["IP"] >= min_ip]
 if team != "All":
     filtered = filtered[filtered["Tm"] == team]
-ascending = sort_by in ("ERA", "FIP", "WHIP")
+ascending = sort_by in ("ERA", "FIP", "xERA", "WHIP")
 filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
 
 max_rows = st.slider(
@@ -66,27 +66,38 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption("FIP = fielding-independent pitching (ERA-scale, strips out defense/luck). K/9, BB/9 = per-9-inning rates. K/BB = strikeout-to-walk ratio.")
+    st.caption(
+        "FIP = fielding-independent pitching (ERA-scale, strips out defense/luck). K/9, BB/9 = "
+        "per-9-inning rates. K/BB = strikeout-to-walk ratio. BAbip = opponent batting average on "
+        "balls in play (a hitter-independent luck signal, same idea as a batter's own BABIP — high "
+        "value often means bad luck/defense rather than getting hit hard). GB/FB = ground ball to "
+        "fly ball ratio (higher = more of a groundball pitcher, generally allows fewer home runs)."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB"]
-    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB"})
+        ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB"]
+    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB"})
     st.dataframe(
         style.style_stats_table(
             display,
             higher_better=["K/9", "K/BB"],
-            lower_better=["FIP", "BB/9"],
+            lower_better=["FIP", "BB/9", "BAbip"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"FIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}"},
+            precision={"FIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}", "GB/FB": "{:.2f}"},
         ),
         use_container_width=True,
         height=600,
     )
 
 with statcast_tab:
-    st.caption("Contact quality allowed, from Statcast (Baseball Savant).")
+    st.caption(
+        "Contact quality allowed, from Statcast (Baseball Savant). xERA estimates what a pitcher's "
+        "ERA \"should be\" based on the quality of contact allowed (exit velocity, launch angle, "
+        "sprint speed) — the pitching-side counterpart to a batter's xBA/xSLG/xwOBA, and the closest "
+        "thing available here to xFIP/SIERA (those aren't published anywhere this app can pull from)."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
+        ["Name", "Age", "Tm", "ERA", "xERA", "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
     ].rename(columns={
         "avg_exit_velo_against": "Avg EV Against",
         "hard_hit_pct_against": "Hard-Hit% Against",
@@ -95,10 +106,10 @@ with statcast_tab:
     st.dataframe(
         style.style_stats_table(
             display,
-            lower_better=["Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
+            lower_better=["ERA", "xERA", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}", "Barrel% Against": "{:.1f}"},
+            precision={"ERA": "{:.2f}", "xERA": "{:.2f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}", "Barrel% Against": "{:.1f}"},
         ),
         use_container_width=True,
         height=600,
@@ -121,7 +132,7 @@ with statcast_tab:
 with explore_tab:
     st.caption("Pick any two stats to plot against each other, sized by IP and colored by ERA.")
     axis_options = [
-        "ERA", "FIP", "WHIP", "SO", "W", "SV", "K_9", "BB_9", "K_BB",
+        "ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB",
         "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
     ]
     ecol1, ecol2 = st.columns(2)
