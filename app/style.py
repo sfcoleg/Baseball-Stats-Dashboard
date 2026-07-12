@@ -135,10 +135,10 @@ _DIAMOND_FIELD_SVG = (
 # actual base/mound pixel positions in app/assets/baseballfield.png (265x265).
 _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 17),
-    ("LF", "LF", 28, 30),
-    ("RF", "RF", 72, 30),
-    ("2B", "2B", 62, 44),
-    ("SS", "SS", 38, 44),
+    ("LF", "LF", 26, 32),
+    ("RF", "RF", 74, 32),
+    ("2B", "2B", 62, 45),
+    ("SS", "SS", 38, 45),
     ("1B", "1B", 76, 62),
     ("3B", "3B", 24, 62),
     ("SP", "P", 50, 62),
