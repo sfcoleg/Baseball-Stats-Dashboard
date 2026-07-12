@@ -39,6 +39,7 @@ PAGES = [
     st.Page("pages/1_Batting.py", title="Batting"),
     st.Page("pages/2_Pitching.py", title="Pitching"),
     st.Page("pages/3_Fielding.py", title="Fielding"),
+    st.Page("pages/6_Baserunning.py", title="Baserunning"),
     st.Page("pages/4_Team.py", title="Team"),
     st.Page("pages/5_Compare.py", title="Compare"),
     st.Page("pages/8_Todays_Games.py", title="Today's Games"),
