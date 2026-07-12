@@ -17,15 +17,23 @@ if not db.DB_PATH.exists():
     st.stop()
 
 mtime = db.db_mtime()
-season = st.selectbox("Season", db.get_seasons("batting"), index=0)
+available_seasons = db.get_seasons("batting")
+season = st.selectbox("Season", available_seasons, index=0)
+current_season = available_seasons[0]  # most recent season = the one recent_batting/recent_pitching cover
 
-_COMPOSITE_SCOPES = {"All MLB Team": "all", "All Month Team": "month"}
 _COMPOSITE_COLORS = {"all": "#0C2340", "month": "#E3572A"}
 _COMPOSITE_CAPTIONS = {
     "all": f"Best qualified player at each position across all 30 teams, full-season stats "
            f"(min {db._COMPOSITE_MIN_PA} PA / {db._COMPOSITE_MIN_IP} IP for starters, {db._COMPOSITE_MIN_RP_IP} IP for relievers).",
     "month": "Best performer at each position over the trailing 30 days (min PA/IP same as the Home page's \"Hot This Month\" cards).",
 }
+
+_COMPOSITE_SCOPES = {"All MLB Team": "all"}
+if season == current_season:
+    # recent_batting/recent_pitching are current-season-only (never backfilled
+    # for historical years — see AGENTS.md), so "All Month Team" only makes
+    # sense when the current season is selected.
+    _COMPOSITE_SCOPES["All Month Team"] = "month"
 
 team_options = teams.all_teams()
 labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES)
