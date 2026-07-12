@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
@@ -114,6 +115,12 @@ for _, row in games.iterrows():
             if status == "In Progress" and live.get("inning"):
                 status_line = live["inning"]
             st.caption(f"<div style='text-align:center'>{status_line}</div>", unsafe_allow_html=True)
+            if row.get("game_time") and not started:
+                st.markdown(
+                    f"<div class='game-time-local' data-utc='{row['game_time']}' "
+                    f"style='text-align:center;color:#9AA3B5;font-size:0.85rem'>{row['game_time']}</div>",
+                    unsafe_allow_html=True,
+                )
             if row.get("venue"):
                 st.caption(f"<div style='text-align:center'>{row['venue']}</div>", unsafe_allow_html=True)
 
@@ -158,3 +165,31 @@ for _, row in games.iterrows():
                     ),
                     unsafe_allow_html=True,
                 )
+
+# Converts each game's UTC start time (stored in data-utc, e.g. "2026-07-12T23:10:00Z")
+# to the viewer's own local time/timezone client-side, so a West Coast visitor sees
+# PDT and an East Coast visitor sees EDT for the same game. st.markdown's
+# unsafe_allow_html doesn't execute <script> tags (innerHTML-inserted scripts never
+# run, per browser spec) — st.components.v1.html() runs in a real iframe, so it
+# reaches into the parent document to update the placeholder divs instead.
+# setInterval keeps re-applying because Streamlit reruns (e.g. clicking "Show box
+# score") recreate those divs with fresh unconverted text.
+components.html(
+    """
+    <script>
+    (function() {
+        function updateGameTimes() {
+            const els = window.parent.document.querySelectorAll('.game-time-local[data-utc]');
+            els.forEach(function(el) {
+                const d = new Date(el.dataset.utc);
+                if (isNaN(d.getTime())) return;
+                el.textContent = d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit', timeZoneName: 'short'});
+            });
+        }
+        updateGameTimes();
+        setInterval(updateGameTimes, 1000);
+    })();
+    </script>
+    """,
+    height=0,
+)

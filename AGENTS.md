@@ -59,7 +59,14 @@ app/
                      # "View" selector also offers two stats-driven composite rosters in place of a
                      # real team — All MLB / All Month — see db.build_composite_team()
     5_Compare.py    # Side-by-side two-player comparison with winner highlighting + percentile radar chart
-    8_Todays_Games.py     # Today's schedule: live scores, venue, our own Log5-based win predictions/odds, on-demand box scores
+    8_Todays_Games.py     # Today's schedule: live scores, venue, our own Log5-based win predictions/odds, on-demand
+                           # box scores, and each pre-game matchup's start time converted to the viewer's own local
+                           # timezone client-side (st.components.v1.html() running JS in a real iframe, reaching into
+                           # window.parent.document — st.markdown's unsafe_allow_html can't execute <script> tags at
+                           # all, since innerHTML-inserted scripts never run per browser spec). The UTC timestamp from
+                           # the Stats API sits in each placeholder div's data-utc attribute; a setInterval poll keeps
+                           # re-applying the conversion since Streamlit reruns (e.g. "Show box score") recreate those
+                           # divs with fresh unconverted text.
     9_Standings.py        # Current MLB division standings (MLB Stats API)
     10_Injury_Report.py   # Every player on a major-league IL across all 30 teams (db.load_injury_report()) —
                            # 40-man roster status codes (D7/D10/D15/D60) give the authoritative current list;
@@ -108,7 +115,7 @@ Player search is NOT a dedicated page — `sidebar.render_search()` is called on
 - **Live scores and box scores are NOT part of the daily ingest** — both are fetched live, on-demand, from the app itself (not `refresh_data.py`), since scores change constantly through the day and pre-fetching them once at 6am would be instantly stale. `db.load_live_scores(date_str)` does one schedule API call (`hydrate=linescore`) covering every game at once, short TTL (~20s) cache, used for the score shown on every game card. `db.load_linescore(game_pk)` is a per-game detailed box score (inning-by-inning), fetched only when a user clicks "Show box score" for that specific game — button-gated so it doesn't fire for all games on every page load.
 - There used to be a `prediction_history` table + Prediction Accuracy page tracking this app's predictions against real outcomes — removed per user request. If resurrecting it, the previous implementation's git history has the resolve/lock-in logic (and a real bug it's worth not repeating: never delete-and-reinsert a whole date's rows when storing new predictions, since that wipes out `actual_winner`/scores already resolved for other games sharing that date — only insert genuinely new `game_pk`s).
 - **Multi-season data**: `batting`/`pitching`/`fielding` are keyed by `season` and written via DELETE-then-append per season (`_store_season_table()`), not a full-table replace — so backfilling historical seasons doesn't wipe the current one. Daily refresh only ever touches `CURRENT_SEASON`; add a historical year with `./venv/bin/python ingest/refresh_data.py --backfill <year>`, one year per invocation (deliberately not batched, to keep peak memory the same as a normal daily run on a memory-constrained machine — see "Known issues"). `recent_batting`/`recent_pitching`/`player_history`/`todays_games` are current-day/current-season concepts only and aren't backfilled.
-- **Known data quirks handled in ingest**: Baseball-Reference leaves W/L/SV blank (not 0) for pitchers with none — filled to 0. Accented names (Acuña, Hernández) and escaped apostrophes (d'Arnaud) sometimes arrive as literal escape text from bref's scraper — fixed via `fix_mojibake_names`. MLB Stats API uses team abbreviation `AZ`; every other source in this app (including `teams.py`) uses `ARI` — remap before doing a color/abbreviation lookup (see `_ABBR_FIX` in `8_Todays_Games.py`).
+- **Known data quirks handled in ingest**: Baseball-Reference leaves W/L/SV blank (not 0) for pitchers with none — filled to 0. Accented names (Acuña, Hernández) and escaped apostrophes (d'Arnaud) sometimes arrive as literal escape text from bref's scraper — fixed via `fix_mojibake_names`. MLB Stats API uses team abbreviation `AZ`; every other source in this app (including `teams.py`) uses `ARI` — remap before doing a color/abbreviation lookup (see `teams.normalize_mlb_abbr()`).
 
 ## Conventions
 
