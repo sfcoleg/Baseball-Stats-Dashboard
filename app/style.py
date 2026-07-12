@@ -115,31 +115,34 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     return styler
 
 
-# Field geometry, viewBox 0 0 600 600, home plate at the bottom. The infield
-# is a true square rotated 45° off home plate (real baseline geometry — 1B/3B
-# sit exactly on the lines drawn from home through them), not eyeballed
-# coordinates, so the foul lines actually pass through 1st and 3rd base.
+# Field geometry, viewBox 0 0 600 600, home plate at the bottom. Home and 2nd
+# are opposite corners of a square whose diagonal is D=260; the other two
+# corners (1st/3rd) sit at the square's center offset by D/2 each way — NOT
+# D/sqrt(2) (that earlier version put 1st/3rd a full side-length off-center,
+# stretching the shape into a non-square rhombus).
 _HOME = (300, 560)
-_SECOND = (300, 300)  # home-to-2nd distance (260) is the square's diagonal
-_FIRST = (483.85, 376.15)
-_THIRD = (116.15, 376.15)
+_D = 260
+_SECOND = (300, _HOME[1] - _D)
+_FIRST = (_HOME[0] + _D / 2, _HOME[1] - _D / 2)
+_THIRD = (_HOME[0] - _D / 2, _HOME[1] - _D / 2)
 # Mound sits ~47.5% of the way from home to 2nd (60.5ft of the real 127.28ft).
-_MOUND = (300, 436.5)
+_MOUND = (300, _HOME[1] - 0.475 * _D)
 # Foul lines extend the home->1B / home->3B rays out to the edge of the field.
 _FOUL_RIGHT_END = (600, 260)
 _FOUL_LEFT_END = (0, 260)
 
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
-# each card over the field SVG above; infielders sit on/near their base,
-# outfielders are spread out beyond the fence arc.
+# each card over the field SVG above. Infielders sit on/near their base;
+# outfielders are pulled in well inside the fence arc (the arc dips as low
+# as y=115 in straightaway center), not past it.
 _DIAMOND_POSITIONS = [
-    ("CF", "CF", 50, 8),
-    ("LF", "LF", 15, 20),
-    ("RF", "RF", 85, 20),
-    ("2B", "2B", 65, 56),
-    ("SS", "SS", 35, 56),
-    ("1B", "1B", 83, 62),
-    ("3B", "3B", 17, 62),
+    ("CF", "CF", 50, 28),
+    ("LF", "LF", 25, 35),
+    ("RF", "RF", 75, 35),
+    ("2B", "2B", 61, 61),
+    ("SS", "SS", 39, 61),
+    ("1B", "1B", 75, 73),
+    ("3B", "3B", 25, 73),
     ("SP", "P", 50, 73),
     ("C", "C", 50, 92),
 ]
@@ -154,9 +157,11 @@ _DIAMOND_FIELD_SVG = (
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
     f"<line x1='{_HOME[0]}' y1='{_HOME[1]}' x2='{_FOUL_RIGHT_END[0]}' y2='{_FOUL_RIGHT_END[1]}' "
     "stroke='#FAFAFA' stroke-width='3' opacity='0.85' />"
+    f"<circle cx='{_HOME[0]}' cy='{_HOME[1]}' r='70' fill='#B8895F' />"
     f"<polygon points='{_HOME[0]},{_HOME[1]} {_FIRST[0]},{_FIRST[1]} {_SECOND[0]},{_SECOND[1]} {_THIRD[0]},{_THIRD[1]}' "
-    "fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
-    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='14' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
+    "fill='none' stroke='#B8895F' stroke-width='34' stroke-linejoin='round' />"
+    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='42' fill='#B8895F' />"
+    f"<circle cx='{_MOUND[0]}' cy='{_MOUND[1]}' r='13' fill='#C9A578' stroke='#FAFAFA' stroke-width='2' />"
     f"<rect x='{_FIRST[0] - 7}' y='{_FIRST[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_FIRST[0]} {_FIRST[1]})' />"
     f"<rect x='{_SECOND[0] - 7}' y='{_SECOND[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_SECOND[0]} {_SECOND[1]})' />"
     f"<rect x='{_THIRD[0] - 7}' y='{_THIRD[1] - 7}' width='14' height='14' fill='#FAFAFA' transform='rotate(45 {_THIRD[0]} {_THIRD[1]})' />"
