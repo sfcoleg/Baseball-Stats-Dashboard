@@ -43,6 +43,13 @@ if team_batting.empty and team_pitching.empty and team_fielding.empty:
     st.info("No players found for this team in the selected season.")
     st.stop()
 
+team_id = teams.team_id_for_abbr(selected_abbr)
+starters = db.load_depth_chart(team_id) if team_id else {}
+if starters:
+    style.colored_header("Starting Lineup", "fielding")
+    st.caption("Current depth-chart starter at each position, from the MLB Stats API — not specific to the selected season.")
+    st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
+
 style.colored_header("Batting", "batting")
 st.dataframe(
     style.style_stats_table(

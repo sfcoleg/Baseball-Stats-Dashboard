@@ -115,6 +115,71 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     return styler
 
 
+# (depth-chart position code, on-field label, x%, y%) — coordinates place
+# each card over a same-sized field SVG (viewBox 0 0 600 600), home plate
+# at the bottom, outfield at the top.
+_DIAMOND_POSITIONS = [
+    ("CF", "CF", 50, 8),
+    ("LF", "LF", 18, 18),
+    ("RF", "RF", 82, 18),
+    ("2B", "2B", 60, 42),
+    ("SS", "SS", 40, 42),
+    ("1B", "1B", 77, 63),
+    ("3B", "3B", 23, 63),
+    ("SP", "P", 50, 72),
+    ("C", "C", 50, 93),
+]
+
+_DIAMOND_FIELD_SVG = (
+    "<svg viewBox='0 0 600 600' preserveAspectRatio='none' "
+    "style='position:absolute;top:0;left:0;width:100%;height:100%;z-index:0'>"
+    "<rect x='0' y='0' width='600' height='600' fill='#2F6B3A' />"
+    "<line x1='300' y1='560' x2='0' y2='0' stroke='#FAFAFA' stroke-width='2' opacity='0.5' />"
+    "<line x1='300' y1='560' x2='600' y2='0' stroke='#FAFAFA' stroke-width='2' opacity='0.5' />"
+    "<polygon points='300,560 460,430 300,300 140,430' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' opacity='0.9' />"
+    "<circle cx='300' cy='460' r='14' fill='#B8895F' stroke='#FAFAFA' stroke-width='2' />"
+    "<rect x='292' y='552' width='16' height='16' fill='#FAFAFA' transform='rotate(45 300 560)' />"
+    "</svg>"
+)
+
+
+def baseball_diamond(starters: dict, team_color: str) -> str:
+    """HTML+SVG baseball diamond showing each defensive position's current
+    starter (photo + name), from db.load_depth_chart(). `starters` maps a
+    depth-chart position code ("SP", "C", "1B", ...) to {"name", "mlbID"};
+    a position with no data just renders as a "TBD" placeholder card."""
+    cards = []
+    for key, label, x, y in _DIAMOND_POSITIONS:
+        player = starters.get(key)
+        if player:
+            name = player["name"]
+            photo_html = (
+                f"<img src='{headshot_url(player['mlbID'], width=120)}' "
+                f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;"
+                f"border:2px solid {team_color};box-shadow:0 2px 6px rgba(0,0,0,0.5)' />"
+            )
+        else:
+            name = "TBD"
+            photo_html = (
+                f"<div style='width:56px;height:56px;border-radius:50%;background:#4A5266;"
+                f"border:2px solid {team_color};display:flex;align-items:center;justify-content:center;"
+                f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
+            )
+        cards.append(
+            f"<div style='position:absolute;left:{x}%;top:{y}%;transform:translate(-50%,-50%);"
+            f"text-align:center;z-index:1;width:90px'>"
+            f"{photo_html}"
+            f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:#FAFAFA;"
+            f"text-shadow:0 1px 3px rgba(0,0,0,0.8);overflow-wrap:break-word'>{name}</div>"
+            f"<div style='font-size:0.65rem;color:#D8DEE9;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{label}</div>"
+            f"</div>"
+        )
+    return (
+        "<div style='position:relative;width:min(560px,100%);aspect-ratio:1/1;margin:0 auto 1.5rem;"
+        "border-radius:12px;overflow:hidden'>" + _DIAMOND_FIELD_SVG + "".join(cards) + "</div>"
+    )
+
+
 def _fmt_compare_value(v):
     if v is None or (isinstance(v, float) and pd.isna(v)):
         return "—"

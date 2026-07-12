@@ -284,6 +284,39 @@ def load_linescore(game_pk) -> dict | None:
         return None
 
 
+_DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF"}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
+def load_depth_chart(team_id: int) -> dict:
+    """Current starter at each defensive position (plus the rotation's #1
+    starting pitcher) for one team, from the MLB Stats API's depth chart
+    roster — a live lookup, not part of the daily ingest, since depth
+    charts shift with trades/call-ups more often than once a day. Returns
+    {position_code: {"name", "mlbID"}}, e.g. {"SS": {"name": "...", ...}};
+    a position is simply absent if the API has no one listed there."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1/teams/{int(team_id)}/roster",
+            params={"rosterType": "depthChart"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        roster = resp.json().get("roster", [])
+    except Exception:
+        return {}
+
+    starters = {}
+    for entry in roster:
+        pos = entry.get("position", {}).get("abbreviation")
+        if pos not in _DEPTH_CHART_POSITIONS or pos in starters:
+            continue
+        person = entry.get("person", {})
+        if person.get("id") and person.get("fullName"):
+            starters[pos] = {"name": person["fullName"], "mlbID": person["id"]}
+    return starters
+
+
 @st.cache_data(show_spinner=False, max_entries=2)
 def load_standings(db_mtime_val: float) -> pd.DataFrame:
     """Current MLB standings from the Stats API (current standings only,

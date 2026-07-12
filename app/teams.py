@@ -104,3 +104,19 @@ def team_meta_from_nickname(nickname: str) -> tuple[str, str]:
     if not isinstance(nickname, str):
         return ("—", "#666666")
     return _BY_NICKNAME.get(nickname, (nickname[:3].upper(), "#666666"))
+
+
+# abbreviation -> MLB Stats API team id (stable, from /api/v1/teams?sportId=1),
+# used for live per-team lookups like the depth chart. The API reports
+# Arizona as "AZ", not our "ARI" — keyed here under our own abbreviation.
+_TEAM_IDS = {
+    "ARI": 109, "ATL": 144, "ATH": 133, "BAL": 110, "BOS": 111, "CWS": 145,
+    "CHC": 112, "CIN": 113, "CLE": 114, "COL": 115, "DET": 116, "HOU": 117,
+    "KC": 118, "LAA": 108, "LAD": 119, "MIA": 146, "MIL": 158, "MIN": 142,
+    "NYY": 147, "NYM": 121, "PHI": 143, "PIT": 134, "SD": 135, "SF": 137,
+    "SEA": 136, "STL": 138, "TB": 139, "TEX": 140, "TOR": 141, "WSH": 120,
+}
+
+
+def team_id_for_abbr(abbr: str) -> int | None:
+    return _TEAM_IDS.get(abbr)
