@@ -118,18 +118,17 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 
 
 # Field geometry, viewBox 0 0 600 600, home plate at the bottom. Home and 2nd
-# are opposite corners of a square whose diagonal is D; the other two
-# corners (1st/3rd) sit at the square's center offset by D/2 each way — NOT
-# D/sqrt(2) (that earlier version put 1st/3rd a full side-length off-center,
-# stretching the shape into a non-square rhombus). D is smaller than the
-# true home-to-2nd fraction of the field so 2nd base sits lower (closer to
-# home), leaving more outfield room for the dirt cutout at 2nd to flare into
-# without crowding the outfielder cards above it.
+# sit on the vertical center line; 1st/3rd are out along the 45° foul lines,
+# at their own distance from home (not forced to match a perfect square —
+# pushed further out than a true square would place them, matching the
+# actual base positions the white base markers are drawn at).
 _HOME = (300, 560)
 _D = 245
 _SECOND = (300, _HOME[1] - _D)
-_FIRST = (_HOME[0] + _D / 2, _HOME[1] - _D / 2)
-_THIRD = (_HOME[0] - _D / 2, _HOME[1] - _D / 2)
+_CORNER_DIST = 200  # home-to-1B / home-to-3B distance along the foul line
+_FOUL_UNIT = (0.7071, -0.7071)
+_FIRST = (_HOME[0] + _CORNER_DIST * _FOUL_UNIT[0], _HOME[1] + _CORNER_DIST * _FOUL_UNIT[1])
+_THIRD = (_HOME[0] - _CORNER_DIST * _FOUL_UNIT[0], _HOME[1] + _CORNER_DIST * _FOUL_UNIT[1])
 # Mound sits ~47.5% of the way from home to 2nd (60.5ft of the real 127.28ft).
 _MOUND = (300, _HOME[1] - 0.475 * _D)
 # Foul lines extend the home->1B / home->3B rays out to the edge of the field.
@@ -142,7 +141,14 @@ def _rounded_corner_path(points, radii):
     replaced by a quadratic-bezier round (like a rounded-rect, generalized
     to any polygon, with a per-corner radius) — real infield dirt cutouts
     curve at the basepath corners instead of coming to a sharp point, and
-    flare out wider on the outfield side (2nd base) than around home."""
+    flare out wider on the outfield side (2nd base) than around home.
+
+    A quadratic bezier with its control point AT the corner undershoots —
+    the curve's apex lands inside the true vertex by ~0.354*radius, pulled
+    toward the corner's angle bisector. To keep each base marker centered
+    on its dirt bulge, `points` should already be pre-shifted outward by
+    that same amount (see `_compensate_apex_offset`) before calling this.
+    """
     n = len(points)
 
     def unit(a, b):
@@ -167,9 +173,33 @@ def _rounded_corner_path(points, radii):
     return " ".join(parts)
 
 
+def _compensate_apex_offset(points, radii):
+    """Shift each vertex outward (away from its rounded corner's bezier
+    apex) by the ~0.354*radius undershoot described in `_rounded_corner_path`,
+    so the resulting curve's apex lands exactly on the original point."""
+    n = len(points)
+
+    def unit(a, b):
+        dx, dy = b[0] - a[0], b[1] - a[1]
+        length = math.hypot(dx, dy)
+        return dx / length, dy / length
+
+    shifted = []
+    for i in range(n):
+        prev_p, curr, next_p = points[i - 1], points[i], points[(i + 1) % n]
+        r = radii[i]
+        u1x, u1y = unit(curr, prev_p)
+        u2x, u2y = unit(curr, next_p)
+        shifted.append((curr[0] - 0.25 * r * (u1x + u2x), curr[1] - 0.25 * r * (u1y + u2y)))
+    return shifted
+
+
 # Home/1B/3B corners round modestly; 2nd base — the corner facing the
 # outfield grass — flares out much wider, like a real infield dirt cutout.
-_BASEPATH_D = _rounded_corner_path([_HOME, _FIRST, _SECOND, _THIRD], radii=[45, 45, 110, 45])
+_BASEPATH_RADII = [45, 45, 110, 45]
+_BASEPATH_D = _rounded_corner_path(
+    _compensate_apex_offset([_HOME, _FIRST, _SECOND, _THIRD], _BASEPATH_RADII), _BASEPATH_RADII
+)
 
 # (depth-chart position code, on-field label, x%, y%) — coordinates place
 # each card over the field SVG above. Infielders sit on/near their base;
@@ -179,10 +209,10 @@ _DIAMOND_POSITIONS = [
     ("CF", "CF", 50, 34),
     ("LF", "LF", 18, 46),
     ("RF", "RF", 82, 46),
-    ("2B", "2B", 60, 63),
-    ("SS", "SS", 40, 63),
-    ("1B", "1B", 71, 73),
-    ("3B", "3B", 29, 73),
+    ("2B", "2B", 62, 61),
+    ("SS", "SS", 38, 61),
+    ("1B", "1B", 74, 70),
+    ("3B", "3B", 26, 70),
     ("SP", "P", 50, 74),
     ("C", "C", 50, 92),
 ]
