@@ -41,7 +41,7 @@ st.markdown(
     "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
     ".diamond-title {"
     "  font-family: 'Bungee', cursive;"
-    "  font-size: 3rem;"
+    "  font-size: 2rem;"
     "  letter-spacing: 1px;"
     "  margin: 0;"
     f"  color: {style.DIAMOND_COLOR};"
@@ -49,19 +49,20 @@ st.markdown(
     "}"
     ".diamond-header {"
     "  position: sticky; top: 0; z-index: 999; background-color: #33405F;"
-    "  display: flex; align-items: center; gap: 14px; padding: 0.75rem 0;"
+    "  display: flex; align-items: center; gap: 10px; padding: 0.25rem 0 0.5rem;"
     "}"
-    # Streamlit's own toolbar (hamburger menu / Deploy button) is a short,
-    # absolutely-positioned bar, but the page's block-container still pads
-    # itself well below it by default — leaving a big empty gap above our
-    # header. Shrinking that padding to just the toolbar's own height pulls
-    # the logo/title up to sit right at the top of the page.
-    "[data-testid='stMainBlockContainer'] { padding-top: 3.75rem !important; }"
+    # Streamlit's own toolbar (hamburger menu / Deploy button) is an opaque,
+    # absolutely-positioned bar that the page's block-container pads itself
+    # below — both default to a taller height than the toolbar's icons
+    # actually need. Shrinking both to match pulls the logo/title up to sit
+    # right at the top of the page instead of leaving dead space above it.
+    "[data-testid='stHeader'] { height: 2.5rem; }"
+    "[data-testid='stMainBlockContainer'] { padding-top: 2.5rem !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<div class='diamond-header'>{style.diamond_logo(52)}"
+    f"<div class='diamond-header'>{style.diamond_logo(36)}"
     f"<h1 class='diamond-title'>Diamond Metrics</h1></div>",
     unsafe_allow_html=True,
 )
