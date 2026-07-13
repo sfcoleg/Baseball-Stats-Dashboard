@@ -16,9 +16,8 @@ def render_search():
     if not db.DB_PATH.exists() or not query.strip():
         return
 
-    season = db.get_seasons("batting")[0]
     mtime = db.db_mtime()
-    matches = db.search_players(query, season, mtime)
+    matches = db.search_players_all_seasons(query, mtime)
 
     if matches.empty:
         st.sidebar.caption("No matches.")
@@ -29,7 +28,7 @@ def render_search():
         if st.sidebar.button(label, key=f"sidebar_result_{row['mlbID']}_{row['roles']}", use_container_width=True):
             st.session_state["selected_mlbID"] = int(row["mlbID"])
             st.session_state["selected_name"] = row["Name"]
-            st.session_state["selected_season"] = season
+            st.session_state["selected_season"] = int(row["season"])
             st.switch_page("pages/_Player.py")
 
     if len(matches) > 8:

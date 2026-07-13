@@ -864,6 +864,56 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     return grouped.sort_values("Name").reset_index(drop=True)
 
 
+@st.cache_data(show_spinner=False)
+def _player_name_index_all_seasons(db_mtime_val: float) -> pd.DataFrame:
+    """Same idea as _player_name_index, but spans every cached season
+    instead of just one — so retired/inactive players (e.g. Kershaw) are
+    still searchable, not just whoever's active in the most recent season.
+    Reads mlbID/Name/Tm/season directly via SQL rather than going through
+    load_batting/load_pitching, since those pull every stat column and
+    this only needs a name lookup. Keeps one row per (mlbID, role): the
+    most recent season, since that's the season a profile click should
+    open to (a retired player has no row in the current season)."""
+    frames = []
+    with sqlite3.connect(DB_PATH) as conn:
+        for table, role in [("batting", "Batter"), ("pitching", "Pitcher")]:
+            df = pd.read_sql(f"SELECT mlbID, Name, Tm, season FROM {table}", conn)
+            df["role"] = role
+            frames.append(df)
+    combined = pd.concat(frames, ignore_index=True)
+    combined = combined.sort_values("season").drop_duplicates(subset=["mlbID", "role"], keep="last")
+    combined["name_norm"] = combined["Name"].map(normalize_text)
+    return combined.reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False)
+def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
+    """Search batters and pitchers by name across every cached season (not
+    just the current one) — used by the persistent sidebar search, so
+    retired/inactive players are findable too. Returns one row per player
+    with a combined roles string and the most recent season they have a
+    row in (the profile page opens to that season)."""
+    query_norm = normalize_text(query.strip())
+    if not query_norm:
+        return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles", "season"])
+
+    index = _player_name_index_all_seasons(db_mtime_val)
+    matches = index[index["name_norm"].str.contains(query_norm, na=False, regex=False)]
+    if matches.empty:
+        return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles", "season"])
+
+    matches = matches.sort_values("season")
+    grouped = (
+        matches.groupby("mlbID")
+        .agg(
+            Name=("Name", "last"), Tm=("Tm", "last"), season=("season", "max"),
+            roles=("role", lambda r: " / ".join(sorted(set(r)))),
+        )
+        .reset_index()
+    )
+    return grouped.sort_values("Name").reset_index(drop=True)
+
+
 # Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
 # the player profile's "Career Arc" stat selector (see pages/_Player.py)
 # offers exactly these, depending on the player's role.
