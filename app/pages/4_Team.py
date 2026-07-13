@@ -81,7 +81,13 @@ team_fielding = fielding[fielding["Tm"] == selected_abbr].sort_values("OAA", asc
 logo_col, header_col = st.columns([1, 8])
 with logo_col:
     if team_id:
-        st.image(style.team_logo_url(team_id), width=80)
+        # st.image inherits the theme's baseRadius ("large") and rounds the
+        # logo's corners — a raw <img> tag with an inline style override
+        # sidesteps that without touching the global theme.
+        st.markdown(
+            f"<img src='{style.team_logo_url(team_id)}' width='80' style='border-radius:0'>",
+            unsafe_allow_html=True,
+        )
 with header_col:
     st.markdown(
         f"<h2><span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
