@@ -23,7 +23,25 @@ if "selected_mlbID" not in st.session_state:
 
 mlbID = st.session_state["selected_mlbID"]
 mtime = db.db_mtime()
-season = st.session_state.get("selected_season") or db.get_seasons("batting")[0]
+
+seasons = db.get_seasons("batting")
+current_season = seasons[0]
+default_season = st.session_state.get("selected_season") or current_season
+if default_season not in seasons:
+    default_season = current_season
+# Keyed per-player so switching to a different search result resets the
+# selectbox to that player's own default season instead of sticking on
+# whatever season was last picked for the previous player.
+season = st.selectbox("Season", seasons, index=seasons.index(default_season), key=f"player_profile_season_{mlbID}")
+
+# "Retired" is judged against the CURRENT season specifically, independent
+# of whichever season is being viewed above — a player who's active now
+# but has no row in some earlier off-year isn't retired, and a retired
+# player is still retired even while you're looking at their 2019 season.
+is_retired = (
+    db.get_player_batting(mlbID, current_season, mtime) is None
+    and db.get_player_pitching(mlbID, current_season, mtime) is None
+)
 
 batting = db.get_player_batting(mlbID, season, mtime)
 pitching = db.get_player_pitching(mlbID, season, mtime)
@@ -62,10 +80,16 @@ photo_col, header_col = st.columns([1, 6])
 with photo_col:
     st.image(style.headshot_url(mlbID, width=180), width=120)
 with header_col:
+    retired_badge = (
+        "<span style='background-color:#66666666;color:#DCE1EA;padding:4px 12px;"
+        "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600;margin-left:6px'>RETIRED</span>"
+        if is_retired else ""
+    )
     st.markdown(
         f"# {selected_name} "
         f"<span style='background-color:{color}66;color:#FAFAFA;padding:4px 12px;"
-        f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>",
+        f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>"
+        f"{retired_badge}",
         unsafe_allow_html=True,
     )
     st.caption(f"{nickname} · Age {age} · {selected_roles}")
@@ -204,7 +228,7 @@ if not fielding.empty:
         hide_index=True,
     )
 
-if batting is not None or pitching is not None:
+if not is_retired and (batting is not None or pitching is not None):
     style.colored_header("Season Trend", "headliners")
     stat_col, stat_label, role_filter = ("OPS", "OPS", "Batter") if batting is not None else ("ERA", "ERA", "Pitcher")
     trend = history[(history["role"] == role_filter) & history[stat_col].notna()]
