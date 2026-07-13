@@ -1,15 +1,11 @@
 [theme]
 base = "dark"
 primaryColor = "#3B82F6"
-backgroundColor = "#2B3242"
-secondaryBackgroundColor = "#3A4356"
+backgroundColor = "#28324A"
+secondaryBackgroundColor = "#33405F"
 textColor = "#FAFAFA"
 baseRadius = "large"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
-
-[theme.sidebar]
-backgroundColor = "#28324A"
-secondaryBackgroundColor = "#33405F"
 
 [browser]
 gatherUsageStats = false
