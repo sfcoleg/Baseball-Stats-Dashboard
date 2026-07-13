@@ -370,9 +370,18 @@ def load_linescore(game_pk) -> dict | None:
 # score margin; WP_HOME_EDGE_RUNS is a small constant home-field mean shift
 # (rough run-equivalent of predict_game()'s HOME_FIELD_ADVANTAGE probability
 # edge), applied at every point in the game rather than just pre-game.
+# SIGMA_FLOOR keeps late-game uncertainty realistic — a single half-inning
+# still has real run-scoring variance (walk-off homers, grand slams, etc.
+# happen), so a 1-2 run lead in the 9th shouldn't read as a near-lock the
+# way naively shrinking sigma toward 0 would produce. WP_CLAMP additionally
+# hard-caps the displayed probability so it never actually reaches 99-100%,
+# even in a blowout, since MLB games are unpredictable enough that nothing
+# short of the final out is ever really "certain."
 SIGMA_FULL_GAME = 3.0
+SIGMA_FLOOR = 1.6
 WP_HOME_EDGE_RUNS = 0.15
 REGULATION_OUTS = 54  # 3 outs x 2 halves x 9 innings
+WP_CLAMP = (0.03, 0.97)
 
 
 def _normal_cdf(z: float) -> float:
@@ -387,9 +396,10 @@ def load_win_probability(game_pk) -> pd.DataFrame:
     pre-game odds). Model: treat the final score margin as normally
     distributed around the current differential (plus a small constant
     home-field edge), with a standard deviation that shrinks from
-    SIGMA_FULL_GAME toward 0 as outs remaining in the game shrink toward 0
-    (scaled by sqrt(outs_remaining / REGULATION_OUTS) — variance falls off
-    roughly linearly with scoring opportunities remaining). This has no
+    SIGMA_FULL_GAME toward SIGMA_FLOOR (not all the way to 0 — see that
+    constant's comment) as outs remaining in the game shrink, scaled by
+    sqrt(outs_remaining / REGULATION_OUTS). The result is clamped to
+    WP_CLAMP so it never reports outright certainty. This has no
     leverage-index / base-out-state precision (a bases-loaded jam and a
     solo-runner situation with the same score/outs get the same number) —
     it's a simplified, score-and-time-based estimate, not a real WP model.
@@ -422,12 +432,13 @@ def load_win_probability(game_pk) -> pd.DataFrame:
         total_outs = max(REGULATION_OUTS, inning * 6)
         outs_remaining = max(total_outs - outs_elapsed, 1)
 
-        sigma = max(SIGMA_FULL_GAME * math.sqrt(outs_remaining / REGULATION_OUTS), 0.35)
+        sigma = max(SIGMA_FULL_GAME * math.sqrt(outs_remaining / REGULATION_OUTS), SIGMA_FLOOR)
         diff = (home_score - away_score) + WP_HOME_EDGE_RUNS
+        home_wp = min(max(_normal_cdf(diff / sigma), WP_CLAMP[0]), WP_CLAMP[1])
         rows.append({
             "seq": len(rows),
             "label": f"{'Top' if is_top else 'Bot'} {inning}",
-            "home_win_prob": round(_normal_cdf(diff / sigma), 4),
+            "home_win_prob": round(home_wp, 4),
             "away_score": away_score,
             "home_score": home_score,
         })
