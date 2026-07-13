@@ -556,7 +556,7 @@ def fetch_all_star_roster(season):
     to finish. Returns an empty DataFrame for a season with no game (2020,
     canceled) or any other lookup failure."""
     print(f"Fetching {season} All-Star Game rosters...")
-    columns = ["season", "league", "mlbID", "Name", "Pos", "Tm"]
+    columns = ["season", "league", "mlbID", "Name", "Pos", "Tm", "is_starter"]
     try:
         resp = requests.get(
             "https://statsapi.mlb.com/api/v1/schedule",
@@ -583,13 +583,26 @@ def fetch_all_star_roster(season):
         league = "AL" if "American League" in team["team"]["name"] else "NL"
         for p in team["players"].values():
             person = p.get("person", {})
+            pos = p.get("position", {}).get("abbreviation", "—")
+            # A "true" starter (the fan-elected/managerial-pick lineup, not a
+            # later substitution) has a battingOrder ending in "00" — e.g.
+            # "500" is the original DH, "501"/"502" are subs who came in
+            # later. Pitchers don't bat, so they're identified separately by
+            # gamesStarted == 1 (there's exactly one starting pitcher per side).
+            batting_order = p.get("battingOrder")
+            is_starter = (
+                bool(batting_order) and str(batting_order).endswith("00")
+                if pos != "P"
+                else p.get("stats", {}).get("pitching", {}).get("gamesStarted") == 1
+            )
             rows.append({
                 "season": season,
                 "league": league,
                 "mlbID": person.get("id"),
                 "Name": person.get("fullName"),
-                "Pos": p.get("position", {}).get("abbreviation", "—"),
+                "Pos": pos,
                 "Tm": app_teams.abbr_for_team_id(p.get("parentTeamId")) or "—",
+                "is_starter": is_starter,
             })
     return pd.DataFrame(rows)
 

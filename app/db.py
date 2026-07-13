@@ -667,17 +667,22 @@ def load_all_star_roster(season: int, league: str, db_mtime_val: float) -> pd.Da
     """One league's (AL/NL) All-Star Game roster for a season — see
     ingest/refresh_data.py's fetch_all_star_roster() for where this comes
     from (the ASG itself has real team IDs, so its boxscore doubles as the
-    roster). Sorted by position (P last within each non-pitcher group is
-    unnecessary — just alphabetical by Pos then Name) for a stable,
-    scannable table."""
+    roster). `is_starter` marks the actual starting lineup (fan-elected
+    position players + the game's starting pitcher) vs. reserves — used to
+    build the starters dict for style.baseball_diamond(). Sorted by
+    position then name for a stable, scannable table."""
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
-                "SELECT mlbID, Name, Pos, Tm FROM all_star_rosters WHERE season = ? AND league = ?",
+                "SELECT mlbID, Name, Pos, Tm, is_starter FROM all_star_rosters WHERE season = ? AND league = ?",
                 conn, params=(season, league),
             )
         except pd.errors.DatabaseError:
-            return pd.DataFrame(columns=["mlbID", "Name", "Pos", "Tm"])
+            return pd.DataFrame(columns=["mlbID", "Name", "Pos", "Tm", "is_starter"])
+    # SQLite has no native boolean type — is_starter round-trips as 0/1
+    # ints, which pandas won't treat as a boolean mask (df[df["int_col"]]
+    # raises instead of filtering) unless cast back to bool explicitly.
+    df["is_starter"] = df["is_starter"].astype(bool)
     return df.sort_values(["Pos", "Name"]).reset_index(drop=True)
 
 

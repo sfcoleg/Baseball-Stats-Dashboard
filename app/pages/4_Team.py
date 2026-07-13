@@ -91,19 +91,63 @@ if choice in _COMPOSITE_SCOPES:
     st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
     st.stop()
 
+_ALL_STAR_COLORS = {"AL": "#C8102E", "NL": "#003DA5"}
+
 if choice in _ALL_STAR_SCOPES:
     league = _ALL_STAR_SCOPES[choice]
     style.colored_header(choice, "headliners")
-    st.caption(f"The {season} All-Star Game roster, by position.")
+    st.caption(f"The {season} All-Star Game starting lineup and full roster.")
     roster = db.load_all_star_roster(season, league, mtime)
     if roster.empty:
         st.info("No All-Star roster data for this season.")
         st.stop()
-    st.dataframe(
-        roster.rename(columns={"Tm": "Team"})[["Pos", "Name", "Team"]],
-        use_container_width=True,
-        hide_index=True,
-    )
+
+    # The starting pitcher's boxscore position is "P" (there's no separate
+    # "SP" in the Stats API), but style.baseball_diamond's diamond layout
+    # keys the mound slot as "SP" — remap just that one row.
+    starters = {
+        ("SP" if row.Pos == "P" else row.Pos): {"name": row.Name, "mlbID": int(row.mlbID)}
+        for row in roster[roster["is_starter"]].itertuples()
+    }
+    st.markdown(style.baseball_diamond(starters, _ALL_STAR_COLORS[league]), unsafe_allow_html=True)
+    if "SP" not in starters:
+        # Rosters are announced weeks ahead, but the official starting-
+        # pitcher flag isn't set until game time — not a bug, the SP slot
+        # just shows TBD until then.
+        st.caption("Starting pitcher not yet announced for this game.")
+
+    roster_ids = set(roster["mlbID"].astype(int))
+    all_batting = teams.add_team_abbr(db.load_batting(season, mtime))
+    all_pitching = teams.add_team_abbr(db.load_pitching(season, mtime))
+    roster_batting = all_batting[all_batting["mlbID"].isin(roster_ids)].sort_values("OPS", ascending=False)
+    roster_pitching = all_pitching[all_pitching["mlbID"].isin(roster_ids)].sort_values("ERA", ascending=True)
+
+    if not roster_batting.empty:
+        style.colored_header("Batting", "batting")
+        st.dataframe(
+            style.style_stats_table(
+                roster_batting[["Name", "Age", "Tm", "G", "PA", "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"]],
+                higher_better=["HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"],
+                team_col="Tm", team_color_fn=teams.color_for_abbr,
+                precision={"BA": "{:.3f}", "OBP": "{:.3f}", "SLG": "{:.3f}", "OPS": "{:.3f}"},
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+    if not roster_pitching.empty:
+        style.colored_header("Pitching", "pitching")
+        st.dataframe(
+            style.style_stats_table(
+                roster_pitching[["Name", "Age", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO"]],
+                higher_better=["W", "SV", "SO"],
+                lower_better=["ERA", "WHIP", "L"],
+                team_col="Tm", team_color_fn=teams.color_for_abbr,
+                precision={"ERA": "{:.2f}", "WHIP": "{:.3f}"},
+            ),
+            use_container_width=True,
+            hide_index=True,
+        )
     st.stop()
 
 selected_abbr = team_options[labels.index(choice)][0]
