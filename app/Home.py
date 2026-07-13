@@ -32,12 +32,6 @@ mtime = db.db_mtime()
 batting = db.load_batting(season, mtime)
 pitching = db.load_pitching(season, mtime)
 
-col1, col2, col3, col4 = st.columns(4)
-col1.metric("Batters tracked", len(batting))
-col2.metric("Pitchers tracked", len(pitching))
-col3.metric("Season", season)
-col4.metric("Teams", batting["Tm"].nunique())
-
 st.divider()
 
 qualified_batters = batting[batting["PA"] >= 50].sort_values("OPS", ascending=False)
