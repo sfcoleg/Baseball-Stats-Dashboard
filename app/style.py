@@ -22,6 +22,37 @@ def headshot_url(mlbID, width=180):
 
 ACCENT = "#3B82F6"
 
+# The gemstone-diamond logo's main facet color — also used to color the
+# Home page title text (see Home.py), so the two stay in sync if this ever
+# changes rather than needing the hex repeated in two places.
+DIAMOND_COLOR = "#93C5FD"
+
+
+def diamond_logo(size=64):
+    """A small faceted-gemstone SVG (a literal diamond, not a baseball
+    diamond) — brilliant-cut top view: a hexagonal crown facet, four
+    pavilion facets shaded from light to dark for a 3D-ish look, dark
+    outlines for the facet edges, and a white highlight streak for shine."""
+    return f"""
+    <svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
+        <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
+        <polygon points="85,35 50,90 70,20" fill="#7DB8F5" />
+        <polygon points="15,35 85,35 50,90" fill="{ACCENT}" />
+        <g stroke="#1E3A66" stroke-width="1.5" stroke-linejoin="round">
+            <line x1="30" y1="20" x2="15" y2="35" />
+            <line x1="70" y1="20" x2="85" y2="35" />
+            <line x1="15" y1="35" x2="85" y2="35" />
+            <line x1="30" y1="20" x2="50" y2="90" />
+            <line x1="70" y1="20" x2="50" y2="90" />
+            <line x1="15" y1="35" x2="50" y2="90" />
+            <line x1="85" y1="35" x2="50" y2="90" />
+            <polygon points="30,20 70,20 85,35 15,35" fill="none" />
+        </g>
+        <polygon points="35,23 45,23 39,31" fill="#FFFFFF" opacity="0.65" />
+    </svg>
+    """
+
 # All section headers share one accent color now (see colored_header) rather
 # than a different hue per category — kept as a dict (not a bare constant)
 # so existing colored_header(..., category) call sites don't need to change.

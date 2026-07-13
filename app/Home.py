@@ -13,7 +13,13 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
-st.title("Diamond Metrics")
+st.markdown(
+    f"<div style='display:flex;align-items:center;gap:12px;margin-bottom:0.5rem'>"
+    f"{style.diamond_logo(56)}"
+    f"<h1 style='color:{style.DIAMOND_COLOR};margin:0'>Diamond Metrics</h1>"
+    f"</div>",
+    unsafe_allow_html=True,
+)
 
 if not db.DB_PATH.exists():
     st.error(
