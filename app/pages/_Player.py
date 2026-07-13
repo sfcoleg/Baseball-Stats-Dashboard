@@ -261,54 +261,59 @@ if not is_retired and (batting is not None or pitching is not None):
         st.caption("Trend builds up day by day from the daily refresh — check back after a few more days of data.")
 
 arc_is_batter = batting is not None
-if (batting is not None or pitching is not None) and db.player_season_count(mlbID, arc_is_batter, mtime) >= 3:
-    style.colored_header("Career Arc", "headliners")
-    arc_stat = st.selectbox(
-        "Track", db.CAREER_ARC_BATTING_STATS if arc_is_batter else db.CAREER_ARC_PITCHING_STATS,
-        key="career_arc_stat", format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
-    )
-    arc_stat_label = db.STAT_DISPLAY_LABELS.get(arc_stat, arc_stat)
-    arc_df = db.player_career_arc(mlbID, arc_is_batter, arc_stat, mtime)
-    if len(arc_df) >= 2:
-        fig = px.line(arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat_label})
-        fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
-        fig.update_layout(
-            height=320, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#FAFAFA", xaxis=dict(dtick=1),
-        )
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.caption("Not enough cached seasons yet to show a career arc for this stat.")
-
 if batting is not None or pitching is not None:
-    style.colored_header("Aging Curve", "chart")
-    aging_stat_label = "OPS" if arc_is_batter else "ERA"
-    league_curve = db.league_aging_curve(arc_is_batter, mtime)
-    player_points = db.player_aging_points(mlbID, arc_is_batter, mtime)
-    if len(player_points) >= 2 and len(league_curve) >= 2:
-        st.caption(
-            f"Dotted line = league average {aging_stat_label} by age (qualified players, every cached season). "
-            f"Solid line = {selected_name}'s own {aging_stat_label} by age."
+    style.colored_header("Career Arc", "headliners")
+    arc_col1, arc_col2 = st.columns([2, 1])
+    with arc_col1:
+        arc_stat = st.selectbox(
+            "Track", db.CAREER_ARC_BATTING_STATS if arc_is_batter else db.CAREER_ARC_PITCHING_STATS,
+            key="career_arc_stat", format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
         )
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=league_curve["Age"], y=league_curve["stat"], mode="lines",
-            name="League average", line=dict(color="#9AA3B5", width=2, dash="dot"),
-        ))
-        fig.add_trace(go.Scatter(
-            x=player_points["Age"], y=player_points["stat"], mode="lines+markers",
-            name=selected_name, line=dict(color="#3B82F6", width=3), marker=dict(size=8),
-        ))
-        fig.update_layout(
-            height=340, margin=dict(l=0, r=0, t=10, b=0),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#FAFAFA", xaxis_title="Age", yaxis_title=aging_stat_label,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        )
-        st.plotly_chart(fig, use_container_width=True)
+    with arc_col2:
+        arc_x_axis = st.radio("X-axis", ["Season", "Age"], key="career_arc_x_axis", horizontal=True)
+    arc_stat_label = db.STAT_DISPLAY_LABELS.get(arc_stat, arc_stat)
+
+    if arc_x_axis == "Season":
+        arc_df = db.player_career_arc(mlbID, arc_is_batter, arc_stat, mtime)
+        if len(arc_df) >= 2:
+            fig = px.line(
+                arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat_label},
+            )
+            fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
+            fig.update_layout(
+                height=320, margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#FAFAFA", xaxis=dict(dtick=1),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("Not enough cached seasons yet to show a season-by-season arc for this stat.")
     else:
-        st.caption("Not enough cached seasons yet to show an aging curve for this player.")
+        league_curve = db.league_aging_curve(arc_is_batter, arc_stat, mtime)
+        player_points = db.player_aging_points(mlbID, arc_is_batter, arc_stat, mtime)
+        if len(player_points) >= 2 and len(league_curve) >= 2:
+            st.caption(
+                f"Dotted line = league average {arc_stat_label} by age (qualified players, every cached season). "
+                f"Solid line = {selected_name}'s own {arc_stat_label} by age."
+            )
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=league_curve["Age"], y=league_curve["stat"], mode="lines",
+                name="League average", line=dict(color="#9AA3B5", width=2, dash="dot"),
+            ))
+            fig.add_trace(go.Scatter(
+                x=player_points["Age"], y=player_points["stat"], mode="lines+markers",
+                name=selected_name, line=dict(color="#3B82F6", width=3), marker=dict(size=8),
+            ))
+            fig.update_layout(
+                height=340, margin=dict(l=0, r=0, t=10, b=0),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color="#FAFAFA", xaxis_title="Age", yaxis_title=arc_stat_label,
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.caption("Not enough cached seasons yet to show an age curve for this stat.")
 
 if batting is not None or pitching is not None:
     style.colored_header("League Distribution", "chart")

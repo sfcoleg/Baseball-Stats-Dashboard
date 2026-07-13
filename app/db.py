@@ -1022,14 +1022,15 @@ def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: 
 
 
 @st.cache_data(show_spinner=False)
-def league_aging_curve(is_batter: bool, db_mtime_val: float) -> pd.DataFrame:
-    """League-wide average OPS (batters) or ERA (pitchers) by age, computed
+def league_aging_curve(is_batter: bool, stat_col: str, db_mtime_val: float) -> pd.DataFrame:
+    """League-wide average of `stat_col` (must be one of
+    CAREER_ARC_BATTING_STATS/CAREER_ARC_PITCHING_STATS) by age, computed
     across every cached season combined and restricted to a qualification
     threshold (PA>=100 / IP>=20) so noise from tiny partial-season samples
     doesn't distort the shape. One row per whole-number age — feeds the
-    "Aging Curve" chart's background line on the player profile page."""
+    Career Arc chart's "By Age" mode background line on the player
+    profile page."""
     table = "batting" if is_batter else "pitching"
-    stat_col = "OPS" if is_batter else "ERA"
     qual_col, qual_min = ("PA", 100) if is_batter else ("IP", 20)
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
@@ -1042,34 +1043,19 @@ def league_aging_curve(is_batter: bool, db_mtime_val: float) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=300)
-def player_aging_points(mlbID: int, is_batter: bool, db_mtime_val: float) -> pd.DataFrame:
-    """One player's own (Age, OPS/ERA) points across every cached season —
+def player_aging_points(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: float) -> pd.DataFrame:
+    """One player's own (Age, `stat_col`) points across every cached season —
     no qualification threshold, unlike league_aging_curve, since we want
     this specific player's full career shown regardless of playing time.
-    Overlaid on league_aging_curve's line on the player profile page."""
+    Overlaid on league_aging_curve's line in the Career Arc chart's "By
+    Age" mode on the player profile page."""
     table = "batting" if is_batter else "pitching"
-    stat_col = "OPS" if is_batter else "ERA"
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
             f'SELECT Age, "{stat_col}" AS stat FROM {table} WHERE mlbID = ? ORDER BY Age',
             conn, params=(int(mlbID),),
         )
     return df.dropna(subset=["Age", "stat"])
-
-
-@st.cache_data(show_spinner=False, max_entries=300)
-def player_season_count(mlbID: int, is_batter: bool, db_mtime_val: float) -> int:
-    """How many distinct cached seasons a player has rows for, regardless
-    of stat column — used to gate the "Career Arc" section on the player
-    profile page, since a 1-2 year career doesn't have enough points to
-    show a meaningful trend."""
-    table = "batting" if is_batter else "pitching"
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            df = pd.read_sql(f"SELECT DISTINCT season FROM {table} WHERE mlbID = ?", conn, params=(int(mlbID),))
-        except pd.errors.DatabaseError:
-            return 0
-    return len(df)
 
 
 @st.cache_data(show_spinner=False, max_entries=300)
