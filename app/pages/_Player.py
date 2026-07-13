@@ -76,6 +76,7 @@ st.divider()
 team_row = batting if batting is not None else pitching
 if team_row is not None:
     abbr, nickname, color = teams.team_meta_from_city(team_row["Tm"], team_row.get("Lev"))
+    nickname = teams.franchise_display_name(abbr, season)
     age = team_row["Age"]
 elif not fielding.empty:
     abbr, color = teams.team_meta_from_nickname(fielding.iloc[0]["Tm"])

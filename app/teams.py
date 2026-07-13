@@ -12,6 +12,11 @@ _BY_CITY_LEAGUE = {
     ("Arizona", None): ("ARI", "Diamondbacks", "#A71930"),
     ("Atlanta", None): ("ATL", "Braves", "#CE1141"),
     ("Athletics", None): ("ATH", "Athletics", "#003831"),
+    # Same franchise, same abbreviation/color as "Athletics" above — this is
+    # just the pre-2025 Baseball-Reference city name, before they dropped
+    # "Oakland" as part of relocating (see franchise_display_name() for the
+    # season-aware "Oakland Athletics" vs "Athletics" display name).
+    ("Oakland", None): ("ATH", "Athletics", "#003831"),
     ("Baltimore", None): ("BAL", "Orioles", "#DF4601"),
     ("Boston", None): ("BOS", "Red Sox", "#BD3039"),
     ("Chicago", "AL"): ("CWS", "White Sox", "#27251F"),
@@ -62,6 +67,18 @@ def color_for_abbr(abbr: str) -> str:
 
 def nickname_for_abbr(abbr: str) -> str:
     return _NICKNAME_BY_ABBR.get(abbr, abbr)
+
+
+def franchise_display_name(abbr: str, season: int | None) -> str:
+    """Like nickname_for_abbr, but accounts for a franchise rename
+    mid-history — currently only the Athletics, who dropped "Oakland" from
+    the name as part of relocating starting with the 2025 season. Every
+    other team's current nickname is shown regardless of season (same
+    precedent as the Guardians/Indians rename), so this only special-cases
+    ATH; pass `season=None` to always get the current name."""
+    if abbr == "ATH" and season is not None and season <= 2024:
+        return "Oakland Athletics"
+    return nickname_for_abbr(abbr)
 
 
 def all_teams() -> list[tuple[str, str]]:

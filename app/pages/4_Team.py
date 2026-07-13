@@ -97,7 +97,7 @@ with logo_col:
 with header_col:
     st.markdown(
         f"<h2><span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
-        f"border-radius:10px'>{selected_abbr}</span> {choice.split(' — ')[1]}</h2>",
+        f"border-radius:10px'>{selected_abbr}</span> {teams.franchise_display_name(selected_abbr, season)}</h2>",
         unsafe_allow_html=True,
     )
     st.caption(f"{len(team_batting)} batters, {len(team_pitching)} pitchers, {len(team_fielding)} fielders on record for {season}.")
