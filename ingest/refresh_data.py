@@ -545,6 +545,45 @@ def fetch_career_totals():
     return pd.DataFrame(rows)
 
 
+def record_milestone_achievements(conn, career_totals):
+    """Log the first day we notice a player's true career total crossing
+    one of CAREER_MILESTONES's thresholds — powers the Milestone Watch
+    page's "just achieved" callout, which stays up for 5 days after the
+    fact (see db.recent_milestone_achievers()).
+
+    Bootstrap case: the very first time this runs, milestone_achievements
+    doesn't exist yet, so every threshold a player has ALREADY crossed
+    (possibly years ago) would otherwise all get stamped with today's date
+    and wrongly show up as "just achieved". Backdated to 1900-01-01
+    instead on that one run only — old enough to never fall inside the
+    5-day window — so only genuinely new crossings from here on get a
+    real date."""
+    table_is_new = False
+    try:
+        existing = pd.read_sql("SELECT mlbID, Stat, Milestone FROM milestone_achievements", conn)
+        existing_keys = set(zip(existing["mlbID"], existing["Stat"], existing["Milestone"]))
+    except pd.errors.DatabaseError:
+        existing_keys = set()
+        table_is_new = True
+
+    stamp = "1900-01-01" if table_is_new else date.today().isoformat()
+    new_rows = []
+    for row in career_totals.itertuples():
+        for stat, thresholds in CAREER_MILESTONES.items():
+            total = getattr(row, stat, None)
+            if total is None or pd.isna(total):
+                continue
+            for milestone in thresholds:
+                if total >= milestone and (row.mlbID, stat, milestone) not in existing_keys:
+                    new_rows.append({
+                        "mlbID": row.mlbID, "Name": row.Name, "Tm": row.Tm, "Lev": row.Lev,
+                        "Stat": stat, "Milestone": milestone, "achieved_date": stamp,
+                    })
+    if new_rows:
+        pd.DataFrame(new_rows).to_sql("milestone_achievements", conn, if_exists="append", index=False)
+    return len(new_rows)
+
+
 def fetch_all_star_roster(season):
     """That season's All-Star Game roster (both leagues) from the MLB Stats
     API. There's no dedicated "All-Star roster" endpoint — instead, the ASG
@@ -718,6 +757,9 @@ def fetch_and_store():
         # rather than appended via _store_season_table.
         if not career_totals.empty:
             career_totals.to_sql("career_totals", conn, if_exists="replace", index=False)
+            new_achievements = record_milestone_achievements(conn, career_totals)
+        else:
+            new_achievements = 0
         if not recent_batting.empty:
             recent_batting.to_sql("recent_batting", conn, if_exists="replace", index=False)
         if not recent_pitching.empty:
@@ -748,7 +790,8 @@ def fetch_and_store():
         f"{len(fielding)} fielders, {len(recent_batting)} recent-batting rows, "
         f"{len(recent_pitching)} recent-pitching rows, {len(history)} history rows, "
         f"{len(todays_games)} today's games, {len(standings)} standings rows, "
-        f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows to {DB_PATH}"
+        f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows, "
+        f"{new_achievements} new milestone achievements to {DB_PATH}"
     )
 
 

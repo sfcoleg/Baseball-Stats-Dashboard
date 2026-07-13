@@ -1,7 +1,7 @@
 """Shared helpers for reading the cached stats database."""
 import sqlite3
 import unicodedata
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -702,9 +702,9 @@ CAREER_MILESTONES = {
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6)
-def milestone_watch(db_mtime_val: float, limit: int = 40) -> pd.DataFrame:
-    """Every active player's distance to their next uncrossed career
-    counting-stat milestone (500 HR, 3000 K, ...), sourced from true
+def milestone_watch(db_mtime_val: float, max_remaining: int = 10) -> pd.DataFrame:
+    """Every active player within `max_remaining` of their next uncrossed
+    career counting-stat milestone (500 HR, 3000 K, ...), sourced from true
     career totals (see ingest/refresh_data.py's fetch_career_totals()) —
     not just this app's own 2010+ cached seasons, so a player whose
     career started before then is still tracked correctly. One row per
@@ -727,14 +727,37 @@ def milestone_watch(db_mtime_val: float, limit: int = 40) -> pd.DataFrame:
             if not upcoming:
                 continue
             milestone = min(upcoming)
+            remaining = milestone - total
+            if remaining > max_remaining:
+                continue
             rows.append({
                 "mlbID": int(row.mlbID), "Name": row.Name, "Tm": row.Tm, "Lev": row.Lev,
-                "Stat": stat, "Total": total, "Milestone": milestone, "Remaining": milestone - total,
+                "Stat": stat, "Total": total, "Milestone": milestone, "Remaining": remaining,
             })
     watch = pd.DataFrame(rows)
     if watch.empty:
         return watch
-    return watch.sort_values("Remaining").head(limit).reset_index(drop=True)
+    return watch.sort_values("Remaining").reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600)
+def recent_milestone_achievers(db_mtime_val: float, days: int = 5) -> pd.DataFrame:
+    """Players who crossed a career milestone within the last `days` days —
+    see ingest/refresh_data.py's record_milestone_achievements() for how
+    "crossed" is detected and logged (only once per player/stat/threshold,
+    dated the first day it was noticed). Powers the Milestone Watch page's
+    celebratory callout, which stays up for 5 days after the fact."""
+    cutoff = (date.today() - timedelta(days=days)).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT mlbID, Name, Tm, Lev, Stat, Milestone, achieved_date FROM milestone_achievements "
+                "WHERE achieved_date >= ?",
+                conn, params=(cutoff,),
+            )
+        except pd.errors.DatabaseError:
+            return pd.DataFrame(columns=["mlbID", "Name", "Tm", "Lev", "Stat", "Milestone", "achieved_date"])
+    return df.sort_values("achieved_date", ascending=False).reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False, max_entries=2)

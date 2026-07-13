@@ -185,6 +185,30 @@ def milestone_card(mlbID, name, team_abbr, team_color, text):
     )
 
 
+def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
+    """Same layout as milestone_card, but with a gold border/glow and a
+    celebratory badge instead of the plain blue one — for a player who
+    actually crossed a milestone recently (see db.recent_milestone_achievers),
+    as opposed to one who's just getting close."""
+    st.markdown(
+        f"<div style='display:flex;align-items:flex-start;gap:12px;background-color:#F5B94214;"
+        f"border:1px solid #F5B94266;border-radius:12px;padding:10px'>"
+        f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
+        f"border-radius:10px;object-fit:cover;flex-shrink:0;border:2px solid #F5B942' />"
+        f"<div style='flex:1;min-width:0'>"
+        f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
+        f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
+        f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
+        f"</div>"
+        f"<div style='margin-top:6px;'><span style='background-color:#F5B94233;"
+        f"color:#F5B942;padding:3px 10px;border-radius:8px;font-weight:700;font-size:0.9rem'>"
+        f"\U0001f389 {text}</span></div>"
+        f"</div>"
+        f"</div>",
+        unsafe_allow_html=True,
+    )
+
+
 def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> str:
     """Traditional scoreboard-style box score: one row per team, one column
     per inning, R/H/E totals set off with a heavier left border — the same

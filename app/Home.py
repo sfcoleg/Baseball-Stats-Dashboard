@@ -12,6 +12,19 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
+# Temporary: All-Star week has no regular-season games, so the normal "Hot
+# Yesterday" query has nothing to show on the day right after the Home Run
+# Derby / All-Star Game. Keyed by the date this page is being VIEWED on
+# (i.e. "today"), since "yesterday" is computed from that. The Derby-winner
+# name is a placeholder until the user confirms who won — update it then.
+# Remove this whole block once the 2026 All-Star break has passed.
+HOT_YESTERDAY_OVERRIDES = {
+    "2026-07-14": {
+        "batting": {"name": "TBD — Home Run Derby Winner", "note": "2026 Home Run Derby champion"},
+        "pitching": "No pitcher pitched yesterday — it's All-Star week.",
+    },
+}
+
 st.markdown(
     "<style>"
     "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
@@ -71,9 +84,13 @@ if milestones:
 if season == date.today().year:
     style.colored_header("Batting Headliners", "batting")
     h1, h2, h3 = st.columns(3)
+    batting_override = HOT_YESTERDAY_OVERRIDES.get(date.today().isoformat(), {}).get("batting")
     for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
+                if period == "day" and batting_override:
+                    style.headliner_card(label, batting_override["name"], "—", "#F5B942", batting_override["note"])
+                    continue
                 performer = db.top_recent_performer(recent_batting, period)
                 if performer is not None:
                     abbr, _, color = teams.team_meta_from_city(performer["Tm"], performer.get("Lev"))
@@ -88,9 +105,14 @@ if season == date.today().year:
 
     style.colored_header("Pitching Headliners", "pitching")
     p1, p2, p3 = st.columns(3)
+    pitching_override = HOT_YESTERDAY_OVERRIDES.get(date.today().isoformat(), {}).get("pitching")
     for col, period, label in [(p1, "day", "Hot Yesterday"), (p2, "week", "Hot This Week"), (p3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
+                if period == "day" and pitching_override:
+                    st.caption(label)
+                    st.markdown(pitching_override)
+                    continue
                 pitcher = db.top_recent_pitcher(recent_pitching, period)
                 if pitcher is not None:
                     abbr, _, color = teams.team_meta_from_city(pitcher["Tm"], pitcher.get("Lev"))
