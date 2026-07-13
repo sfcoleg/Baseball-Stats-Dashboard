@@ -989,6 +989,25 @@ def player_season_count(mlbID: int, is_batter: bool, db_mtime_val: float) -> int
     return len(df)
 
 
+@st.cache_data(show_spinner=False, max_entries=300)
+def player_seasons(mlbID: int, db_mtime_val: float) -> list[int]:
+    """Every season a player has a row in — batting, pitching, or fielding
+    combined — sorted most recent first. Feeds the "Season" selectbox on
+    the player profile page so a retired player's dropdown only offers
+    seasons they actually played, instead of every cached season (picking
+    a season past their retirement just hit the "no stats found" dead
+    end)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        seasons = set()
+        for table in ("batting", "pitching", "fielding"):
+            try:
+                rows = conn.execute(f"SELECT DISTINCT season FROM {table} WHERE mlbID = ?", (int(mlbID),)).fetchall()
+            except sqlite3.OperationalError:
+                continue
+            seasons.update(r[0] for r in rows)
+    return sorted(seasons, reverse=True)
+
+
 def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
     """Percentile of `value` within `series` (0-100). For lower_is_better
     stats (ERA, WHIP, ...) a lower value yields a higher percentile."""

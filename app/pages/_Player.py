@@ -24,15 +24,21 @@ if "selected_mlbID" not in st.session_state:
 mlbID = st.session_state["selected_mlbID"]
 mtime = db.db_mtime()
 
-seasons = db.get_seasons("batting")
-current_season = seasons[0]
-default_season = st.session_state.get("selected_season") or current_season
-if default_season not in seasons:
-    default_season = current_season
+current_season = db.get_seasons("batting")[0]
+
+# Scoped to seasons this player actually has a row in — not every cached
+# season — so a retired player's dropdown can't land on a post-retirement
+# season with nothing to show.
+own_seasons = db.player_seasons(mlbID, mtime) or [current_season]
+default_season = st.session_state.get("selected_season") or own_seasons[0]
+if default_season not in own_seasons:
+    default_season = own_seasons[0]
 # Keyed per-player so switching to a different search result resets the
 # selectbox to that player's own default season instead of sticking on
 # whatever season was last picked for the previous player.
-season = st.selectbox("Season", seasons, index=seasons.index(default_season), key=f"player_profile_season_{mlbID}")
+season = st.selectbox(
+    "Season", own_seasons, index=own_seasons.index(default_season), key=f"player_profile_season_{mlbID}",
+)
 
 # "Retired" is judged against the CURRENT season specifically, independent
 # of whichever season is being viewed above — a player who's active now
