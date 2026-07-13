@@ -68,6 +68,7 @@ if choice in _COMPOSITE_SCOPES:
 
 selected_abbr = team_options[labels.index(choice)][0]
 color = teams.color_for_abbr(selected_abbr)
+team_id = teams.team_id_for_abbr(selected_abbr)
 
 batting = teams.add_team_abbr(db.load_batting(season, mtime))
 pitching = teams.add_team_abbr(db.load_pitching(season, mtime))
@@ -77,18 +78,22 @@ team_batting = batting[batting["Tm"] == selected_abbr].sort_values("OPS", ascend
 team_pitching = pitching[pitching["Tm"] == selected_abbr].sort_values("ERA", ascending=True)
 team_fielding = fielding[fielding["Tm"] == selected_abbr].sort_values("OAA", ascending=False)
 
-st.markdown(
-    f"<h2><span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
-    f"border-radius:10px'>{selected_abbr}</span> {choice.split(' — ')[1]}</h2>",
-    unsafe_allow_html=True,
-)
-st.caption(f"{len(team_batting)} batters, {len(team_pitching)} pitchers, {len(team_fielding)} fielders on record for {season}.")
+logo_col, header_col = st.columns([1, 8])
+with logo_col:
+    if team_id:
+        st.image(style.team_logo_url(team_id), width=80)
+with header_col:
+    st.markdown(
+        f"<h2><span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
+        f"border-radius:10px'>{selected_abbr}</span> {choice.split(' — ')[1]}</h2>",
+        unsafe_allow_html=True,
+    )
+    st.caption(f"{len(team_batting)} batters, {len(team_pitching)} pitchers, {len(team_fielding)} fielders on record for {season}.")
 
 if team_batting.empty and team_pitching.empty and team_fielding.empty:
     st.info("No players found for this team in the selected season.")
     st.stop()
 
-team_id = teams.team_id_for_abbr(selected_abbr)
 starters = db.load_depth_chart(team_id) if team_id else {}
 if "RP" not in starters:
     # No CP listed on the live depth chart — common for a team using a

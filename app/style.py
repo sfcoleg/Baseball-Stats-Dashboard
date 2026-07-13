@@ -20,6 +20,11 @@ def headshot_url(mlbID, width=180):
     )
 
 
+def team_logo_url(team_id: int) -> str:
+    """MLB's public team-logo CDN, keyed by team_id (see teams.team_id_for_abbr)."""
+    return f"https://www.mlbstatic.com/team-logos/{int(team_id)}.svg"
+
+
 ACCENT = "#3B82F6"
 
 # The gemstone-diamond logo's main facet color — also used to color the
