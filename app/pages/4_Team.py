@@ -102,7 +102,8 @@ with logo_col:
         # logo's corners — a raw <img> tag with an inline style override
         # sidesteps that without touching the global theme.
         st.markdown(
-            f"<img src='{style.team_logo_url(team_id)}' width='80' style='border-radius:0'>",
+            f"<img src='{style.team_logo_for_season(selected_abbr, team_id, season)}' "
+            f"width='80' style='border-radius:0'>",
             unsafe_allow_html=True,
         )
 with header_col:

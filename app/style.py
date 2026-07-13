@@ -21,8 +21,39 @@ def headshot_url(mlbID, width=180):
 
 
 def team_logo_url(team_id: int) -> str:
-    """MLB's public team-logo CDN, keyed by team_id (see teams.team_id_for_abbr)."""
+    """MLB's public team-logo CDN, keyed by team_id (see teams.team_id_for_abbr).
+    Only ever serves each team's CURRENT logo — see team_logo_for_season()
+    for season-correct historical logos."""
     return f"https://www.mlbstatic.com/team-logos/{int(team_id)}.svg"
+
+
+_LOGO_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "team_logos"
+
+# Historical logo overrides for teams whose design has changed since 2010 —
+# the live CDN (team_logo_url) only has each team's CURRENT logo, so a past
+# era needs a local static asset instead. (abbr -> [(start_season,
+# end_season_or_None, filename), ...]); a season with no matching entry
+# falls through to the live CDN. Files live in assets/team_logos/, named
+# "{abbr}_{start_season}.png" to match the entry below.
+_HISTORICAL_LOGOS = {
+    "ARI": [(2010, 2015, "ARI_2010.png"), (2016, None, "ARI_2016.png")],
+    "HOU": [(2010, 2012, "HOU_2010.png")],
+    "MIA": [(2010, 2011, "MIA_2010.png"), (2012, 2018, "MIA_2012.png")],
+    "TOR": [(2010, 2019, "TOR_2010.png")],
+}
+
+
+def team_logo_for_season(abbr: str, team_id: int, season: int | None) -> str:
+    """Season-correct team logo: a historical override (see
+    _HISTORICAL_LOGOS) if this team/season has one, embedded as a base64
+    data URI since it's a local file; otherwise the live CDN's current
+    logo (team_logo_url)."""
+    if season is not None:
+        for start, end, filename in _HISTORICAL_LOGOS.get(abbr, []):
+            if season >= start and (end is None or season <= end):
+                data = base64.b64encode((_LOGO_ASSETS_DIR / filename).read_bytes()).decode()
+                return f"data:image/png;base64,{data}"
+    return team_logo_url(team_id)
 
 
 ACCENT = "#3B82F6"
