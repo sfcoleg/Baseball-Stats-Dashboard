@@ -5,7 +5,9 @@ backgroundColor = "#33405F"
 secondaryBackgroundColor = "#3B81F5"
 textColor = "#FAFAFA"
 baseRadius = "large"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
+font = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap, sans-serif"
+baseFontWeight = 500
+headingFontWeights = 700
 
 [browser]
 gatherUsageStats = false

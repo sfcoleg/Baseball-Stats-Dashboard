@@ -50,6 +50,8 @@ def diamond_logo(size=64):
             <polygon points="30,20 70,20 85,35 15,35" fill="none" />
         </g>
         <polygon points="35,23 45,23 39,31" fill="#FFFFFF" opacity="0.65" />
+        <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
+            stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round" />
     </svg>
     """
 
