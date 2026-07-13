@@ -21,9 +21,14 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent))
+import following
 import sidebar
 
 st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
+
+# Seeds st.session_state's follow lists from the browser's own localStorage
+# (see following.py) — must run before any page can read them.
+following.bootstrap()
 
 # Shrink the sidebar's built-in header bar (which only holds the collapse
 # arrow) so the search box sits higher, closer to the top of the sidebar.

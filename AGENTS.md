@@ -117,14 +117,41 @@ app/
                            # same predict_game()/live_scores rendering as 8_Todays_Games.py, just simplified)
                            # plus yesterday's day-window performances for followed players (recent_batting/
                            # recent_pitching filtered to followed mlbIDs, rendered via style.milestone_card()
-                           # — the same helper the Daily Digest uses). Backed by a new `following` SQLite
-                           # table (db.follow_team()/unfollow_team()/follow_player()/unfollow_player()/
-                           # get_followed_teams()/get_followed_players()) — the ONLY table the app itself
-                           # writes to; every other table is written exclusively by ingest/refresh_data.py.
-                           # Important caveat: this write is NOT committed to git like the rest of
-                           # data/stats.db, so a Streamlit Community Cloud redeploy (which rebuilds the
-                           # container from the repo) resets it — fine for a personal single-user dashboard's
-                           # day-to-day use, just not durable across deploys.
+                           # — the same helper the Daily Digest uses). Persisted per-browser in the client's
+                           # own localStorage (app/following.py), NOT server-side — there's no login, so a
+                           # shared SQLite table would mean every visitor sees and edits the same list.
+                           # followed_teams/followed_players live in st.session_state as lists of
+                           # {"abbr","nickname"}/{"mlbID","name"} dicts, read/written directly by this page
+                           # (`.append()`/`.remove()` on the same list object session_state holds).
+                           #
+                           # following.bootstrap() seeds those two session_state keys and MUST run before
+                           # they're read. It's called both in main.py (the normal path) and again at the top
+                           # of this page itself (idempotent — no-ops if already hydrated this session),
+                           # because Streamlit's legacy pages/-folder auto-discovery can route a direct URL
+                           # hit straight to a page's script via `_mpa_v1`, bypassing main.py's top-level code
+                           # entirely. Since there's no built-in two-way JS<->Python channel, persistence uses
+                           # two one-way `components.html()` script bridges:
+                           #   - LOAD (JS->Python, in bootstrap()): on a fresh session with no `?following=`
+                           #     query param, a script checks localStorage; if it finds saved data, it builds
+                           #     an `<a href="...?following=...">` element IN THE PARENT DOCUMENT (via
+                           #     window.parent.document, allowed since the sandboxed iframe grants
+                           #     allow-same-origin) and clicks it there — NOT `window.parent.location.href =`,
+                           #     which is silently blocked because components.html()'s iframe sandbox lacks
+                           #     allow-top-navigation. One extra page load follows; bootstrap() then reads the
+                           #     query param into session_state and never re-reads it (session_state becomes
+                           #     authoritative from then on).
+                           #   - SAVE (Python->JS, following.save()): called unconditionally near the top of
+                           #     this page, writes current session_state into localStorage. Guarded by a
+                           #     `_following_safe_to_save` session_state flag that bootstrap() only sets True
+                           #     from the SECOND render of a session onward — on the very first render of a
+                           #     fresh session, the "no data yet" placeholder empty lists are still pending the
+                           #     possible localStorage-redirect above, and saving immediately would clobber real
+                           #     saved data with that empty placeholder before the browser gets a chance to run
+                           #     the redirect.
+                           #
+                           # Trade-off: genuinely personal with no auth, but doesn't follow the visitor across
+                           # devices/browsers (unlike the earlier SQLite-backed version this replaced, which
+                           # was shared across every visitor — wrong for a multi-user public dashboard).
     _Player.py      # Player profile view — NOT reached via its own nav tab; driven by st.session_state
                      # ("selected_mlbID"/"selected_name"/"selected_season") set by sidebar.render_search(),
                      # navigated to via st.switch_page("pages/_Player.py"). Excluded from the visible sidebar

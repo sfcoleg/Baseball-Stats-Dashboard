@@ -42,68 +42,6 @@ def get_seasons(table: str) -> list[int]:
     return [r[0] for r in rows]
 
 
-# --- Following (teams/players) ---------------------------------------------
-# The only table the app writes to directly (everything else is written by
-# ingest/refresh_data.py) — a simple kind/key/label table so both "team" and
-# "player" follows share one schema. Not cached: it's tiny and needs to read
-# its own writes back immediately after a follow/unfollow. Persists across
-# page navigations and browser refreshes for the lifetime of the running
-# server process/container, but — like any write to data/stats.db — is NOT
-# committed to git, so a Streamlit Community Cloud redeploy (which rebuilds
-# the container from the repo) resets it. Fine for a personal single-user
-# dashboard's day-to-day use; just not durable across deploys.
-
-
-def _ensure_following_table(conn):
-    conn.execute(
-        "CREATE TABLE IF NOT EXISTS following (kind TEXT NOT NULL, key TEXT NOT NULL, "
-        "label TEXT, PRIMARY KEY (kind, key))"
-    )
-
-
-def follow_team(abbr: str, nickname: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        conn.execute("INSERT OR IGNORE INTO following (kind, key, label) VALUES ('team', ?, ?)", (abbr, nickname))
-        conn.commit()
-
-
-def unfollow_team(abbr: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        conn.execute("DELETE FROM following WHERE kind='team' AND key=?", (abbr,))
-        conn.commit()
-
-
-def follow_player(mlbID, name: str) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        conn.execute("INSERT OR IGNORE INTO following (kind, key, label) VALUES ('player', ?, ?)", (str(int(mlbID)), name))
-        conn.commit()
-
-
-def unfollow_player(mlbID) -> None:
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        conn.execute("DELETE FROM following WHERE kind='player' AND key=?", (str(int(mlbID)),))
-        conn.commit()
-
-
-def get_followed_teams() -> list[tuple[str, str]]:
-    """Returns [(abbr, nickname), ...], sorted by nickname."""
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        return conn.execute("SELECT key, label FROM following WHERE kind='team' ORDER BY label").fetchall()
-
-
-def get_followed_players() -> list[tuple[int, str]]:
-    """Returns [(mlbID, name), ...], sorted by name."""
-    with sqlite3.connect(DB_PATH) as conn:
-        _ensure_following_table(conn)
-        rows = conn.execute("SELECT key, label FROM following WHERE kind='player' ORDER BY label").fetchall()
-    return [(int(k), label) for k, label in rows]
-
-
 # Only the columns actually used anywhere in the app get pulled out of
 # SQLite — Baseball-Reference/Statcast ship many raw columns (pitch counts,
 # batted-ball splits, etc.) that nothing renders, so leaving them out cuts

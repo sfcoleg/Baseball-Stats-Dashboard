@@ -6,6 +6,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import following
 import style
 import teams
 
@@ -13,8 +14,8 @@ st.set_page_config(page_title="Following | Sabermetrics Dashboard", layout="wide
 st.title("Following")
 st.caption(
     "Follow teams and players to get a personalized feed: today's games for your teams, "
-    "yesterday's performances for your players. Stored locally in this app's database — "
-    "not tied to an account, so it's shared across anyone using this dashboard."
+    "yesterday's performances for your players. Saved in this browser only (no account) — "
+    "it'll be here next time you visit on this device/browser, but won't follow you to another one."
 )
 
 if not db.DB_PATH.exists():
@@ -23,8 +24,13 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 season = db.get_seasons("batting")[0]
-followed_teams = db.get_followed_teams()
-followed_players = db.get_followed_players()
+
+# Normally seeded by following.bootstrap() in main.py, but Streamlit's legacy
+# pages/-folder auto-discovery can route a direct URL hit straight to this
+# page's script (bypassing main.py entirely) — so bootstrap defensively here too.
+following.bootstrap()
+followed_teams = st.session_state["followed_teams"]  # [{"abbr", "nickname"}, ...]
+followed_players = st.session_state["followed_players"]  # [{"mlbID", "name"}, ...]
 
 with st.expander("Manage who you follow", expanded=not (followed_teams or followed_players)):
     col1, col2 = st.columns(2)
@@ -32,34 +38,32 @@ with st.expander("Manage who you follow", expanded=not (followed_teams or follow
     with col1:
         st.markdown("**Follow a team**")
         team_options = teams.all_teams()
-        followed_abbrs = {abbr for abbr, _ in followed_teams}
+        followed_abbrs = {t["abbr"] for t in followed_teams}
         labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options if abbr not in followed_abbrs]
         if labels:
             choice = st.selectbox("Team", labels, label_visibility="collapsed")
             if st.button("Follow team"):
                 abbr, nickname = choice.split(" — ")
-                db.follow_team(abbr, nickname)
-                st.rerun()
+                followed_teams.append({"abbr": abbr, "nickname": nickname})
         else:
             st.caption("You're following every team.")
 
         if followed_teams:
             st.markdown("**Following**")
-            for abbr, nickname in followed_teams:
+            for t in list(followed_teams):
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(
-                    f"<span style='background-color:{teams.color_for_abbr(abbr)}66;color:#FAFAFA;"
-                    f"padding:3px 10px;border-radius:8px;font-weight:700'>{abbr}</span> {nickname}",
+                    f"<span style='background-color:{teams.color_for_abbr(t['abbr'])}66;color:#FAFAFA;"
+                    f"padding:3px 10px;border-radius:8px;font-weight:700'>{t['abbr']}</span> {t['nickname']}",
                     unsafe_allow_html=True,
                 )
-                if c2.button("Unfollow", key=f"unfollow_team_{abbr}"):
-                    db.unfollow_team(abbr)
-                    st.rerun()
+                if c2.button("Unfollow", key=f"unfollow_team_{t['abbr']}"):
+                    followed_teams.remove(t)
 
     with col2:
         st.markdown("**Follow a player**")
         query = st.text_input("Search players", label_visibility="collapsed", placeholder="e.g. Ohtani, Judge")
-        followed_ids = {mlbID for mlbID, _ in followed_players}
+        followed_ids = {p["mlbID"] for p in followed_players}
         if query.strip():
             matches = db.search_players(query, season, mtime)
             matches = matches[~matches["mlbID"].isin(followed_ids)]
@@ -67,19 +71,21 @@ with st.expander("Manage who you follow", expanded=not (followed_teams or follow
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(f"{row['Name']} ({row['Tm']}) — {row['roles']}")
                 if c2.button("Follow", key=f"follow_player_{row['mlbID']}"):
-                    db.follow_player(row["mlbID"], row["Name"])
-                    st.rerun()
+                    followed_players.append({"mlbID": int(row["mlbID"]), "name": row["Name"]})
             if matches.empty:
                 st.caption("No matches.")
 
         if followed_players:
             st.markdown("**Following**")
-            for mlbID, name in followed_players:
+            for p in list(followed_players):
                 c1, c2 = st.columns([4, 1])
-                c1.markdown(name)
-                if c2.button("Unfollow", key=f"unfollow_player_{mlbID}"):
-                    db.unfollow_player(mlbID)
-                    st.rerun()
+                c1.markdown(p["name"])
+                if c2.button("Unfollow", key=f"unfollow_player_{p['mlbID']}"):
+                    followed_players.remove(p)
+
+# Persists whatever's currently in session_state to this browser's localStorage
+# — cheap and safe to call unconditionally on every render (see following.py).
+following.save()
 
 if not followed_teams and not followed_players:
     st.info("You're not following any teams or players yet — use \"Manage who you follow\" above to get started.")
@@ -91,7 +97,7 @@ if not followed_teams:
     st.caption("Follow a team to see their games here.")
 else:
     games = db.load_todays_games(mtime)
-    followed_abbrs = {abbr for abbr, _ in followed_teams}
+    followed_abbrs = {t["abbr"] for t in followed_teams}
     my_games = games[
         games["away_abbr"].apply(teams.normalize_mlb_abbr).isin(followed_abbrs)
         | games["home_abbr"].apply(teams.normalize_mlb_abbr).isin(followed_abbrs)
@@ -186,7 +192,7 @@ style.colored_header("Yesterday's Performances", "pitching")
 if not followed_players:
     st.caption("Follow a player to see their performances here.")
 else:
-    followed_ids = {mlbID for mlbID, _ in followed_players}
+    followed_ids = {p["mlbID"] for p in followed_players}
     recent_batting = db.load_recent_batting(season, mtime)
     recent_pitching = db.load_recent_pitching(season, mtime)
     # recent_pitching.mlbID is stored as text in SQLite (unlike every other
