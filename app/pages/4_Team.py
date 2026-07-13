@@ -100,10 +100,15 @@ with logo_col:
     if team_id:
         # st.image inherits the theme's baseRadius ("large") and rounds the
         # logo's corners — a raw <img> tag with an inline style override
-        # sidesteps that without touching the global theme.
+        # sidesteps that without touching the global theme. Sized via CSS
+        # height (not the HTML width attribute) — the live CDN's logos are
+        # SVGs with no intrinsic width/height, only a viewBox, and relying
+        # on a bare `width=` attribute to auto-derive the height from that
+        # rendered them tiny; an explicit CSS height is consistent across
+        # browsers regardless of how the source image declares its size.
         st.markdown(
             f"<img src='{style.team_logo_for_season(selected_abbr, team_id, season)}' "
-            f"width='80' style='border-radius:0'>",
+            f"style='height:80px;width:auto;border-radius:0'>",
             unsafe_allow_html=True,
         )
 with header_col:

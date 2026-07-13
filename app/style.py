@@ -38,7 +38,7 @@ _LOGO_ASSETS_DIR = Path(__file__).resolve().parent / "assets" / "team_logos"
 _HISTORICAL_LOGOS = {
     "ARI": [(2010, 2015, "ARI_2010.png"), (2016, 2023, "ARI_2016.png")],
     "HOU": [(2010, 2012, "HOU_2010.png")],
-    "MIA": [(2010, 2011, "MIA_2010.png"), (2012, 2018, "MIA_2012.png")],
+    "MIA": [(2010, 2011, "MIA_2010.png"), (2012, 2016, "MIA_2012.png"), (2017, 2018, "MIA_2017.png")],
     "TOR": [(2010, 2011, "TOR_2010.png"), (2012, 2019, "TOR_2012.png")],
 }
 
