@@ -221,6 +221,26 @@ if batting is not None or pitching is not None:
         st.caption("Trend builds up day by day from the daily refresh — check back after a few more days of data.")
 
 if batting is not None or pitching is not None:
+    style.colored_header("Career Arc", "headliners")
+    arc_is_batter = batting is not None
+    arc_stat = st.selectbox(
+        "Track", db.CAREER_ARC_BATTING_STATS if arc_is_batter else db.CAREER_ARC_PITCHING_STATS,
+        key="career_arc_stat",
+    )
+    arc_df = db.player_career_arc(mlbID, arc_is_batter, arc_stat, mtime)
+    if len(arc_df) >= 2:
+        fig = px.line(arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat})
+        fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
+        fig.update_layout(
+            height=320, margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#FAFAFA", xaxis=dict(dtick=1),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.caption("Not enough cached seasons yet to show a career arc for this stat.")
+
+if batting is not None or pitching is not None:
     style.colored_header("League Distribution", "chart")
     if batting is not None:
         dist_df = qualified_batting.dropna(subset=["OPS"])

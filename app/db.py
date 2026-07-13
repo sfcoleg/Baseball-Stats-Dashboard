@@ -865,8 +865,8 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
 
 
 # Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
-# the sidebar search's "track" selector (see sidebar.py) offers exactly
-# these, one dropdown per role since a mixed result list can have both.
+# the player profile's "Career Arc" stat selector (see pages/_Player.py)
+# offers exactly these, depending on the player's role.
 CAREER_ARC_BATTING_STATS = ["OPS", "BA", "OBP", "SLG", "HR", "RBI", "WAR", "OPS_plus", "wRC_plus"]
 CAREER_ARC_PITCHING_STATS = ["ERA", "WHIP", "SO", "WAR", "ERA_plus", "FIP"]
 CAREER_ARC_FORMATS = {
@@ -877,14 +877,13 @@ CAREER_ARC_FORMATS = {
 
 
 @st.cache_data(show_spinner=False, max_entries=300)
-def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: float) -> list[float]:
+def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: float) -> pd.DataFrame:
     """Season-by-season value of `stat_col` (must be one of
     CAREER_ARC_BATTING_STATS/CAREER_ARC_PITCHING_STATS) for one player
     across every cached season (2020+, whatever's been backfilled), oldest
-    to newest — feeds the tiny career-arc sparkline shown next to each
-    sidebar search result (see style.sparkline_svg()). Seasons the player
-    has no row in are simply skipped, not filled with a placeholder, so a
-    short career just produces a short sparkline rather than a flat line."""
+    to newest — feeds the "Career Arc" chart on the player profile page.
+    Seasons the player has no row in are simply skipped, not filled with
+    a placeholder, so a short career just produces a short line."""
     table = "batting" if is_batter else "pitching"
     with sqlite3.connect(DB_PATH) as conn:
         try:
@@ -893,8 +892,8 @@ def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: 
                 conn, params=(int(mlbID),),
             )
         except pd.errors.DatabaseError:
-            return []
-    return df["stat"].dropna().tolist()
+            return pd.DataFrame(columns=["season", "stat"])
+    return df.dropna(subset=["stat"])
 
 
 def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:

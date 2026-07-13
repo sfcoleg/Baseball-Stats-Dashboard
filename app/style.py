@@ -56,35 +56,6 @@ def diamond_logo(size=64):
     """
 
 
-def sparkline_svg(values, color=ACCENT, width=72, height=22):
-    """Tiny inline SVG line — no axes, gridlines, or labels, just the shape
-    of a season-by-season trend (see db.player_career_arc()), sized to sit
-    inline next to a sidebar search result. Returns "" for fewer than 2
-    points (a single season has no trend to draw). Doesn't encode whether
-    up or down is "good" (that flips between OPS and ERA) — it's just a
-    glance at the shape of the career, not a judgment."""
-    if len(values) < 2:
-        return ""
-    lo, hi = min(values), max(values)
-    span = (hi - lo) or 1
-    n = len(values)
-    points = []
-    for i, v in enumerate(values):
-        x = (i / (n - 1)) * (width - 4) + 2
-        y = height - 2 - ((v - lo) / span) * (height - 4)
-        points.append((x, y))
-    path = " ".join(f"{x:.1f},{y:.1f}" for x, y in points)
-    last_x, last_y = points[-1]
-    return (
-        f"<svg width='{width}' height='{height}' viewBox='0 0 {width} {height}' "
-        f"xmlns='http://www.w3.org/2000/svg' style='vertical-align:middle'>"
-        f"<polyline points='{path}' fill='none' stroke='{color}' stroke-width='1.5' "
-        f"stroke-linejoin='round' stroke-linecap='round' />"
-        f"<circle cx='{last_x:.1f}' cy='{last_y:.1f}' r='2.2' fill='{color}' />"
-        f"</svg>"
-    )
-
-
 # All section headers share one accent color now (see colored_header) rather
 # than a different hue per category — kept as a dict (not a bare constant)
 # so existing colored_header(..., category) call sites don't need to change.
