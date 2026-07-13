@@ -620,17 +620,21 @@ def fetch_all_star_roster(season):
     for side in ("away", "home"):
         team = box["teams"][side]
         league = "AL" if "American League" in team["team"]["name"] else "NL"
+        # The boxscore's own `battingOrder` list (exactly 9 person IDs, in
+        # true batting order) is the authoritative source for "who started
+        # the game" — unlike each player's individual battingOrder string
+        # (which encodes lineup-SLOT, not starter-vs-sub, and doesn't
+        # reliably end in "00" for the actual starter in every season) or
+        # their position field (which can reflect a later in-game move, e.g.
+        # a player who started in CF but is tagged with the OF spot they
+        # ended up playing). Pitchers don't bat, so the starter there is
+        # identified separately by gamesStarted == 1.
+        starter_ids = set(team.get("battingOrder", []))
         for p in team["players"].values():
             person = p.get("person", {})
             pos = p.get("position", {}).get("abbreviation", "—")
-            # A "true" starter (the fan-elected/managerial-pick lineup, not a
-            # later substitution) has a battingOrder ending in "00" — e.g.
-            # "500" is the original DH, "501"/"502" are subs who came in
-            # later. Pitchers don't bat, so they're identified separately by
-            # gamesStarted == 1 (there's exactly one starting pitcher per side).
-            batting_order = p.get("battingOrder")
             is_starter = (
-                bool(batting_order) and str(batting_order).endswith("00")
+                person.get("id") in starter_ids
                 if pos != "P"
                 else p.get("stats", {}).get("pitching", {}).get("gamesStarted") == 1
             )

@@ -25,28 +25,6 @@ HOT_YESTERDAY_OVERRIDES = {
     },
 }
 
-st.markdown(
-    "<style>"
-    "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
-    ".diamond-title {"
-    "  font-family: 'Bungee', cursive;"
-    "  font-size: 4.5rem;"
-    "  letter-spacing: 1px;"
-    "  margin: 0;"
-    f"  color: {style.DIAMOND_COLOR};"
-    "  text-shadow: 2px 2px 0 #1E3A66, 4px 4px 0 #14294D, 6px 6px 10px rgba(0,0,0,0.45);"
-    "}"
-    "</style>",
-    unsafe_allow_html=True,
-)
-st.markdown(
-    "<div style='display:flex;align-items:center;gap:16px;margin-bottom:0.5rem'>"
-    f"{style.diamond_logo(76)}"
-    f"<h1 class='diamond-title'>Diamond Metrics</h1>"
-    f"</div>",
-    unsafe_allow_html=True,
-)
-
 if not db.DB_PATH.exists():
     st.error(
         "No data found yet. Run `./venv/bin/python ingest/refresh_data.py` "
@@ -129,9 +107,16 @@ if season == date.today().year:
 
 style.colored_header("Top 10 Home Run Leaders", "chart")
 top10_hr = batting.sort_values("HR", ascending=False).head(10).iloc[::-1]
+# Blues' scale minimum is near-white — with no explicit range_color, Plotly
+# auto-scales to the data's actual min/max, so a tight top-10 HR cluster
+# washes out to white by the bottom of the chart. Padding the low end below
+# the data's minimum keeps every bar a visible shade of blue.
+hr_min, hr_max = top10_hr["HR"].min(), top10_hr["HR"].max()
+color_floor = hr_min - (hr_max - hr_min) * 0.6 - 1
 fig = px.bar(
     top10_hr, x="HR", y="Name", orientation="h",
     color="HR", color_continuous_scale="Blues",
+    range_color=[color_floor, hr_max],
     text="HR",
 )
 fig.update_layout(

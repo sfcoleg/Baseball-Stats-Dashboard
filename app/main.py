@@ -23,12 +23,42 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent))
 import following
 import sidebar
+import style
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them.
 following.bootstrap()
+
+# Logo + title header — rendered once here (not per-page) so it shows up on
+# every page, and pinned via position:sticky so it stays visible at the top
+# of the viewport while scrolling a long page. Background color matches the
+# theme's backgroundColor (config.toml) so scrolled-under content doesn't
+# show through.
+st.markdown(
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
+    ".diamond-title {"
+    "  font-family: 'Bungee', cursive;"
+    "  font-size: 3rem;"
+    "  letter-spacing: 1px;"
+    "  margin: 0;"
+    f"  color: {style.DIAMOND_COLOR};"
+    "  text-shadow: 2px 2px 0 #1E3A66, 4px 4px 0 #14294D, 6px 6px 10px rgba(0,0,0,0.45);"
+    "}"
+    ".diamond-header {"
+    "  position: sticky; top: 0; z-index: 999; background-color: #33405F;"
+    "  display: flex; align-items: center; gap: 14px; padding: 0.75rem 0;"
+    "}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    f"<div class='diamond-header'>{style.diamond_logo(52)}"
+    f"<h1 class='diamond-title'>Diamond Metrics</h1></div>",
+    unsafe_allow_html=True,
+)
 
 # Shrink the sidebar's built-in header bar (which only holds the collapse
 # arrow) so the search box sits higher, closer to the top of the sidebar.

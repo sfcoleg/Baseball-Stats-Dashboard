@@ -102,6 +102,12 @@ if choice in _ALL_STAR_SCOPES:
         st.info("No All-Star roster data for this season.")
         st.stop()
 
+    roster_ids = set(roster["mlbID"].astype(int))
+    all_batting = teams.add_team_abbr(db.load_batting(season, mtime))
+    all_pitching = teams.add_team_abbr(db.load_pitching(season, mtime))
+    roster_batting = all_batting[all_batting["mlbID"].isin(roster_ids)].sort_values("OPS", ascending=False)
+    roster_pitching = all_pitching[all_pitching["mlbID"].isin(roster_ids)].sort_values("ERA", ascending=True)
+
     # The starting pitcher's boxscore position is "P" (there's no separate
     # "SP" in the Stats API), but style.baseball_diamond's diamond layout
     # keys the mound slot as "SP" — remap just that one row.
@@ -109,18 +115,24 @@ if choice in _ALL_STAR_SCOPES:
         ("SP" if row.Pos == "P" else row.Pos): {"name": row.Name, "mlbID": int(row.mlbID)}
         for row in roster[roster["is_starter"]].itertuples()
     }
+
+    # There's no "starting reliever" concept, so the RP diamond slot has no
+    # is_starter row to draw from — represent it with the roster's closer
+    # instead (most saves that season among non-starting pitchers), falling
+    # back to the next-best ERA if nobody has recorded a save yet.
+    non_starter_pitching = roster_pitching[~roster_pitching["mlbID"].isin(
+        {v["mlbID"] for k, v in starters.items() if k == "SP"}
+    )]
+    if not non_starter_pitching.empty:
+        closer = non_starter_pitching.sort_values(["SV", "ERA"], ascending=[False, True]).iloc[0]
+        starters["RP"] = {"name": closer["Name"], "mlbID": int(closer["mlbID"])}
+
     st.markdown(style.baseball_diamond(starters, _ALL_STAR_COLORS[league]), unsafe_allow_html=True)
     if "SP" not in starters:
         # Rosters are announced weeks ahead, but the official starting-
         # pitcher flag isn't set until game time — not a bug, the SP slot
         # just shows TBD until then.
         st.caption("Starting pitcher not yet announced for this game.")
-
-    roster_ids = set(roster["mlbID"].astype(int))
-    all_batting = teams.add_team_abbr(db.load_batting(season, mtime))
-    all_pitching = teams.add_team_abbr(db.load_pitching(season, mtime))
-    roster_batting = all_batting[all_batting["mlbID"].isin(roster_ids)].sort_values("OPS", ascending=False)
-    roster_pitching = all_pitching[all_pitching["mlbID"].isin(roster_ids)].sort_values("ERA", ascending=True)
 
     if not roster_batting.empty:
         style.colored_header("Batting", "batting")
