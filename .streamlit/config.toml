@@ -2,12 +2,15 @@
 base = "dark"
 primaryColor = "#3B82F6"
 backgroundColor = "#33405F"
-secondaryBackgroundColor = "#3B81F5"
+secondaryBackgroundColor = "#4A6FA5"
 textColor = "#FAFAFA"
 baseRadius = "large"
 font = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap, sans-serif"
 baseFontWeight = 500
 headingFontWeights = 700
+
+[theme.sidebar]
+backgroundColor = "#33405F"
 
 [browser]
 gatherUsageStats = false
