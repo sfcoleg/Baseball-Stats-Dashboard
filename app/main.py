@@ -33,13 +33,13 @@ following.bootstrap()
 # Shrink the sidebar's built-in header bar (which only holds the collapse
 # arrow) so the search box sits higher, closer to the top of the sidebar.
 # Also narrows the sidebar itself (min/max-width pinned to override its
-# default draggable-resize width) and adds a thin white divider line
-# against the main content area.
+# default draggable-resize width) and gives it a thin white border on all
+# four sides — same width/color as the divider against the main content.
 st.markdown(
     "<style>"
     "[data-testid='stSidebarHeader'] { height: 1.5rem; }"
     "[data-testid='stSidebar'] { min-width: 230px; max-width: 230px; "
-    "border-right: 1px solid #FFFFFF; }"
+    "border: 1px solid #FFFFFF; }"
     "</style>",
     unsafe_allow_html=True,
 )
