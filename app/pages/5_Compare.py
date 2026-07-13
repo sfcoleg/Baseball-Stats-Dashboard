@@ -116,7 +116,7 @@ if batting_a is not None and batting_b is not None:
 
 if batting_a is not None or batting_b is not None:
     style.colored_header("Batting", "batting")
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
+    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
 
     with std_tab:
         fields = [
@@ -139,16 +139,16 @@ if batting_a is not None or batting_b is not None:
     with adv_tab:
         fields = [
             ("ISO", "ISO"), ("BABIP", "BABIP"), ("K%", "K_PCT"), ("BB%", "BB_PCT"),
-            ("wOBA", "wOBA"), ("xwOBA", "xwOBA"),
+            ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("WAR", "WAR"), ("OPS+", "OPS_plus"), ("wRC+", "wRC_plus"),
         ]
         table = build_compare_table(
             batting_a, batting_b, fields,
-            round_map={"ISO": 3, "BABIP": 3, "K%": 1, "BB%": 1, "wOBA": 3, "xwOBA": 3},
+            round_map={"ISO": 3, "BABIP": 3, "K%": 1, "BB%": 1, "wOBA": 3, "xwOBA": 3, "WAR": 1, "OPS+": 0, "wRC+": 0},
         )
         st.dataframe(
             style.style_comparison(
                 table,
-                higher_better=["ISO", "BB%", "wOBA", "xwOBA"],
+                higher_better=["ISO", "BB%", "wOBA", "xwOBA", "WAR", "OPS+", "wRC+"],
                 lower_better=["K%"],
             ),
             use_container_width=True,
@@ -191,7 +191,7 @@ if pitching_a is not None and pitching_b is not None:
 
 if pitching_a is not None or pitching_b is not None:
     style.colored_header("Pitching", "pitching")
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
+    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
 
     with std_tab:
         fields = [
@@ -211,15 +211,18 @@ if pitching_a is not None or pitching_b is not None:
         )
 
     with adv_tab:
-        fields = [("FIP", "FIP"), ("K/9", "K_9"), ("BB/9", "BB_9"), ("K/BB", "K_BB")]
+        fields = [
+            ("FIP", "FIP"), ("K/9", "K_9"), ("BB/9", "BB_9"), ("K/BB", "K_BB"),
+            ("WAR", "WAR"), ("ERA+", "ERA_plus"),
+        ]
         table = build_compare_table(
             pitching_a, pitching_b, fields,
-            round_map={"FIP": 2, "K/9": 2, "BB/9": 2, "K/BB": 2},
+            round_map={"FIP": 2, "K/9": 2, "BB/9": 2, "K/BB": 2, "WAR": 1, "ERA+": 0},
         )
         st.dataframe(
             style.style_comparison(
                 table,
-                higher_better=["K/9", "K/BB"],
+                higher_better=["K/9", "K/BB", "WAR", "ERA+"],
                 lower_better=["FIP", "BB/9"],
             ),
             use_container_width=True,

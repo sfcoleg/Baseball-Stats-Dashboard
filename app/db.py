@@ -50,12 +50,14 @@ BATTING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "PA", "AB", "R", "H", "2B", "3B", "HR",
     "RBI", "BB", "SO", "SB", "CS", "BA", "OBP", "SLG", "OPS", "mlbID",
     "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "avg_exit_velo", "max_exit_velo",
-    "hard_hit_pct", "barrel_pct", "xwOBA", "xBA", "xSLG", "sprint_speed", "hp_to_1b",
-    "baserunning_runs", "season",
+    "hard_hit_pct", "barrel_pct", "xwOBA", "xBA", "xSLG",
+    "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR",
+    "sprint_speed", "hp_to_1b", "baserunning_runs", "season",
 ]
 PITCHING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP",
     "SO", "BB", "HR", "mlbID", "K_9", "BB_9", "K_BB", "FIP", "xERA", "BAbip", "GB_FB",
+    "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR",
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against", "season",
 ]
 FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "season"]

@@ -28,7 +28,7 @@ with col2:
     min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
 with col3:
     sort_by = st.selectbox(
-        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9"], index=0
+        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "WAR", "ERA_plus"], index=0
     )
 
 filtered = pitching[pitching["IP"] >= min_ip]
@@ -45,7 +45,7 @@ table_rows = filtered.head(max_rows)
 st.caption(f"{len(filtered)} players match filters — showing {len(table_rows)} in the tables below.")
 
 standard_tab, advanced_tab, statcast_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced (Sabermetrics)", "Statcast", "Chart Explorer"]
+    ["Standard", "Advanced", "Statcast", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -66,39 +66,59 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption("FIP = fielding-independent pitching. BAbip = opponent BABIP. GB/FB = groundball/flyball ratio.")
+    st.caption(
+        "FIP = fielding-independent pitching. BAbip = opponent BABIP. GB/FB = groundball/flyball ratio. "
+        "WAR = wins above replacement (Baseball-Reference). ERA+ = 100 is league average, higher is better "
+        "(park-factor-free approximation)."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB"]
-    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB"})
+        ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WAR", "ERA_plus"]
+    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB", "ERA_plus": "ERA+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["K/9", "K/BB"],
+            higher_better=["K/9", "K/BB", "WAR", "ERA+"],
             lower_better=["FIP", "BB/9", "BAbip"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"FIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}", "GB/FB": "{:.2f}"},
+            precision={
+                "FIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}",
+                "GB/FB": "{:.2f}", "WAR": "{:.1f}", "ERA+": "{:.0f}",
+            },
         ),
         use_container_width=True,
         height=600,
     )
 
 with statcast_tab:
-    st.caption("Contact quality allowed, from Statcast. xERA = expected ERA based on quality of contact.")
+    st.caption(
+        "Contact quality allowed, from Statcast. xERA/xBA/xSLG against = expected stats based on quality of "
+        "contact allowed. \"diff\" is actual ERA minus expected ERA — positive means outperforming the "
+        "underlying contact quality, negative means getting unlucky relative to it."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "ERA", "xERA", "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
+        ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "xBA_against", "xSLG_against",
+         "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
     ].rename(columns={
         "avg_exit_velo_against": "Avg EV Against",
         "hard_hit_pct_against": "Hard-Hit% Against",
         "barrel_pct_against": "Barrel% Against",
+        "xBA_against": "xBA Against",
+        "xSLG_against": "xSLG Against",
+        "xERA_diff": "ERA diff",
     })
     st.dataframe(
         style.style_stats_table(
             display,
-            lower_better=["ERA", "xERA", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
+            higher_better=["ERA diff"],
+            lower_better=["ERA", "xERA", "xBA Against", "xSLG Against", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"ERA": "{:.2f}", "xERA": "{:.2f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}", "Barrel% Against": "{:.1f}"},
+            precision={
+                "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}", "xBA Against": "{:.3f}",
+                "xSLG Against": "{:.3f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}",
+                "Barrel% Against": "{:.1f}",
+            },
         ),
         use_container_width=True,
         height=600,

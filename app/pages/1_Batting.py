@@ -29,7 +29,7 @@ with col2:
 with col3:
     sort_by = st.selectbox(
         "Sort by",
-        ["OPS", "HR", "RBI", "SB", "BA", "OBP", "SLG", "PA", "wOBA", "xwOBA", "ISO", "barrel_pct"],
+        ["OPS", "HR", "RBI", "SB", "BA", "OBP", "SLG", "PA", "wOBA", "xwOBA", "ISO", "barrel_pct", "WAR", "OPS_plus", "wRC_plus"],
         index=0,
     )
 
@@ -46,7 +46,7 @@ table_rows = filtered.head(max_rows)
 st.caption(f"{len(filtered)} players match filters — showing {len(table_rows)} in the tables below.")
 
 standard_tab, advanced_tab, statcast_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced (Sabermetrics)", "Statcast", "Chart Explorer"]
+    ["Standard", "Advanced", "Statcast", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -66,40 +66,56 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption("ISO = isolated power. BABIP = batting avg on balls in play. wOBA = weighted on-base average.")
+    st.caption(
+        "ISO = isolated power. BABIP = batting avg on balls in play. wOBA = weighted on-base average. "
+        "WAR = wins above replacement (Baseball-Reference). OPS+/wRC+ = 100 is league average, higher is "
+        "better (park-factor-free approximation)."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA"]
-    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%"})
+        ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA", "WAR", "OPS_plus", "wRC_plus"]
+    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "WAR", "OPS+", "wRC+"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "wOBA": "{:.3f}", "xwOBA": "{:.3f}"},
+            precision={
+                "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "wOBA": "{:.3f}",
+                "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}",
+            },
         ),
         use_container_width=True,
         height=600,
     )
 
 with statcast_tab:
-    st.caption("Exit velocity and barrel rate from Statcast. xBA/xSLG = expected stats based on contact quality.")
+    st.caption(
+        "Exit velocity and barrel rate from Statcast. xBA/xSLG = expected stats based on contact quality. "
+        "The \"diff\" columns are actual minus expected — positive means outperforming contact quality, "
+        "negative means better luck than the underlying batted-ball data supports."
+    )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct", "xBA", "xSLG"]
+        ["Name", "Age", "Tm", "avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct",
+         "xBA", "xSLG", "xwOBA_diff"]
     ].rename(columns={
         "avg_exit_velo": "Avg EV",
         "max_exit_velo": "Max EV",
         "hard_hit_pct": "Hard-Hit%",
         "barrel_pct": "Barrel%",
+        "xwOBA_diff": "wOBA diff",
     })
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["Avg EV", "Max EV", "Hard-Hit%", "Barrel%", "xBA", "xSLG"],
+            higher_better=["Avg EV", "Max EV", "Hard-Hit%", "Barrel%", "xBA", "xSLG", "wOBA diff"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={"Avg EV": "{:.1f}", "Max EV": "{:.1f}", "Hard-Hit%": "{:.1f}", "Barrel%": "{:.1f}", "xBA": "{:.3f}", "xSLG": "{:.3f}"},
+            precision={
+                "Avg EV": "{:.1f}", "Max EV": "{:.1f}", "Hard-Hit%": "{:.1f}", "Barrel%": "{:.1f}",
+                "xBA": "{:.3f}", "xSLG": "{:.3f}", "wOBA diff": "{:+.3f}",
+            },
         ),
         use_container_width=True,
         height=600,

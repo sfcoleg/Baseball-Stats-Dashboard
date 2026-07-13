@@ -26,6 +26,8 @@ from pybaseball import (
     pitching_stats_bref,
     batting_stats_range,
     pitching_stats_range,
+    bwar_bat,
+    bwar_pitch,
     statcast_batter_exitvelo_barrels,
     statcast_batter_expected_stats,
     statcast_pitcher_exitvelo_barrels,
@@ -116,6 +118,48 @@ def add_pitching_sabermetrics(df):
     return df
 
 
+def add_batting_plus_stats(df):
+    """OPS+ and wRC+ (100 = league average, higher is better), computed from
+    this same season's field rather than fetched from anywhere else, so they
+    stay consistent with our own OBP/SLG/wOBA_calc numbers. Simplification:
+    no park-factor adjustment (we don't have a park-factors source wired up),
+    unlike FanGraphs/Baseball-Reference's published versions."""
+    total_pa = df["PA"].sum()
+    lg_obp = (df["OBP"] * df["PA"]).sum() / total_pa
+    lg_slg = (df["SLG"] * df["PA"]).sum() / total_pa
+    df["OPS_plus"] = (100 * (df["OBP"] / lg_obp + df["SLG"] / lg_slg - 1)).round(0)
+
+    # wRC+: standard "runs created per PA, relative to league average" plus
+    # stat. wOBA_scale converts wOBA points to runs; FanGraphs publishes an
+    # exact value per season (recently ~1.20-1.25) — we use a fixed 1.20
+    # approximation since we don't have their guts-constants feed.
+    woba_scale = 1.20
+    lg_woba = (df["wOBA_calc"] * df["PA"]).sum() / total_pa
+    lg_r_pa = df["R"].sum() / total_pa
+    wrc_per_pa = (df["wOBA_calc"] - lg_woba) / woba_scale + lg_r_pa
+    df["wRC_plus"] = (100 * wrc_per_pa / lg_r_pa).round(0)
+    return df
+
+
+def add_pitching_plus_stats(df):
+    """ERA+ (100 = league average, higher is better). Same no-park-factor
+    simplification as OPS+/wRC+ above."""
+    lg_era = df["ER"].sum() * 9 / df["IP"].sum()
+    df["ERA_plus"] = (100 * lg_era / df["ERA"].replace(0, float("nan"))).round(0)
+    return df
+
+
+def fetch_war(is_pitcher, season):
+    """Baseball-Reference's WAR (bwar_bat/bwar_pitch), keyed by mlb_ID. A
+    player traded mid-season has one row per stint, so sum WAR across stints
+    to get a season total — min_count=1 so a player with no numeric rows at
+    all (older/legacy players lacking a WAR calc) stays NaN instead of 0."""
+    raw = bwar_pitch() if is_pitcher else bwar_bat()
+    raw = raw[raw["year_ID"] == season]
+    war = raw.groupby("mlb_ID", as_index=False)["WAR"].sum(min_count=1)
+    return war.rename(columns={"mlb_ID": "player_id"})
+
+
 def fetch_savant_leaderboard_csv(path, year):
     """Fetch a Baseball Savant leaderboard CSV directly — some leaderboards
     (e.g. baserunning run value) aren't wrapped by pybaseball, but follow
@@ -144,13 +188,20 @@ def fetch_batting(season=CURRENT_SEASON):
 
     print(f"Fetching {season} Statcast expected stats (batters)...")
     expected = statcast_batter_expected_stats(season, minPA=1)[
-        ["player_id", "woba", "est_woba", "est_ba", "est_slg"]
+        ["player_id", "woba", "est_woba", "est_ba", "est_slg",
+         "est_ba_minus_ba_diff", "est_slg_minus_slg_diff", "est_woba_minus_woba_diff"]
     ].rename(columns={
         "woba": "wOBA",
         "est_woba": "xwOBA",
         "est_ba": "xBA",
         "est_slg": "xSLG",
+        "est_ba_minus_ba_diff": "xBA_diff",
+        "est_slg_minus_slg_diff": "xSLG_diff",
+        "est_woba_minus_woba_diff": "xwOBA_diff",
     })
+
+    print(f"Fetching {season} WAR (Baseball-Reference)...")
+    war = fetch_war(is_pitcher=False, season=season)
 
     print(f"Fetching {season} Statcast sprint speed...")
     sprint = statcast_sprint_speed(season, min_opp=1)[
@@ -173,10 +224,11 @@ def fetch_batting(season=CURRENT_SEASON):
         baserunning_value = pd.DataFrame({"player_id": pd.Series(dtype="float64"), "baserunning_runs": pd.Series(dtype="float64")})
 
     batting["mlbID"] = pd.to_numeric(batting["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, sprint, baserunning_value):
+    for stats_df in (exitvelo, expected, sprint, baserunning_value, war):
         batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
         batting = batting.drop(columns="player_id")
 
+    batting = add_batting_plus_stats(batting)
     batting["season"] = season
     return batting
 
@@ -206,17 +258,29 @@ def fetch_pitching(season=CURRENT_SEASON):
     # equivalent this data source has to xFIP/SIERA. True xFIP needs a raw
     # fly-ball count and league HR/FB rate that neither Baseball-Reference
     # nor Statcast expose here (bref only gives a GB/FB *ratio*), so xERA is
-    # used instead of trying to approximate xFIP from incomplete inputs.
+    # used instead of trying to approximate xFIP from incomplete inputs. This
+    # same leaderboard also has expected-contact-quality equivalents of
+    # BA/SLG/wOBA against, so we're not limited to just xERA here.
     print(f"Fetching {season} Statcast expected stats (pitchers)...")
     expected = statcast_pitcher_expected_stats(season, minPA=1)[
-        ["player_id", "xera"]
-    ].rename(columns={"xera": "xERA"})
+        ["player_id", "xera", "est_ba", "est_slg", "est_woba", "era_minus_xera_diff"]
+    ].rename(columns={
+        "xera": "xERA",
+        "est_ba": "xBA_against",
+        "est_slg": "xSLG_against",
+        "est_woba": "xwOBA_against",
+        "era_minus_xera_diff": "xERA_diff",
+    })
+
+    print(f"Fetching {season} WAR (Baseball-Reference)...")
+    war = fetch_war(is_pitcher=True, season=season)
 
     pitching["mlbID"] = pd.to_numeric(pitching["mlbID"], errors="coerce")
-    pitching = pitching.merge(exitvelo, left_on="mlbID", right_on="player_id", how="left")
-    pitching = pitching.merge(expected, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
-    pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
+    for stats_df in (exitvelo, expected, war):
+        pitching = pitching.merge(stats_df, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
+        pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
 
+    pitching = add_pitching_plus_stats(pitching)
     pitching["season"] = season
     return pitching
 

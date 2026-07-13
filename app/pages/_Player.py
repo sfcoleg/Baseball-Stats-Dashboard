@@ -124,7 +124,7 @@ if batting is not None:
     for col, (label, value, pct) in zip(br_cols, br_metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
+    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
     with std_tab:
         st.dataframe(
             batting[["G", "PA", "AB", "R", "H", "2B", "3B", "HR", "RBI", "BB", "SO", "SB", "CS"]]
@@ -134,8 +134,8 @@ if batting is not None:
         )
     with adv_tab:
         st.dataframe(
-            batting[["ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA"]]
-            .rename({"K_PCT": "K%", "BB_PCT": "BB%"})
+            batting[["ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA", "WAR", "OPS_plus", "wRC_plus"]]
+            .rename({"K_PCT": "K%", "BB_PCT": "BB%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
             .to_frame().T,
             use_container_width=True,
             hide_index=True,
@@ -166,7 +166,7 @@ if pitching is not None:
     for col, (label, value, pct) in zip(cols, metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced (Sabermetrics)", "Statcast"])
+    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
     with std_tab:
         st.dataframe(
             pitching[["G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]]
@@ -176,8 +176,8 @@ if pitching is not None:
         )
     with adv_tab:
         st.dataframe(
-            pitching[["FIP", "K_9", "BB_9", "K_BB"]]
-            .rename({"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB"})
+            pitching[["FIP", "K_9", "BB_9", "K_BB", "WAR", "ERA_plus"]]
+            .rename({"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "ERA_plus": "ERA+"})
             .to_frame().T,
             use_container_width=True,
             hide_index=True,
