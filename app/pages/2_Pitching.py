@@ -28,7 +28,8 @@ with col2:
     min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
 with col3:
     sort_by = st.selectbox(
-        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "WAR", "ERA_plus"], index=0
+        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "WAR", "ERA_plus"], index=0,
+        format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
 filtered = pitching[pitching["IP"] >= min_ip]

@@ -980,6 +980,15 @@ HALL_OF_FAME_MLBIDS = {
 }
 
 
+# The underlying column names use a trailing "_plus" (SQL/pandas can't have
+# a bare "+" in a column name) — this maps them to how they're actually
+# written everywhere else (OPS+, ERA+, wRC+). Pass as a selectbox's
+# format_func wherever one of these columns is a dropdown option, so the
+# stored value (used for sorting/querying) stays the real column name while
+# only the displayed text changes.
+STAT_DISPLAY_LABELS = {"OPS_plus": "OPS+", "ERA_plus": "ERA+", "wRC_plus": "wRC+"}
+
+
 # Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
 # the player profile's "Career Arc" stat selector (see pages/_Player.py)
 # offers exactly these, depending on the player's role.

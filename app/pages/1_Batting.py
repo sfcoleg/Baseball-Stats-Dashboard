@@ -31,6 +31,7 @@ with col3:
         "Sort by",
         ["OPS", "HR", "RBI", "SB", "BA", "OBP", "SLG", "PA", "wOBA", "xwOBA", "ISO", "barrel_pct", "WAR", "OPS_plus", "wRC_plus"],
         index=0,
+        format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
 filtered = batting[batting["PA"] >= min_pa]

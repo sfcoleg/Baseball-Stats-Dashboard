@@ -264,11 +264,12 @@ if (batting is not None or pitching is not None) and db.player_season_count(mlbI
     style.colored_header("Career Arc", "headliners")
     arc_stat = st.selectbox(
         "Track", db.CAREER_ARC_BATTING_STATS if arc_is_batter else db.CAREER_ARC_PITCHING_STATS,
-        key="career_arc_stat",
+        key="career_arc_stat", format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
+    arc_stat_label = db.STAT_DISPLAY_LABELS.get(arc_stat, arc_stat)
     arc_df = db.player_career_arc(mlbID, arc_is_batter, arc_stat, mtime)
     if len(arc_df) >= 2:
-        fig = px.line(arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat})
+        fig = px.line(arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat_label})
         fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
