@@ -168,7 +168,7 @@ def milestone_card(mlbID, name, team_abbr, team_color, text):
     """Photo on the left, name/badge + the achievement stacked to its
     right, for the Home page's Milestones section."""
     st.markdown(
-        f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+        f"<div style='display:flex;align-items:flex-start;gap:12px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
         f"border-radius:10px;object-fit:cover;flex-shrink:0' />"
         f"<div style='flex:1;min-width:0'>"
@@ -192,7 +192,7 @@ def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
     as opposed to one who's just getting close."""
     st.markdown(
         f"<div style='display:flex;align-items:flex-start;gap:12px;background-color:#F5B94214;"
-        f"border:1px solid #F5B94266;border-radius:12px;padding:10px'>"
+        f"border:1px solid #F5B94266;border-radius:12px;padding:10px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
         f"border-radius:10px;object-fit:cover;flex-shrink:0;border:2px solid #F5B942' />"
         f"<div style='flex:1;min-width:0'>"
