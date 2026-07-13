@@ -2,7 +2,7 @@
 base = "dark"
 primaryColor = "#3B82F6"
 backgroundColor = "#33405F"
-secondaryBackgroundColor = "#33405F"
+secondaryBackgroundColor = "#3B81F5"
 textColor = "#FAFAFA"
 baseRadius = "large"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
