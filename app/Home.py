@@ -75,7 +75,7 @@ if season == date.today().year:
                     if period == "day":
                         stat_line = style.batting_day_stat_line(performer)
                     else:
-                        stat_line = f"{performer['OPS']:.3f} OPS, {int(performer['HR'])} HR ({int(performer['PA'])} PA)"
+                        stat_line = f"{performer['OPS']:.3f} OPS, {int(performer['HR'])} HR, {int(performer['RBI'])} RBI"
                     style.headliner_card(label, performer["Name"], abbr, color, stat_line)
                 else:
                     st.caption(label)
