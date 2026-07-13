@@ -864,6 +864,26 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     return grouped.sort_values("Name").reset_index(drop=True)
 
 
+@st.cache_data(show_spinner=False, max_entries=300)
+def player_career_arc(mlbID: int, is_batter: bool, db_mtime_val: float) -> list[float]:
+    """Season-by-season OPS (batters) or ERA (pitchers) for one player
+    across every cached season (2020+, whatever's been backfilled), oldest
+    to newest — feeds the tiny career-arc sparkline shown next to each
+    sidebar search result (see style.sparkline_svg()). Seasons the player
+    has no row in are simply skipped, not filled with a placeholder, so a
+    short career just produces a short sparkline rather than a flat line."""
+    table, stat_col = ("batting", "OPS") if is_batter else ("pitching", "ERA")
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                f'SELECT season, "{stat_col}" AS stat FROM {table} WHERE mlbID = ? ORDER BY season',
+                conn, params=(int(mlbID),),
+            )
+        except pd.errors.DatabaseError:
+            return []
+    return df["stat"].dropna().tolist()
+
+
 def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
     """Percentile of `value` within `series` (0-100). For lower_is_better
     stats (ERA, WHIP, ...) a lower value yields a higher percentile."""
