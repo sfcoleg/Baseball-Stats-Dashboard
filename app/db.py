@@ -650,6 +650,37 @@ def build_composite_team(season: int, mtime: float, scope: str) -> dict:
     return starters
 
 
+@st.cache_data(show_spinner=False)
+def all_star_seasons() -> list[int]:
+    """Seasons with a cached All-Star roster — 2020 is deliberately absent
+    (the game was canceled that year), not a gap in the ingest."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            rows = conn.execute("SELECT DISTINCT season FROM all_star_rosters ORDER BY season DESC").fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [r[0] for r in rows]
+
+
+@st.cache_data(show_spinner=False)
+def load_all_star_roster(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
+    """One league's (AL/NL) All-Star Game roster for a season — see
+    ingest/refresh_data.py's fetch_all_star_roster() for where this comes
+    from (the ASG itself has real team IDs, so its boxscore doubles as the
+    roster). Sorted by position (P last within each non-pitcher group is
+    unnecessary — just alphabetical by Pos then Name) for a stable,
+    scannable table."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT mlbID, Name, Pos, Tm FROM all_star_rosters WHERE season = ? AND league = ?",
+                conn, params=(season, league),
+            )
+        except pd.errors.DatabaseError:
+            return pd.DataFrame(columns=["mlbID", "Name", "Pos", "Tm"])
+    return df.sort_values(["Pos", "Name"]).reset_index(drop=True)
+
+
 @st.cache_data(show_spinner=False, max_entries=2)
 def load_standings(db_mtime_val: float) -> pd.DataFrame:
     """Current MLB standings from the Stats API (current standings only,

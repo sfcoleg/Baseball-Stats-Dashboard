@@ -469,6 +469,55 @@ def fetch_standings():
     return pd.DataFrame(rows)
 
 
+def fetch_all_star_roster(season):
+    """That season's All-Star Game roster (both leagues) from the MLB Stats
+    API. There's no dedicated "All-Star roster" endpoint — instead, the ASG
+    itself has real team IDs (159 = AL All-Stars, 160 = NL All-Stars) like
+    any other game, so this finds that game via the season's gameType=A
+    schedule entry and reads its boxscore. The roster is already final
+    (all players+positions listed) as soon as it's announced, well before
+    the game is actually played, so this doesn't need to wait for the game
+    to finish. Returns an empty DataFrame for a season with no game (2020,
+    canceled) or any other lookup failure."""
+    print(f"Fetching {season} All-Star Game rosters...")
+    columns = ["season", "league", "mlbID", "Name", "Pos", "Tm"]
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "season": season, "gameType": "A"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        games = [g for d in resp.json().get("dates", []) for g in d.get("games", [])]
+        if not games:
+            print("  skipped (no All-Star Game found for this season)")
+            return pd.DataFrame(columns=columns)
+        game_pk = games[0]["gamePk"]
+
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=15)
+        resp.raise_for_status()
+        box = resp.json()["liveData"]["boxscore"]
+    except Exception as e:
+        print(f"  skipped ({e})")
+        return pd.DataFrame(columns=columns)
+
+    rows = []
+    for side in ("away", "home"):
+        team = box["teams"][side]
+        league = "AL" if "American League" in team["team"]["name"] else "NL"
+        for p in team["players"].values():
+            person = p.get("person", {})
+            rows.append({
+                "season": season,
+                "league": league,
+                "mlbID": person.get("id"),
+                "Name": person.get("fullName"),
+                "Pos": p.get("position", {}).get("abbreviation", "—"),
+                "Tm": app_teams.abbr_for_team_id(p.get("parentTeamId")) or "—",
+            })
+    return pd.DataFrame(rows)
+
+
 def build_player_history(batting, pitching, recent_batting, recent_pitching):
     """One row per player per day, appended to `player_history` on every run.
     Two purposes: season-to-date OPS/ERA power the Search page's trend line;
@@ -553,6 +602,7 @@ def fetch_and_store():
     recent_pitching = fetch_recent_pitching()
     todays_games = fetch_todays_games()
     standings = fetch_standings()
+    all_star_roster = fetch_all_star_roster(CURRENT_SEASON)
     history = build_player_history(batting, pitching, recent_batting, recent_pitching)
 
     conn = sqlite3.connect(DB_PATH)
@@ -571,6 +621,8 @@ def fetch_and_store():
         _store_season_table(conn, "batting", batting, CURRENT_SEASON)
         _store_season_table(conn, "pitching", pitching, CURRENT_SEASON)
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
+        if not all_star_roster.empty:
+            _store_season_table(conn, "all_star_rosters", all_star_roster, CURRENT_SEASON)
         if not recent_batting.empty:
             recent_batting.to_sql("recent_batting", conn, if_exists="replace", index=False)
         if not recent_pitching.empty:
@@ -600,7 +652,8 @@ def fetch_and_store():
         f"Saved {len(batting)} batters, {len(pitching)} pitchers, "
         f"{len(fielding)} fielders, {len(recent_batting)} recent-batting rows, "
         f"{len(recent_pitching)} recent-pitching rows, {len(history)} history rows, "
-        f"{len(todays_games)} today's games, {len(standings)} standings rows to {DB_PATH}"
+        f"{len(todays_games)} today's games, {len(standings)} standings rows, "
+        f"{len(all_star_roster)} All-Star roster rows to {DB_PATH}"
     )
 
 
@@ -628,11 +681,29 @@ def backfill_season(season):
     print(f"Backfilled {season}: {len(batting)} batters, {len(pitching)} pitchers, {len(fielding)} fielders to {DB_PATH}")
 
 
+def backfill_all_star(season):
+    """One-time fetch of a single season's All-Star Game roster — separate
+    from backfill_season() since it's an independent, much smaller table
+    (see fetch_all_star_roster())."""
+    roster = fetch_all_star_roster(season)
+
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        _store_season_table(conn, "all_star_rosters", roster, season)
+        conn.commit()
+    finally:
+        conn.close()
+
+    print(f"Backfilled {season} All-Star rosters: {len(roster)} players to {DB_PATH}")
+
+
 if __name__ == "__main__":
     import sys
 
     DB_PATH.parent.mkdir(exist_ok=True)
     if len(sys.argv) > 1 and sys.argv[1] == "--backfill":
         backfill_season(int(sys.argv[2]))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--allstar":
+        backfill_all_star(int(sys.argv[2]))
     else:
         fetch_and_store()

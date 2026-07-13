@@ -40,8 +40,16 @@ if season == current_season:
     # sense when the current season is selected.
     _COMPOSITE_SCOPES["All Month Team"] = "month"
 
+# All-Star rosters come from the ASG itself (see
+# ingest/refresh_data.py's fetch_all_star_roster()) — covers every season
+# 2010+ except 2020, when the game was canceled.
+_ALL_STAR_SCOPES = {}
+if season in db.all_star_seasons():
+    _ALL_STAR_SCOPES["AL All-Stars"] = "AL"
+    _ALL_STAR_SCOPES["NL All-Stars"] = "NL"
+
 team_options = teams.all_teams()
-labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES)
+labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES) + list(_ALL_STAR_SCOPES)
 
 # Keyed (rather than an `index=` computed fresh each run) so the choice
 # survives a rerun even when `labels` itself changes shape — e.g. switching
@@ -81,6 +89,21 @@ if choice in _COMPOSITE_SCOPES:
         for pos, player in starters.items()
     ]
     st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
+    st.stop()
+
+if choice in _ALL_STAR_SCOPES:
+    league = _ALL_STAR_SCOPES[choice]
+    style.colored_header(choice, "headliners")
+    st.caption(f"The {season} All-Star Game roster, by position.")
+    roster = db.load_all_star_roster(season, league, mtime)
+    if roster.empty:
+        st.info("No All-Star roster data for this season.")
+        st.stop()
+    st.dataframe(
+        roster.rename(columns={"Tm": "Team"})[["Pos", "Name", "Team"]],
+        use_container_width=True,
+        hide_index=True,
+    )
     st.stop()
 
 selected_abbr = team_options[labels.index(choice)][0]
