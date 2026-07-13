@@ -825,6 +825,50 @@ def predict_game(
     }
 
 
+# Shohei Ohtani is the only player whose search/profile "roles" description
+# shows both — everyone else shows a single primary role (see
+# player_roles_label below). Without this, a position player who mopped up
+# one inning in a blowout gets mislabeled "Pitcher", and a real starter who
+# happened to bat under the old NL rules (e.g. Kershaw) gets mislabeled a
+# hitter, just because they have at least one row in the other table.
+TWO_WAY_PLAYER_MLBIDS = {660271}  # Shohei Ohtani
+
+
+@st.cache_data(show_spinner=False)
+def _player_role_totals(db_mtime_val: float) -> pd.DataFrame:
+    """Career totals (summed across every cached season) of batting PA and
+    pitching IP per mlbID — the basis for player_primary_role()."""
+    with sqlite3.connect(DB_PATH) as conn:
+        pa = pd.read_sql("SELECT mlbID, SUM(PA) AS total_pa FROM batting GROUP BY mlbID", conn)
+        ip = pd.read_sql("SELECT mlbID, SUM(IP) AS total_ip FROM pitching GROUP BY mlbID", conn)
+    return pa.merge(ip, on="mlbID", how="outer")
+
+
+def player_primary_role(mlbID: int, db_mtime_val: float) -> str:
+    """Batter vs Pitcher, decided by raw career PA vs raw career IP. A real
+    everyday player racks up hundreds of PA a season against at most a
+    handful of mop-up innings; a real pitcher racks up dozens to hundreds
+    of IP against, at most (under the old NL rules), maybe 60-70 PA/season
+    on the days he started. That gap is lopsided enough in both directions
+    that a raw-count comparison doesn't need anything fancier."""
+    totals = _player_role_totals(db_mtime_val)
+    row = totals[totals["mlbID"] == mlbID]
+    if row.empty:
+        return "Batter"
+    total_pa = row.iloc[0]["total_pa"] or 0
+    total_ip = row.iloc[0]["total_ip"] or 0
+    return "Pitcher" if total_ip > total_pa else "Batter"
+
+
+def player_roles_label(mlbID: int, db_mtime_val: float) -> str:
+    """The "roles" string shown in search results and the profile caption.
+    Only TWO_WAY_PLAYER_MLBIDS gets the dual "Batter / Pitcher" label —
+    everyone else gets their single primary role."""
+    if mlbID in TWO_WAY_PLAYER_MLBIDS:
+        return "Batter / Pitcher"
+    return player_primary_role(mlbID, db_mtime_val)
+
+
 @st.cache_data(show_spinner=False)
 def _player_name_index(season: int, db_mtime_val: float) -> pd.DataFrame:
     """Small (mlbID, Name, Tm, role, name_norm) index built once per season,
@@ -845,7 +889,7 @@ def _player_name_index(season: int, db_mtime_val: float) -> pd.DataFrame:
 @st.cache_data(show_spinner=False)
 def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame:
     """Search batters and pitchers by name (accent/case-insensitive substring match).
-    Returns one row per player with a combined list of roles (Batter/Pitcher)."""
+    Returns one row per player with their roles label (see player_roles_label)."""
     query_norm = normalize_text(query.strip())
     if not query_norm:
         return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles"])
@@ -855,13 +899,9 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     if matches.empty:
         return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles"])
 
-    grouped = (
-        matches.groupby(["mlbID", "Name", "Tm"])["role"]
-        .apply(lambda roles: " / ".join(sorted(set(roles))))
-        .reset_index()
-        .rename(columns={"role": "roles"})
-    )
-    return grouped.sort_values("Name").reset_index(drop=True)
+    grouped = matches.groupby(["mlbID", "Name", "Tm"]).size().reset_index(name="_n")
+    grouped["roles"] = grouped["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
+    return grouped.drop(columns="_n").sort_values("Name").reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -891,8 +931,8 @@ def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     """Search batters and pitchers by name across every cached season (not
     just the current one) — used by the persistent sidebar search, so
     retired/inactive players are findable too. Returns one row per player
-    with a combined roles string and the most recent season they have a
-    row in (the profile page opens to that season)."""
+    with their roles label (see player_roles_label) and the most recent
+    season they have a row in (the profile page opens to that season)."""
     query_norm = normalize_text(query.strip())
     if not query_norm:
         return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles", "season"])
@@ -905,12 +945,10 @@ def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     matches = matches.sort_values("season")
     grouped = (
         matches.groupby("mlbID")
-        .agg(
-            Name=("Name", "last"), Tm=("Tm", "last"), season=("season", "max"),
-            roles=("role", lambda r: " / ".join(sorted(set(r)))),
-        )
+        .agg(Name=("Name", "last"), Tm=("Tm", "last"), season=("season", "max"))
         .reset_index()
     )
+    grouped["roles"] = grouped["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
     return grouped.sort_values("Name").reset_index(drop=True)
 
 

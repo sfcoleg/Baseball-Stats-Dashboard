@@ -59,9 +59,11 @@ if batting is None and pitching is None and fielding.empty:
     st.stop()
 
 selected_name = st.session_state.get("selected_name", "")
-selected_roles = " / ".join(
-    role for role, present in [("Batter", batting is not None), ("Pitcher", pitching is not None)] if present
-)
+# Primary role only (career PA vs career IP) except the one true two-way
+# player — see db.player_roles_label — so a pitcher who batted a handful
+# of times under the old NL rules, or a position player who mopped up an
+# inning in a blowout, isn't mislabeled with a dual role.
+selected_roles = db.player_roles_label(mlbID, mtime)
 
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
@@ -241,7 +243,9 @@ if not fielding.empty:
 
 if not is_retired and (batting is not None or pitching is not None):
     style.colored_header("Season Trend", "headliners")
-    stat_col, stat_label, role_filter = ("OPS", "OPS", "Batter") if batting is not None else ("ERA", "ERA", "Pitcher")
+    stat_col, stat_label, role_filter = (
+        ("ERA", "ERA", "Pitcher") if selected_roles == "Pitcher" else ("OPS", "OPS", "Batter")
+    )
     trend = history[(history["role"] == role_filter) & history[stat_col].notna()]
     if len(trend) >= 2:
         fig = px.line(trend, x="date", y=stat_col, markers=True, labels={"date": "Date", stat_col: stat_label})
