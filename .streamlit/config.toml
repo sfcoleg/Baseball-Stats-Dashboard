@@ -5,9 +5,7 @@ backgroundColor = "#33405F"
 secondaryBackgroundColor = "#4A6FA5"
 textColor = "#FAFAFA"
 baseRadius = "large"
-font = "Space Grotesk:https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap, sans-serif"
-baseFontWeight = 500
-headingFontWeights = 700
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
 
 [theme.sidebar]
 backgroundColor = "#33405F"

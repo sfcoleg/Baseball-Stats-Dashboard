@@ -14,9 +14,23 @@ import teams
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
 st.markdown(
-    f"<div style='display:flex;align-items:center;gap:12px;margin-bottom:0.5rem'>"
-    f"{style.diamond_logo(56)}"
-    f"<h1 style='color:{style.DIAMOND_COLOR};margin:0'>Diamond Metrics</h1>"
+    "<style>"
+    "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
+    ".diamond-title {"
+    "  font-family: 'Bungee', cursive;"
+    "  font-size: 4.5rem;"
+    "  letter-spacing: 1px;"
+    "  margin: 0;"
+    f"  color: {style.DIAMOND_COLOR};"
+    "  text-shadow: 2px 2px 0 #1E3A66, 4px 4px 0 #14294D, 6px 6px 10px rgba(0,0,0,0.45);"
+    "}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+st.markdown(
+    f"<div style='display:flex;align-items:center;gap:16px;margin-bottom:0.5rem'>"
+    f"{style.diamond_logo(76)}"
+    f"<h1 class='diamond-title'>Diamond Metrics</h1>"
     f"</div>",
     unsafe_allow_html=True,
 )
