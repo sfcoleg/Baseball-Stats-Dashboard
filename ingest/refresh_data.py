@@ -527,17 +527,16 @@ ARTICLE_MODEL = "claude-sonnet-5"
 
 _ARTICLE_INSTRUCTIONS = (
     "You are a beat writer for a baseball analytics dashboard, writing a short "
-    "\"storyline of the day\" article about yesterday's MLB action. Use web "
-    "search to research real, current context about the player and their "
-    "season — recent form, injury history, team situation, notable "
-    "narratives — before writing. Write a headline (under 8 words), a "
-    "one-sentence teaser, and exactly 3 paragraphs of prose (2-4 sentences "
-    "each) in a factual, engaging beat-writer tone. Ground every claim in "
-    "the stats given below or in what you actually find via search — never "
-    "invent quotes, injuries, or stats that weren't given to you or found "
-    "in search results. If search doesn't turn up anything beyond the box "
-    "score, that's fine — write a solid article from the stats alone rather "
-    "than making things up.\n\n"
+    "\"storyline of the day\" article about yesterday's MLB action. No web "
+    "search or outside research is available — write using ONLY the stats "
+    "given to you below, which include this player's full season stat line, "
+    "several advanced/percentile numbers, and yesterday's trigger performance. "
+    "Write a headline (under 8 words), a one-sentence teaser, and exactly 3 "
+    "paragraphs of prose (2-4 sentences each) in a factual, engaging "
+    "beat-writer tone. Ground every claim in the stats given below — never "
+    "invent quotes, injuries, trades, or stats that weren't given to you. "
+    "Use the percentile numbers to add real context (e.g. \"top-10% in the "
+    "league\") rather than just restating raw stats.\n\n"
     "Respond with ONLY a JSON object (no other text before or after it), in "
     'exactly this shape: {"headline": "...", "teaser": "...", "paragraphs": '
     '["...", "...", "..."]}'
@@ -545,21 +544,21 @@ _ARTICLE_INSTRUCTIONS = (
 
 
 def _generate_article(trigger, stat_context):
-    """Calls Claude (with web search enabled) to research and write one
-    article. Returns the parsed {"headline", "teaser", "paragraphs"} dict, or
-    None on any failure — missing API key, network/API error, or a response
-    that doesn't parse as the expected JSON. A single failed article should
-    never take down the rest of the daily refresh."""
+    """Calls Claude to write one article purely from the stats handed to it
+    (no web search — see _ARTICLE_INSTRUCTIONS). Returns the parsed
+    {"headline", "teaser", "paragraphs"} dict, or None on any failure —
+    missing API key, network/API error, or a response that doesn't parse as
+    the expected JSON. A single failed article should never take down the
+    rest of the daily refresh."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
     if not api_key or anthropic is None:
         return None
-    prompt = f"{_ARTICLE_INSTRUCTIONS}\n\nYesterday's trigger: {trigger}\n\nSeason stats context: {stat_context}"
+    prompt = f"{_ARTICLE_INSTRUCTIONS}\n\nYesterday's trigger: {trigger}\n\n{stat_context}"
     try:
         client = anthropic.Anthropic(api_key=api_key)
         response = client.messages.create(
             model=ARTICLE_MODEL,
             max_tokens=2048,
-            tools=[{"type": "web_search_20250305", "name": "web_search", "max_uses": 3}],
             messages=[{"role": "user", "content": prompt}],
         )
         text = "".join(block.text for block in response.content if block.type == "text")
@@ -575,85 +574,149 @@ def _generate_article(trigger, stat_context):
         return None
 
 
-def build_daily_articles(recent_batting, recent_pitching, batting, pitching):
-    """Assembles the Daily Digest page's "Today's Storylines": up to three
-    AI-written articles (batting, pitching, injury) about yesterday's most
-    notable happenings, each backed by real web research via _generate_article().
-    Runs once here during the daily ingest, NOT at page-load time, since
-    every article costs a real API call. Returns [] entirely if
-    ANTHROPIC_API_KEY isn't configured (see _generate_article) — the Daily
-    Digest page just shows its empty state in that case."""
-    articles = []
+def _batting_stat_dump(season_row, qualified):
+    """Every batting stat we have on this player's season, handed to the
+    model as-is (see build_daily_articles) rather than pre-summarized into a
+    sentence or two — "feed it all the data we have" per the design call for
+    this feature, now that there's no web search to fill in context instead."""
+    if season_row is None:
+        return "Season stats: not yet qualified for season leaderboards (under 50 PA)."
+    fields = {
+        "BA": season_row.get("BA"), "OBP": season_row.get("OBP"), "SLG": season_row.get("SLG"),
+        "OPS": season_row.get("OPS"), "HR": season_row.get("HR"), "RBI": season_row.get("RBI"),
+        "R": season_row.get("R"), "SB": season_row.get("SB"), "PA": season_row.get("PA"),
+        "ISO": season_row.get("ISO"), "BABIP": season_row.get("BABIP"), "K%": season_row.get("K_PCT"),
+        "BB%": season_row.get("BB_PCT"), "wOBA": season_row.get("wOBA"), "xwOBA": season_row.get("xwOBA"),
+        "WAR": season_row.get("WAR"), "OPS+": season_row.get("OPS_plus"), "wRC+": season_row.get("wRC_plus"),
+    }
+    percentiles = {
+        "OPS percentile": percentile_rank(qualified["OPS"], season_row.get("OPS")),
+        "ISO percentile": percentile_rank(qualified["ISO"], season_row.get("ISO")),
+        "WAR percentile": percentile_rank(qualified["WAR"], season_row.get("WAR")) if "WAR" in qualified else None,
+    }
+    parts = [f"{k} {v}" for k, v in fields.items() if v is not None and not pd.isna(v)]
+    parts += [f"{k} {v}" for k, v in percentiles.items() if v is not None]
+    return "Season stats: " + ", ".join(parts) + "."
 
+
+def _pitching_stat_dump(season_row, qualified):
+    """Pitching equivalent of _batting_stat_dump()."""
+    if season_row is None:
+        return "Season stats: not yet qualified for season leaderboards (under 20 IP)."
+    fields = {
+        "ERA": season_row.get("ERA"), "WHIP": season_row.get("WHIP"), "IP": season_row.get("IP"),
+        "SO": season_row.get("SO"), "BB": season_row.get("BB"), "W": season_row.get("W"),
+        "L": season_row.get("L"), "SV": season_row.get("SV"), "K_9": season_row.get("K_9"),
+        "BB_9": season_row.get("BB_9"), "FIP": season_row.get("FIP"), "xERA": season_row.get("xERA"),
+        "WAR": season_row.get("WAR"), "ERA+": season_row.get("ERA_plus"),
+    }
+    percentiles = {
+        "ERA percentile": percentile_rank(qualified["ERA"], season_row.get("ERA"), lower_is_better=True),
+        "K/9 percentile": percentile_rank(qualified["K_9"], season_row.get("K_9")),
+        "WAR percentile": percentile_rank(qualified["WAR"], season_row.get("WAR")) if "WAR" in qualified else None,
+    }
+    parts = [f"{k} {v}" for k, v in fields.items() if v is not None and not pd.isna(v)]
+    parts += [f"{k} {v}" for k, v in percentiles.items() if v is not None]
+    return "Season stats: " + ", ".join(parts) + "."
+
+
+def _batting_article(row, batting, used_ids):
+    """Builds one AI-written article from a single day-window batting row.
+    Returns None if the mlbID was already used for another article today
+    (so the guaranteed-3rd-article fallback in build_daily_articles() can't
+    duplicate the same player) or if _generate_article() itself fails."""
+    mlbID = int(row["mlbID"])
+    if mlbID in used_ids:
+        return None
+    hits, hr, rbi = int(row["H"]), int(row["HR"]), int(row["RBI"])
+    tb = int(row["H"] + row["2B"] + 2 * row["3B"] + 3 * row["HR"])
+    abbr, nickname, color = app_teams.team_meta_from_city(row["Tm"], row.get("Lev"))
+    qualified = batting[batting["PA"] >= 50]
+    season_row_df = batting[batting["mlbID"] == mlbID]
+    season_row = season_row_df.iloc[0] if not season_row_df.empty else None
+    trigger = (
+        f"{row['Name']} ({nickname}) went {hits}-for-his-game yesterday with {tb} total bases, "
+        f"{hr} home run(s), and {rbi} RBI."
+    )
+    article = _generate_article(trigger, _batting_stat_dump(season_row, qualified))
+    if not article:
+        return None
+    article["mlbID"] = mlbID
+    article["Tm"] = abbr
+    article["color"] = color
+    used_ids.add(mlbID)
+    return article
+
+
+def _pitching_article(row, pitching, used_ids):
+    """Pitching equivalent of _batting_article()."""
+    mlbID = int(pd.to_numeric(row["mlbID"]))
+    if mlbID in used_ids:
+        return None
+    era, ip, so = row["ERA"], row["IP"], int(row["SO"])
+    gsc = pd.to_numeric(row.get("GSc"), errors="coerce")
+    gsc_clause = f" (Game Score {int(gsc)})" if pd.notna(gsc) else ""
+    abbr, nickname, color = app_teams.team_meta_from_city(row["Tm"], row.get("Lev"))
+    qualified = pitching[pitching["IP"] >= 20]
+    season_row_df = pitching[pitching["mlbID"] == mlbID]
+    season_row = season_row_df.iloc[0] if not season_row_df.empty else None
+    trigger = (
+        f"{row['Name']} ({nickname}) threw {ip:.1f} innings yesterday, allowing "
+        f"{era:.2f} runs per nine with {so} strikeouts{gsc_clause}."
+    )
+    article = _generate_article(trigger, _pitching_stat_dump(season_row, qualified))
+    if not article:
+        return None
+    article["mlbID"] = mlbID
+    article["Tm"] = abbr
+    article["color"] = color
+    used_ids.add(mlbID)
+    return article
+
+
+def build_daily_articles(recent_batting, recent_pitching, batting, pitching):
+    """Assembles the Daily Digest page's "Today's Storylines": 3 AI-written
+    articles about yesterday's action — the day's best batting line, best
+    pitching line, and (if there was one) the most notable injury, else a
+    third notable performance so the digest still gets 3 stories most days.
+    Written purely from this app's own stats (see _generate_article) — no
+    outside research. Runs once here during the daily ingest, NOT at
+    page-load time, since every article is a real API call. Returns []
+    entirely if ANTHROPIC_API_KEY isn't configured — the Daily Digest page
+    just shows its empty state in that case."""
+    articles = []
+    used_ids = set()
+
+    day_batting = pd.DataFrame()
     if not recent_batting.empty:
         day_batting = recent_batting[
             (recent_batting["period"] == "day") & (recent_batting["PA"] >= RECENT_MIN_PA["day"])
         ].copy()
         if not day_batting.empty:
             day_batting["TB"] = day_batting["H"] + day_batting["2B"] + 2 * day_batting["3B"] + 3 * day_batting["HR"]
-            top_batter = day_batting.sort_values("TB", ascending=False).iloc[0]
-            hits, hr, rbi, tb = int(top_batter["H"]), int(top_batter["HR"]), int(top_batter["RBI"]), int(top_batter["TB"])
-            if hits >= 2 or hr >= 1:
-                abbr, nickname, color = app_teams.team_meta_from_city(top_batter["Tm"], top_batter.get("Lev"))
-                qualified = batting[batting["PA"] >= 50]
-                season_row_df = batting[batting["mlbID"] == top_batter["mlbID"]]
-                season_row = season_row_df.iloc[0] if not season_row_df.empty else None
-                trigger = (
-                    f"{top_batter['Name']} ({nickname}) went {hits}-for-his-game yesterday with {tb} total bases, "
-                    f"{hr} home run(s), and {rbi} RBI."
-                )
-                if season_row is not None:
-                    ops_pct = percentile_rank(qualified["OPS"], season_row["OPS"])
-                    stat_context = (
-                        f"Season line: {season_row['BA']:.3f}/{season_row['OBP']:.3f}/{season_row['SLG']:.3f}, "
-                        f"{int(season_row['HR'])} HR, {int(season_row['RBI'])} RBI, {int(season_row['PA'])} PA. "
-                        f"OPS percentile among qualified hitters: {ops_pct if ops_pct is not None else 'not qualified'}."
-                    )
-                else:
-                    stat_context = "Not yet qualified for season leaderboards (under 50 PA)."
-                article = _generate_article(trigger, stat_context)
-                if article:
-                    article["mlbID"] = int(top_batter["mlbID"])
-                    article["Tm"] = abbr
-                    article["color"] = color
-                    articles.append(article)
+            day_batting = day_batting.sort_values("TB", ascending=False).reset_index(drop=True)
+            article = _batting_article(day_batting.iloc[0], batting, used_ids)
+            if article:
+                articles.append(article)
 
+    day_pitching = pd.DataFrame()
     if not recent_pitching.empty:
         day_pitching = recent_pitching[
             (recent_pitching["period"] == "day") & (recent_pitching["IP"] >= RECENT_MIN_IP["day"])
-        ]
+        ].copy()
         if not day_pitching.empty:
-            gsc = pd.to_numeric(day_pitching.get("GSc"), errors="coerce")
-            top_pitcher = day_pitching.loc[gsc.sort_values(ascending=False).index[0]] if gsc.notna().any() else None
-            if top_pitcher is not None:
-                era, ip, so = top_pitcher["ERA"], top_pitcher["IP"], int(top_pitcher["SO"])
-                top_gsc = pd.to_numeric(top_pitcher.get("GSc"), errors="coerce")
-                if (pd.notna(top_gsc) and top_gsc >= 65) or so >= 8:
-                    abbr, nickname, color = app_teams.team_meta_from_city(top_pitcher["Tm"], top_pitcher.get("Lev"))
-                    qualified = pitching[pitching["IP"] >= 20]
-                    season_row_df = pitching[pitching["mlbID"] == pd.to_numeric(top_pitcher["mlbID"])]
-                    season_row = season_row_df.iloc[0] if not season_row_df.empty else None
-                    gsc_clause = f" (Game Score {int(top_gsc)})" if pd.notna(top_gsc) else ""
-                    trigger = (
-                        f"{top_pitcher['Name']} ({nickname}) threw {ip:.1f} innings yesterday, allowing "
-                        f"{era:.2f} runs per nine with {so} strikeouts{gsc_clause}."
-                    )
-                    if season_row is not None:
-                        era_pct = percentile_rank(qualified["ERA"], season_row["ERA"], lower_is_better=True)
-                        stat_context = (
-                            f"Season line: {season_row['ERA']:.2f} ERA, {season_row['WHIP']:.3f} WHIP, "
-                            f"{season_row['IP']:.1f} IP, {int(season_row['SO'])} SO. ERA percentile among "
-                            f"qualified pitchers: {era_pct if era_pct is not None else 'not qualified'}."
-                        )
-                    else:
-                        stat_context = "Not yet qualified for season leaderboards (under 20 IP)."
-                    article = _generate_article(trigger, stat_context)
-                    if article:
-                        article["mlbID"] = int(top_pitcher["mlbID"])
-                        article["Tm"] = abbr
-                        article["color"] = color
-                        articles.append(article)
+            gsc = pd.to_numeric(day_pitching["GSc"], errors="coerce")
+            day_pitching = day_pitching.loc[gsc.sort_values(ascending=False).index].reset_index(drop=True)
+            article = _pitching_article(day_pitching.iloc[0], pitching, used_ids)
+            if article:
+                articles.append(article)
 
+    # Third slot: the most notable injury, judged by season percentile or
+    # playing time (a September call-up's IL trip isn't a story) — falling
+    # back to the next-best batting/pitching performance not already used
+    # above, so the digest still lands on 3 stories on a day with no
+    # newsworthy injury.
+    third_article = None
     il_moves = fetch_il_moves()
     if not il_moves.empty:
         qualified_batting = batting[batting["PA"] >= 50]
@@ -683,22 +746,29 @@ def build_daily_articles(recent_batting, recent_pitching, batting, pitching):
             name = season_row["Name"]
             trigger = f"The {abbr} placed {name} on the injured list yesterday: \"{tx_row['description']}\"."
             if kind == "batting":
-                stat_context = (
-                    f"Season line: {season_row['BA']:.3f}/{season_row['OBP']:.3f}/{season_row['SLG']:.3f}, "
-                    f"{int(season_row['HR'])} HR, {int(season_row['RBI'])} RBI, {int(season_row['PA'])} PA. "
-                    f"OPS percentile among qualified hitters: {pct}. Team: {nickname}."
-                )
+                stat_context = _batting_stat_dump(season_row, qualified_batting) + f" Team: {nickname}."
             else:
-                stat_context = (
-                    f"Season line: {season_row['ERA']:.2f} ERA, {season_row['IP']:.1f} IP, "
-                    f"{int(season_row['SO'])} SO. ERA percentile among qualified pitchers: {pct}. Team: {nickname}."
-                )
+                stat_context = _pitching_stat_dump(season_row, qualified_pitching) + f" Team: {nickname}."
             article = _generate_article(trigger, stat_context)
             if article:
                 article["mlbID"] = int(season_row["mlbID"])
                 article["Tm"] = abbr
                 article["color"] = app_teams.color_for_abbr(abbr)
-                articles.append(article)
+                third_article = article
+
+    if third_article is None:
+        for i in range(1, len(day_batting)):
+            third_article = _batting_article(day_batting.iloc[i], batting, used_ids)
+            if third_article:
+                break
+    if third_article is None:
+        for i in range(1, len(day_pitching)):
+            third_article = _pitching_article(day_pitching.iloc[i], pitching, used_ids)
+            if third_article:
+                break
+
+    if third_article:
+        articles.append(third_article)
 
     return articles
 

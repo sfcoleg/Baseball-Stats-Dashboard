@@ -35,7 +35,7 @@ il_moves = txs_yesterday[
 ] if not txs_yesterday.empty else txs_yesterday
 
 style.colored_header("Today's Storylines", "headliners")
-st.caption("AI-written recaps with real background research — click into a storyline for the full write-up.")
+st.caption("AI-written recaps generated from this app's own stats — click into a storyline for the full write-up.")
 articles = db.load_daily_articles(mtime)
 if not articles:
     st.caption("Nothing stood out enough to write up yesterday.")
