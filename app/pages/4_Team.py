@@ -27,7 +27,13 @@ _COMPOSITE_CAPTIONS = {
     "month": "Best performer at each position over the trailing 30 days.",
 }
 
-_COMPOSITE_SCOPES = {"All MLB Team": "all"}
+_COMPOSITE_SCOPES = {}
+if season >= 2016:
+    # build_composite_team() needs fielding.Pos to assign roster spots, and
+    # the fielding table is empty before 2016 (Statcast's Outs Above
+    # Average metric didn't exist yet) — so "All MLB Team" would just come
+    # back with no fielders assignable to a position.
+    _COMPOSITE_SCOPES["All MLB Team"] = "all"
 if season == current_season:
     # recent_batting/recent_pitching are current-season-only (never backfilled
     # for historical years — see AGENTS.md), so "All Month Team" only makes
@@ -100,19 +106,24 @@ if team_batting.empty and team_pitching.empty and team_fielding.empty:
     st.info("No players found for this team in the selected season.")
     st.stop()
 
-starters = db.load_depth_chart(team_id) if team_id else {}
-if "RP" not in starters:
-    # No CP listed on the live depth chart — common for a team using a
-    # closer-by-committee rather than one set closer. Fall back to this
-    # season's highest-IP reliever (GS == 0) so the RP slot isn't just blank.
-    bullpen = team_pitching[team_pitching["GS"] == 0]
-    if not bullpen.empty:
-        top_rp = bullpen.sort_values("IP", ascending=False).iloc[0]
-        starters["RP"] = {"name": top_rp["Name"], "mlbID": top_rp["mlbID"]}
-if starters:
-    style.colored_header("Starting Lineup", "fielding")
-    st.caption("Current depth-chart starter at each position.")
-    st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
+# db.load_depth_chart() hits the MLB Stats API's live, present-day depth
+# chart — it can't be scoped to a season, so it only makes sense to show
+# when the CURRENT season is selected. A historical season would otherwise
+# show today's roster next to that season's stats, which is misleading.
+if season == current_season:
+    starters = db.load_depth_chart(team_id) if team_id else {}
+    if "RP" not in starters:
+        # No CP listed on the live depth chart — common for a team using a
+        # closer-by-committee rather than one set closer. Fall back to this
+        # season's highest-IP reliever (GS == 0) so the RP slot isn't just blank.
+        bullpen = team_pitching[team_pitching["GS"] == 0]
+        if not bullpen.empty:
+            top_rp = bullpen.sort_values("IP", ascending=False).iloc[0]
+            starters["RP"] = {"name": top_rp["Name"], "mlbID": top_rp["mlbID"]}
+    if starters:
+        style.colored_header("Starting Lineup", "fielding")
+        st.caption("Current depth-chart starter at each position.")
+        st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
 
 style.colored_header("Batting", "batting")
 st.dataframe(
