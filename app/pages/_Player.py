@@ -220,9 +220,9 @@ if batting is not None or pitching is not None:
     else:
         st.caption("Trend builds up day by day from the daily refresh — check back after a few more days of data.")
 
-if batting is not None or pitching is not None:
+arc_is_batter = batting is not None
+if (batting is not None or pitching is not None) and db.player_season_count(mlbID, arc_is_batter, mtime) >= 3:
     style.colored_header("Career Arc", "headliners")
-    arc_is_batter = batting is not None
     arc_stat = st.selectbox(
         "Track", db.CAREER_ARC_BATTING_STATS if arc_is_batter else db.CAREER_ARC_PITCHING_STATS,
         key="career_arc_stat",

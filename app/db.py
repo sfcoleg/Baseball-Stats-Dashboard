@@ -896,6 +896,21 @@ def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: 
     return df.dropna(subset=["stat"])
 
 
+@st.cache_data(show_spinner=False, max_entries=300)
+def player_season_count(mlbID: int, is_batter: bool, db_mtime_val: float) -> int:
+    """How many distinct cached seasons a player has rows for, regardless
+    of stat column — used to gate the "Career Arc" section on the player
+    profile page, since a 1-2 year career doesn't have enough points to
+    show a meaningful trend."""
+    table = "batting" if is_batter else "pitching"
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(f"SELECT DISTINCT season FROM {table} WHERE mlbID = ?", conn, params=(int(mlbID),))
+        except pd.errors.DatabaseError:
+            return 0
+    return len(df)
+
+
 def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
     """Percentile of `value` within `series` (0-100). For lower_is_better
     stats (ERA, WHIP, ...) a lower value yields a higher percentile."""
