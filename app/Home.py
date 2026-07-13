@@ -42,9 +42,6 @@ if not db.DB_PATH.exists():
     )
     st.stop()
 
-updated = db.last_updated()
-st.caption(f"Data last refreshed: {updated}")
-
 seasons = db.get_seasons("batting")
 season = st.selectbox("Season", seasons, index=0)
 
@@ -74,7 +71,6 @@ if milestones:
 
 if season == date.today().year:
     style.colored_header("Batting Headliners", "batting")
-    st.caption("Hottest recent hitting performances, refreshed daily — not just season-long bests.")
     h1, h2, h3 = st.columns(3)
     for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
         with col:
@@ -93,7 +89,6 @@ if season == date.today().year:
                     st.markdown("No data yet")
 
     style.colored_header("Pitching Headliners", "pitching")
-    st.caption("Hottest recent pitching performances — Game Score for yesterday, ERA (min IP) for week/month.")
     p1, p2, p3 = st.columns(3)
     for col, period, label in [(p1, "day", "Hot Yesterday"), (p2, "week", "Hot This Week"), (p3, "month", "Hot This Month")]:
         with col:

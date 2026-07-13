@@ -14,7 +14,6 @@ st.set_page_config(page_title="Daily Digest | Diamond Metrics", layout="wide")
 st.title("Daily Digest")
 
 yesterday = date.today() - timedelta(days=1)
-st.caption(f"Everything that happened in baseball on {yesterday.isoformat()}, in one scroll.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

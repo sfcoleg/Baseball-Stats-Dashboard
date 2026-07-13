@@ -35,12 +35,8 @@ if position != "All":
     filtered = filtered[filtered["Pos"] == position]
 filtered = filtered.sort_values("OAA", ascending=False).reset_index(drop=True)
 
-max_rows = st.slider(
-    "Max rows shown", 25, max(len(filtered), 25), min(75, max(len(filtered), 25)),
-    help="Lower this if the dashboard is crashing — rendering large tables is the most memory-intensive thing this app does.",
-)
-table_rows = filtered.head(max_rows)
-st.caption(f"{len(filtered)} players match filters — showing {len(table_rows)}.")
+table_rows = filtered
+st.caption(f"{len(filtered)} players match filters.")
 display = teams.add_team_abbr_from_nickname(table_rows)[
     ["Name", "Tm", "Pos", "OAA", "FRP", "success_rate"]
 ].rename(columns={"success_rate": "Success Rate"})

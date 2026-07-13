@@ -864,15 +864,28 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     return grouped.sort_values("Name").reset_index(drop=True)
 
 
+# Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
+# the sidebar search's "track" selector (see sidebar.py) offers exactly
+# these, one dropdown per role since a mixed result list can have both.
+CAREER_ARC_BATTING_STATS = ["OPS", "BA", "OBP", "SLG", "HR", "RBI", "WAR", "OPS_plus", "wRC_plus"]
+CAREER_ARC_PITCHING_STATS = ["ERA", "WHIP", "SO", "WAR", "ERA_plus", "FIP"]
+CAREER_ARC_FORMATS = {
+    "OPS": "{:.3f}", "BA": "{:.3f}", "OBP": "{:.3f}", "SLG": "{:.3f}",
+    "HR": "{:.0f}", "RBI": "{:.0f}", "WAR": "{:.1f}", "OPS_plus": "{:.0f}", "wRC_plus": "{:.0f}",
+    "ERA": "{:.2f}", "WHIP": "{:.3f}", "SO": "{:.0f}", "ERA_plus": "{:.0f}", "FIP": "{:.2f}",
+}
+
+
 @st.cache_data(show_spinner=False, max_entries=300)
-def player_career_arc(mlbID: int, is_batter: bool, db_mtime_val: float) -> list[float]:
-    """Season-by-season OPS (batters) or ERA (pitchers) for one player
+def player_career_arc(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val: float) -> list[float]:
+    """Season-by-season value of `stat_col` (must be one of
+    CAREER_ARC_BATTING_STATS/CAREER_ARC_PITCHING_STATS) for one player
     across every cached season (2020+, whatever's been backfilled), oldest
     to newest — feeds the tiny career-arc sparkline shown next to each
     sidebar search result (see style.sparkline_svg()). Seasons the player
     has no row in are simply skipped, not filled with a placeholder, so a
     short career just produces a short sparkline rather than a flat line."""
-    table, stat_col = ("batting", "OPS") if is_batter else ("pitching", "ERA")
+    table = "batting" if is_batter else "pitching"
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
@@ -965,11 +978,3 @@ def current_scoreless_streak(history: pd.DataFrame) -> int | None:
 
 def db_mtime() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
-
-
-def last_updated() -> str | None:
-    import datetime
-
-    if not DB_PATH.exists():
-        return None
-    return datetime.datetime.fromtimestamp(db_mtime()).strftime("%Y-%m-%d %H:%M")

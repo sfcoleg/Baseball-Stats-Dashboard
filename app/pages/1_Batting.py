@@ -38,12 +38,8 @@ if team != "All":
     filtered = filtered[filtered["Tm"] == team]
 filtered = filtered.sort_values(sort_by, ascending=False).reset_index(drop=True)
 
-max_rows = st.slider(
-    "Max rows shown in tables below", 25, max(len(filtered), 25), min(75, max(len(filtered), 25)),
-    help="Lower this if the dashboard is crashing — rendering large tables is the most memory-intensive thing this app does.",
-)
-table_rows = filtered.head(max_rows)
-st.caption(f"{len(filtered)} players match filters — showing {len(table_rows)} in the tables below.")
+table_rows = filtered
+st.caption(f"{len(filtered)} players match filters.")
 
 standard_tab, advanced_tab, statcast_tab, explore_tab = st.tabs(
     ["Standard", "Advanced", "Statcast", "Chart Explorer"]
