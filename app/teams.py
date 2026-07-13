@@ -30,6 +30,11 @@ _BY_CITY_LEAGUE = {
     ("Los Angeles", "AL"): ("LAA", "Angels", "#BA0021"),
     ("Los Angeles", "NL"): ("LAD", "Dodgers", "#005A9C"),
     ("Miami", None): ("MIA", "Marlins", "#00A3E0"),
+    # Same franchise as "Miami" above — pre-2012 Baseball-Reference city
+    # name, before the franchise moved from Sun Life Stadium to Miami's new
+    # ballpark and rebranded from the Florida Marlins to the Miami Marlins
+    # (see franchise_display_name() for the season-aware display name).
+    ("Florida", None): ("MIA", "Marlins", "#00A3E0"),
     ("Milwaukee", None): ("MIL", "Brewers", "#12284B"),
     ("Minnesota", None): ("MIN", "Twins", "#002B5C"),
     ("New York", "AL"): ("NYY", "Yankees", "#0C2340"),
@@ -71,13 +76,17 @@ def nickname_for_abbr(abbr: str) -> str:
 
 def franchise_display_name(abbr: str, season: int | None) -> str:
     """Like nickname_for_abbr, but accounts for a franchise rename
-    mid-history — currently only the Athletics, who dropped "Oakland" from
-    the name as part of relocating starting with the 2025 season. Every
-    other team's current nickname is shown regardless of season (same
-    precedent as the Guardians/Indians rename), so this only special-cases
-    ATH; pass `season=None` to always get the current name."""
+    mid-history — the Athletics dropped "Oakland" from the name starting
+    with their 2025 relocation, and the Marlins were the Florida Marlins
+    through 2011 before moving to Miami's new ballpark in 2012. Every other
+    team's current nickname is shown regardless of season (same precedent
+    as the Guardians/Indians rename, deliberately excluded here), so this
+    only special-cases ATH/MIA; pass `season=None` to always get the
+    current name."""
     if abbr == "ATH" and season is not None and season <= 2024:
         return "Oakland Athletics"
+    if abbr == "MIA" and season is not None and season <= 2011:
+        return "Florida Marlins"
     return nickname_for_abbr(abbr)
 
 

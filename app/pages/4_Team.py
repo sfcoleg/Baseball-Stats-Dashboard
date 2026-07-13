@@ -43,17 +43,28 @@ if season == current_season:
 team_options = teams.all_teams()
 labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options] + list(_COMPOSITE_SCOPES)
 
+# Keyed (rather than an `index=` computed fresh each run) so the choice
+# survives a rerun even when `labels` itself changes shape — e.g. switching
+# to a season where "All MLB Team" isn't offered used to silently reset the
+# selectbox back to index 0 (Diamondbacks) on every such rerun.
+TEAM_CHOICE_KEY = "team_page_team_choice"
+
 # Set by clicking a team's row on the Standings page (st.switch_page) — one-shot,
 # so a manual selectbox change afterward isn't overridden on a later visit.
 default_abbr = st.session_state.pop("team_page_selected_team", None)
-default_index = 0
 if default_abbr:
-    for i, label in enumerate(labels):
+    for label in labels:
         if label.startswith(f"{default_abbr} —"):
-            default_index = i
+            st.session_state[TEAM_CHOICE_KEY] = label
             break
 
-choice = st.selectbox("Team", labels, index=default_index)
+if st.session_state.get(TEAM_CHOICE_KEY) not in labels:
+    # First visit, or the previously selected option isn't valid for this
+    # season anymore (e.g. a composite scope gated to certain seasons) —
+    # fall back to the first team instead of Streamlit raising on a stale value.
+    st.session_state[TEAM_CHOICE_KEY] = labels[0]
+
+choice = st.selectbox("Team", labels, key=TEAM_CHOICE_KEY)
 
 if choice in _COMPOSITE_SCOPES:
     scope = _COMPOSITE_SCOPES[choice]
