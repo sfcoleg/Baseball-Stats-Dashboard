@@ -32,37 +32,35 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 following.bootstrap()
 
 # Logo + title header — rendered once here (not per-page) so it shows up on
-# every page, and pinned via position:sticky so it stays visible at the top
-# of the viewport while scrolling a long page. Background color matches the
-# theme's backgroundColor (config.toml) so scrolled-under content doesn't
-# show through.
+# every page. Streamlit's own toolbar (hamburger menu / Deploy button) is an
+# opaque bar pinned to the very top of the viewport; rather than push our
+# header below it (leaving it lower than the toolbar's own icons), this
+# places the logo/title INSIDE that same top strip via position:fixed, at
+# the same height as the Deploy button and the sidebar's Player Search box.
+HEADER_HEIGHT = "2.5rem"
 st.markdown(
     "<style>"
     "@import url('https://fonts.googleapis.com/css2?family=Bungee&display=swap');"
     ".diamond-title {"
-    "  font-family: 'Bungee', cursive;"
-    "  font-size: 2rem;"
+    "  font-family: 'Bungee', cursive !important;"
+    "  font-size: 1.4rem !important;"
+    "  line-height: 1.4rem !important;"
     "  letter-spacing: 1px;"
-    "  margin: 0;"
-    f"  color: {style.DIAMOND_COLOR};"
-    "  text-shadow: 2px 2px 0 #1E3A66, 4px 4px 0 #14294D, 6px 6px 10px rgba(0,0,0,0.45);"
+    "  margin: 0 !important;"
+    f"  color: {style.DIAMOND_COLOR} !important;"
+    "  text-shadow: 1px 1px 0 #1E3A66, 2px 2px 0 #14294D, 4px 4px 8px rgba(0,0,0,0.45);"
     "}"
     ".diamond-header {"
-    "  position: sticky; top: 0; z-index: 999; background-color: #33405F;"
-    "  display: flex; align-items: center; gap: 10px; padding: 0.25rem 0 0.5rem;"
+    f"  position: fixed; top: 0; left: 230px; height: {HEADER_HEIGHT}; z-index: 1000000;"
+    "  display: flex; align-items: center; gap: 8px; padding-left: 1rem;"
     "}"
-    # Streamlit's own toolbar (hamburger menu / Deploy button) is an opaque,
-    # absolutely-positioned bar that the page's block-container pads itself
-    # below — both default to a taller height than the toolbar's icons
-    # actually need. Shrinking both to match pulls the logo/title up to sit
-    # right at the top of the page instead of leaving dead space above it.
-    "[data-testid='stHeader'] { height: 2.5rem; }"
-    "[data-testid='stMainBlockContainer'] { padding-top: 2.5rem !important; }"
+    f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
+    f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
     "</style>",
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<div class='diamond-header'>{style.diamond_logo(36)}"
+    f"<div class='diamond-header'>{style.diamond_logo(26)}"
     f"<h1 class='diamond-title'>Diamond Metrics</h1></div>",
     unsafe_allow_html=True,
 )
