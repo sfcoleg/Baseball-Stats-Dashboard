@@ -2,7 +2,6 @@ import sys
 from datetime import date
 from pathlib import Path
 
-import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -79,8 +78,7 @@ if season == date.today().year:
                 if performer is not None:
                     abbr, _, color = teams.team_meta_from_city(performer["Tm"], performer.get("Lev"))
                     if period == "day":
-                        tb = int(performer["H"] + performer["2B"] + 2 * performer["3B"] + 3 * performer["HR"])
-                        stat_line = f"{tb} TB, {int(performer['H'])} H, {int(performer['HR'])} HR, {int(performer['RBI'])} RBI"
+                        stat_line = style.batting_day_stat_line(performer)
                     else:
                         stat_line = f"{performer['OPS']:.3f} OPS, {int(performer['HR'])} HR ({int(performer['PA'])} PA)"
                     style.headliner_card(label, performer["Name"], abbr, color, stat_line)
@@ -96,8 +94,8 @@ if season == date.today().year:
                 pitcher = db.top_recent_pitcher(recent_pitching, period)
                 if pitcher is not None:
                     abbr, _, color = teams.team_meta_from_city(pitcher["Tm"], pitcher.get("Lev"))
-                    if period == "day" and pd.notna(pitcher.get("GSc")):
-                        stat_line = f"Game Score {int(pitcher['GSc'])}, {pitcher['ERA']:.2f} ERA ({pitcher['IP']:.1f} IP)"
+                    if period == "day":
+                        stat_line = style.pitching_day_stat_line(pitcher)
                     else:
                         stat_line = f"{pitcher['ERA']:.2f} ERA, {int(pitcher['SO'])} SO ({pitcher['IP']:.1f} IP)"
                     style.headliner_card(label, pitcher["Name"], abbr, color, stat_line)

@@ -61,8 +61,8 @@ PITCHING_COLS = [
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against", "season",
 ]
 FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "season"]
-RECENT_BATTING_COLS = ["mlbID", "Name", "Tm", "Lev", "PA", "H", "2B", "3B", "HR", "RBI", "OPS", "period", "season"]
-RECENT_PITCHING_COLS = ["mlbID", "Name", "Tm", "Lev", "IP", "ERA", "GSc", "SO", "BB", "HBP", "H", "SV", "period", "season"]
+RECENT_BATTING_COLS = ["mlbID", "Name", "Tm", "Lev", "PA", "H", "2B", "3B", "HR", "RBI", "SB", "OPS", "period", "season"]
+RECENT_PITCHING_COLS = ["mlbID", "Name", "Tm", "Lev", "IP", "ERA", "GSc", "SO", "ER", "BB", "HBP", "H", "SV", "period", "season"]
 
 
 def _select(cols: list[str]) -> str:

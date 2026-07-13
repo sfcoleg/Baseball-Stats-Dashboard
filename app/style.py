@@ -114,6 +114,36 @@ def colored_header(text, category):
     )
 
 
+def batting_day_stat_line(row) -> str:
+    """One-game batting stat line for the Home page's "Hot Yesterday" card
+    and the Daily Digest's Top Batting Performances — H/HR/RBI always
+    shown, 2B/3B/SB only when the player actually did them (no padding a
+    single-and-a-walk game with "0 2B, 0 3B, 0 SB"), and Total Bases only
+    when it's actually a notable total (>10) rather than just double-
+    counting H/HR for an ordinary game."""
+    tb = int(row["H"] + row["2B"] + 2 * row["3B"] + 3 * row["HR"])
+    parts = []
+    if tb > 10:
+        parts.append(f"{tb} TB")
+    parts.append(f"{int(row['H'])} H")
+    if int(row.get("2B") or 0) > 0:
+        parts.append(f"{int(row['2B'])} 2B")
+    if int(row.get("3B") or 0) > 0:
+        parts.append(f"{int(row['3B'])} 3B")
+    parts.append(f"{int(row['HR'])} HR")
+    parts.append(f"{int(row['RBI'])} RBI")
+    if int(row.get("SB") or 0) > 0:
+        parts.append(f"{int(row['SB'])} SB")
+    return ", ".join(parts)
+
+
+def pitching_day_stat_line(row) -> str:
+    """One-game pitching stat line for the Home page's "Hot Yesterday" card
+    and the Daily Digest's Top Pitching Performances — earned runs, hits
+    allowed, and strikeouts, in place of the old Game Score/ERA line."""
+    return f"{int(row['ER'])} ER, {int(row['H'])} H, {int(row['SO'])} K ({row['IP']:.1f} IP)"
+
+
 def headliner_card(label, name, team_abbr, team_color, stat_line):
     """A stat card that shows the FULL player name (st.metric truncates long
     values with an ellipsis, which cuts off names like 'Heriberto Hernández')."""

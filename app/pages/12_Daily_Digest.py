@@ -2,7 +2,6 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
-import pandas as pd
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -50,8 +49,7 @@ else:
     for _, row in top_batters.iterrows():
         with st.container(border=True):
             abbr, _, color = teams.team_meta_from_city(row["Tm"], row.get("Lev"))
-            tb = int(row["H"] + row["2B"] + 2 * row["3B"] + 3 * row["HR"])
-            text = f"{tb} TB, {int(row['H'])} H, {int(row['HR'])} HR, {int(row['RBI'])} RBI"
+            text = style.batting_day_stat_line(row)
             style.milestone_card(row["mlbID"], row["Name"], abbr, color, text)
 
 style.colored_header("Top Pitching Performances", "pitching")
@@ -62,10 +60,7 @@ else:
     for _, row in top_pitchers.iterrows():
         with st.container(border=True):
             abbr, _, color = teams.team_meta_from_city(row["Tm"], row.get("Lev"))
-            if pd.notna(row.get("GSc")):
-                text = f"Game Score {int(row['GSc'])}, {row['ERA']:.2f} ERA ({row['IP']:.1f} IP)"
-            else:
-                text = f"{row['ERA']:.2f} ERA, {int(row['SO'])} SO ({row['IP']:.1f} IP)"
+            text = style.pitching_day_stat_line(row)
             style.milestone_card(row["mlbID"], row["Name"], abbr, color, text)
 
 style.colored_header("Transactions", "fielding")
