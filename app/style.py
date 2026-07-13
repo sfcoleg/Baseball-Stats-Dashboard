@@ -20,18 +20,23 @@ def headshot_url(mlbID, width=180):
     )
 
 
+ACCENT = "#3B82F6"
+
+# All section headers share one accent color now (see colored_header) rather
+# than a different hue per category — kept as a dict (not a bare constant)
+# so existing colored_header(..., category) call sites don't need to change.
 CATEGORY_COLORS = {
-    "batting": "#4C9F70",
-    "pitching": "#3B82F6",
-    "fielding": "#A855F7",
-    "headliners": "#F5B942",
-    "chart": "#E3572A",
+    "batting": ACCENT,
+    "pitching": ACCENT,
+    "fielding": ACCENT,
+    "headliners": ACCENT,
+    "chart": ACCENT,
 }
 
 
 def colored_header(text, category):
     """A subheader with a colored left accent bar, keyed by CATEGORY_COLORS."""
-    color = CATEGORY_COLORS.get(category, "#E3572A")
+    color = CATEGORY_COLORS.get(category, ACCENT)
     st.markdown(
         f"<h3 style='border-left: 5px solid {color}; padding-left: 14px; "
         f"margin-top: 1.2em; margin-bottom: 0.6em;'>{text}</h3>",
@@ -324,7 +329,7 @@ def _hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r}, {g}, {b}, {alpha})"
 
 
-def radar_chart(categories, values_a, values_b, name_a, name_b, color_a="#4C9F70", color_b="#3B82F6"):
+def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, color_b="#93C5FD"):
     """Percentile radar (0-100 scale) comparing two players across `categories`."""
     theta = categories + [categories[0]]
     fig = go.Figure()

@@ -102,7 +102,7 @@ style.colored_header("Top 10 Home Run Leaders", "chart")
 top10_hr = batting.sort_values("HR", ascending=False).head(10).iloc[::-1]
 fig = px.bar(
     top10_hr, x="HR", y="Name", orientation="h",
-    color="HR", color_continuous_scale="OrRd",
+    color="HR", color_continuous_scale="Blues",
     text="HR",
 )
 fig.update_layout(

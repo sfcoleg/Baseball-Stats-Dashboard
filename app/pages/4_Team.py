@@ -21,7 +21,7 @@ available_seasons = db.get_seasons("batting")
 season = st.selectbox("Season", available_seasons, index=0)
 current_season = available_seasons[0]  # most recent season = the one recent_batting/recent_pitching cover
 
-_COMPOSITE_COLORS = {"all": "#0C2340", "month": "#E3572A"}
+_COMPOSITE_COLORS = {"all": "#3B82F6", "month": "#93C5FD"}
 _COMPOSITE_CAPTIONS = {
     "all": "Best qualified player at each position across all 30 teams, full-season stats.",
     "month": "Best performer at each position over the trailing 30 days.",

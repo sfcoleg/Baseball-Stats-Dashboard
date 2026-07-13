@@ -184,7 +184,7 @@ if pitching_a is not None and pitching_b is not None:
     st.plotly_chart(
         style.radar_chart(
             [label for label, _, _ in radar_fields], values_a, values_b,
-            selected_a["Name"], selected_b["Name"], color_a="#4C9F70", color_b="#3B82F6",
+            selected_a["Name"], selected_b["Name"],
         ),
         use_container_width=True,
     )

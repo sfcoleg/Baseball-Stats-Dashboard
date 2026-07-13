@@ -210,7 +210,7 @@ if batting is not None or pitching is not None:
     trend = history[(history["role"] == role_filter) & history[stat_col].notna()]
     if len(trend) >= 2:
         fig = px.line(trend, x="date", y=stat_col, markers=True, labels={"date": "Date", stat_col: stat_label})
-        fig.update_traces(line_color="#E3572A", marker_color="#E3572A")
+        fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
@@ -225,13 +225,13 @@ if batting is not None or pitching is not None:
     if batting is not None:
         dist_df = qualified_batting.dropna(subset=["OPS"])
         fig = px.histogram(dist_df, x="OPS", nbins=40, labels={"OPS": "OPS (min 50 PA)"})
-        fig.add_vline(x=batting["OPS"], line_color="#E3572A", line_width=3)
+        fig.add_vline(x=batting["OPS"], line_color="#3B82F6", line_width=3)
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             font_color="#FAFAFA", showlegend=False,
         )
-        st.caption(f"Orange line = {selected_name}'s OPS against all qualified batters.")
+        st.caption(f"Blue line = {selected_name}'s OPS against all qualified batters.")
         st.plotly_chart(fig, use_container_width=True)
     if pitching is not None:
         dist_df = qualified_pitching.dropna(subset=["ERA"])

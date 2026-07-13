@@ -83,7 +83,7 @@ else:
                     f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{tabbr}</span>"
                 )
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #A855F7;padding:8px 14px;"
+            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>{badges}"
             f"<span style='color:#9AA3B5;font-size:0.85rem'>{row['type']}</span>"
             f"<div style='color:#DCE1EA'>{row['description']}</div></div>",

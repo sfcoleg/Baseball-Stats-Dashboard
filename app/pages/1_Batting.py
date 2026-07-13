@@ -125,7 +125,7 @@ with statcast_tab:
     chart_df = filtered.dropna(subset=["avg_exit_velo", "barrel_pct"])
     fig = px.scatter(
         chart_df, x="avg_exit_velo", y="barrel_pct", size="HR", color="OPS",
-        hover_name="Name", color_continuous_scale="OrRd",
+        hover_name="Name", color_continuous_scale="Blues",
         labels={"avg_exit_velo": "Avg Exit Velocity (mph)", "barrel_pct": "Barrel %"},
     )
     fig.update_layout(
@@ -150,7 +150,7 @@ with explore_tab:
     chart_df = filtered.dropna(subset=[x_stat, y_stat])
     fig = px.scatter(
         chart_df, x=x_stat, y=y_stat, size="PA", color="OPS",
-        hover_name="Name", color_continuous_scale="OrRd",
+        hover_name="Name", color_continuous_scale="Blues",
     )
     fig.update_layout(
         height=500, margin=dict(l=0, r=0, t=10, b=0),

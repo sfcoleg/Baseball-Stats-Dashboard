@@ -49,7 +49,7 @@ for _, row in filtered.iterrows():
                 f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{abbr}</span>"
             )
     st.markdown(
-        f"<div style='background-color:#1B243866;border-left:4px solid #4C9F70;padding:10px 14px;"
+        f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:10px 14px;"
         f"border-radius:6px;margin:6px 0'>"
         f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
         f"<div>{badges}<span style='color:#9AA3B5;font-size:0.85rem'>{row['type']}</span></div>"

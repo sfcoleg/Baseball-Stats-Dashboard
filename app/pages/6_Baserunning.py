@@ -75,7 +75,7 @@ st.subheader("Sprint Speed vs. Baserunning Runs")
 chart_df = filtered.dropna(subset=["sprint_speed", "baserunning_runs"])
 fig = px.scatter(
     chart_df, x="sprint_speed", y="baserunning_runs", size="PA", color="SB",
-    hover_name="Name", color_continuous_scale="OrRd",
+    hover_name="Name", color_continuous_scale="Blues",
     labels={"sprint_speed": "Sprint Speed (ft/s)", "baserunning_runs": "Baserunning Runs (BsR)", "SB": "SB"},
 )
 fig.update_layout(
