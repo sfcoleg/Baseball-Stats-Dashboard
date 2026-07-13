@@ -22,6 +22,7 @@ This also runs automatically every day at 6am via a `launchd` job (`~/Library/La
 - Python **3.13** (not 3.14 — see "Known issues" below). Venv at `venv/`.
 - Install deps: `./venv/bin/pip install -r requirements.txt`
 - Config: `.streamlit/config.toml` sets theme (colors, `baseRadius`) and disables the file watcher (`fileWatcherType = "none"`) and usage stats.
+- **`ANTHROPIC_API_KEY`** (optional): needed only for the Daily Digest page's AI-written "Today's Storylines" (see `ingest/refresh_data.py`'s `build_daily_articles()`/`_generate_article()`). Must be set in whatever environment runs `ingest/refresh_data.py` — export it in your shell for a manual run, and add an `EnvironmentVariables` dict to the `launchd` plist for the daily automated run (not present by default; `launchd` jobs don't inherit your shell's exported vars). Missing key = that section of the Daily Digest just stays empty for the day, not an error — nothing else in the app depends on this key.
 
 **The file watcher is disabled**, so Streamlit does NOT auto-reload on code changes. After editing any `app/*.py` file, you must manually restart the server:
 ```bash
@@ -91,22 +92,39 @@ app/
                            # list" in the description, minus "activated" ones). Placed second in nav, right
                            # after Home, in main.py's PAGES list.
                            #
-                           # "Today's Storylines" (top of the page) is db.daily_articles() — up to three
-                           # template-generated multi-paragraph articles (fixed sentence variants chosen by
-                           # stat magnitude, NOT an LLM call — this app has no AI text generation anywhere)
-                           # covering: the day's best batting line, best pitching line, and (when one clears
-                           # the bar) an injury to a "key player". Each is its own private helper
-                           # (_batting_narrative()/_pitching_narrative()/_injury_narrative()) returning
-                           # {"headline", "teaser", "paragraphs" (list of 3 strings), "mlbID", "Tm" (already
-                           # an abbreviation), "color"} or None to skip a quiet day — daily_articles() just
-                           # calls all three and drops the Nones. The injury piece needed a new "mlbID"
-                           # column on load_transactions()'s output (from the raw API's `person.id`,
-                           # previously discarded) to join a placement's description back to that player's
-                           # season stats and judge whether they're actually notable (60th+ percentile, or
-                           # clearly an everyday player/rotation piece by playing time) — a September
-                           # call-up's IL trip isn't a story. Prose that needs a team name in running text
-                           # (not a table-cell badge) uses `teams.nickname_for_abbr()` — "the Pirates", not
-                           # "the PIT" or "the Pittsburgh".
+                           # "Today's Storylines" (top of the page) is db.load_daily_articles() reading a
+                           # `daily_articles` SQLite table — up to three AI-written multi-paragraph articles
+                           # (Claude, WITH web search enabled, so each one is backed by real background
+                           # research on the player, not just a template) covering: the day's best batting
+                           # line, best pitching line, and (when one clears the bar) an injury to a "key
+                           # player". Generation happens once during the DAILY INGEST RUN, not at page-load
+                           # time — see build_daily_articles()/_generate_article() in
+                           # ingest/refresh_data.py — since each article is a real, billed API call with web
+                           # search. The page just reads the cached result; if ANTHROPIC_API_KEY isn't set in
+                           # the ingest environment (see "Required environment variables" below), the table
+                           # ends up empty for that day and the page shows its "nothing stood out" state, not
+                           # an error — a missing/failed key should never break the daily refresh.
+                           #
+                           # build_daily_articles() picks the same candidates the old template version did
+                           # (best day-window batting/pitching line by the same thresholds; the most notable
+                           # new IL placement, judged by season percentile or playing time — a September
+                           # call-up's IL trip isn't a story) but instead of writing the prose itself, builds a
+                           # short "trigger" + "stat context" string per candidate and hands it to
+                           # _generate_article(), which calls the Anthropic Messages API with the
+                           # `web_search_20250305` server tool and asks for a JSON response
+                           # ({"headline","teaser","paragraphs"}) — parsed via a `re.search(r"\{.*\}", ...)`
+                           # grab of the final JSON object out of the response's text blocks, since a
+                           # web-search-using response can include tool-call/tool-result content blocks before
+                           # the model's actual answer. Any failure (missing key, network/API error, bad JSON)
+                           # returns None for that one candidate rather than raising, so one flaky call can't
+                           # take down the rest of the ingest run. The injury piece needs its own
+                           # fetch_il_moves() (a lightweight duplicate of app/db.py's load_transactions(),
+                           # since the ingest script deliberately doesn't import app/db.py's Streamlit-heavy
+                           # module) to join a placement's description back to that player's season stats.
+                           #
+                           # `daily_articles` is replaced wholesale every ingest run (current day's storylines
+                           # only, like todays_games/standings) — paragraphs are stored JSON-encoded in a single
+                           # TEXT column since SQLite has no array type.
                            #
                            # Each storyline card shows only the "teaser" with a "Read more →" button; clicking
                            # it stashes the full article dict in st.session_state["selected_article"] and

@@ -1,4 +1,5 @@
 """Shared helpers for reading the cached stats database."""
+import json
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
@@ -188,251 +189,33 @@ def top_n_recent_pitchers(recent_pitching: pd.DataFrame, period: str, n: int = 5
     return qualified.sort_values("ERA", ascending=True).head(n)
 
 
-def _batting_narrative(top_batter: pd.Series, season_batting: pd.DataFrame) -> dict | None:
-    """Template-generated multi-paragraph write-up of the day's best batting
-    performance. Not AI-written — fixed sentence templates chosen by stat
-    magnitude, reusing data already computed elsewhere (the day-window top
-    performer, season percentiles). Returns None if the day's best line
-    isn't loud enough to bother writing up (fewer than 2 hits and no
-    multi-HR game)."""
-    hits, hr, rbi = int(top_batter["H"]), int(top_batter["HR"]), int(top_batter["RBI"])
-    tb = int(hits + top_batter["2B"] + 2 * top_batter["3B"] + 3 * top_batter["HR"])
-    if hits < 2 and hr < 1:
-        return None
-
-    abbr, nickname, color = teams.team_meta_from_city(top_batter["Tm"], top_batter.get("Lev"))
-    qualified = season_batting[season_batting["PA"] >= 50]
-    season_row_df = season_batting[season_batting["mlbID"] == top_batter["mlbID"]]
-    season_row = season_row_df.iloc[0] if not season_row_df.empty else None
-    ops_pct = percentile_rank(qualified["OPS"], season_row["OPS"]) if season_row is not None else None
-    power_pct = percentile_rank(qualified["ISO"], season_row["ISO"]) if season_row is not None else None
-
-    if hr >= 3:
-        lede = f"{top_batter['Name']} put on a show, going deep {hr} times"
-    elif hr == 2:
-        lede = f"{top_batter['Name']} had one of the loudest lines of the night, homering twice"
-    elif tb >= 7:
-        lede = f"{top_batter['Name']} paced yesterday's hitters with a monster day at the plate"
-    else:
-        lede = f"{top_batter['Name']} led yesterday's hitters"
-
-    teaser = f"{lede}: {hits} hit{'s' if hits != 1 else ''}, {tb} total bases, {rbi} RBI."
-
-    p1 = (
-        f"{lede}, finishing the day with {hits} hit{'s' if hits != 1 else ''}, {tb} total bases, "
-        f"{hr} home run{'s' if hr != 1 else ''}, and {rbi} RBI. It was the kind of line that jumps off yesterday's box scores."
-    )
-
-    if season_row is not None:
-        p2 = (
-            f"On the season, {top_batter['Name']} is hitting {season_row['BA']:.3f}/{season_row['OBP']:.3f}/"
-            f"{season_row['SLG']:.3f} with {int(season_row['HR'])} home runs and {int(season_row['RBI'])} RBI "
-            f"across {int(season_row['PA'])} plate appearances."
-        )
-        if ops_pct is not None and ops_pct >= 80:
-            p2 += (
-                f" That OPS ranks in the {ops_pct}th percentile among qualified hitters — this wasn't a fluke, "
-                f"it's a continuation of a season that's been elite from the start."
-            )
-        elif ops_pct is not None and ops_pct <= 30:
-            p2 += (
-                f" That's only good for the {ops_pct}th percentile among qualified hitters, which makes "
-                f"yesterday a rare spike rather than the norm — worth watching whether it's the start of a "
-                f"turnaround or just one good night in an otherwise quiet season."
-            )
-        else:
-            p2 += " That puts him squarely in the middle of the pack among qualified hitters — a solid, unspectacular season with an exceptional night mixed in."
-        if power_pct is not None and power_pct >= 85:
-            p2 += f" His {season_row['ISO']:.3f} isolated power is also among the best in the league ({power_pct}th percentile), so nights like this shouldn't come as a total surprise."
-    else:
-        p2 = f"{top_batter['Name']} doesn't yet have enough plate appearances this season to qualify for the league leaderboards, so last night's line stands mostly on its own."
-
-    p3 = f"For {top_batter['Name']} and the {nickname}, it's the kind of performance that can shift a series — and a reminder of the upside this lineup carries when things click."
-
-    return {
-        "headline": f"{top_batter['Name']}'s big night",
-        "teaser": teaser, "paragraphs": [p1, p2, p3],
-        "mlbID": top_batter["mlbID"], "Tm": abbr, "color": color,
-    }
-
-
-def _pitching_narrative(top_pitcher: pd.Series, season_pitching: pd.DataFrame) -> dict | None:
-    """Same idea as _batting_narrative(), for the day's best pitching line.
-    Returns None if it's not a standout outing (Game Score under 65 and
-    fewer than 8 strikeouts)."""
-    era, ip, so = top_pitcher["ERA"], top_pitcher["IP"], int(top_pitcher["SO"])
-    # GSc is stored as text in SQLite (unlike every other numeric column here).
-    gsc = pd.to_numeric(top_pitcher.get("GSc"), errors="coerce")
-    if (pd.isna(gsc) or gsc < 65) and so < 8:
-        return None
-
-    abbr, nickname, color = teams.team_meta_from_city(top_pitcher["Tm"], top_pitcher.get("Lev"))
-    qualified = season_pitching[season_pitching["IP"] >= 20]
-    season_row_df = season_pitching[season_pitching["mlbID"] == top_pitcher["mlbID"]]
-    season_row = season_row_df.iloc[0] if not season_row_df.empty else None
-    era_pct = percentile_rank(qualified["ERA"], season_row["ERA"], lower_is_better=True) if season_row is not None else None
-    k9_pct = percentile_rank(qualified["K_9"], season_row["K_9"]) if season_row is not None else None
-
-    if pd.notna(gsc) and gsc >= 85:
-        lede = f"{top_pitcher['Name']} was nearly untouchable"
-    elif so >= 10:
-        lede = f"{top_pitcher['Name']} blew hitters away, racking up {so} strikeouts"
-    else:
-        lede = f"{top_pitcher['Name']} turned in the best start of the night"
-
-    teaser = f"{lede}: {ip:.1f} innings, {era:.2f} ERA, {so} strikeout{'s' if so != 1 else ''}."
-
-    gsc_clause = f" with a Game Score of {int(gsc)}" if pd.notna(gsc) else ""
-    p1 = (
-        f"{lede} last night, working {ip:.1f} innings and allowing just {era:.2f} runs per nine while "
-        f"striking out {so}{gsc_clause}. It was a start that took over the game from the first inning."
-    )
-
-    if season_row is not None:
-        p2 = (
-            f"For the season, {top_pitcher['Name']} now carries a {season_row['ERA']:.2f} ERA and "
-            f"{season_row['WHIP']:.3f} WHIP across {season_row['IP']:.1f} innings, with {int(season_row['SO'])} "
-            f"strikeouts."
-        )
-        if era_pct is not None and era_pct >= 80:
-            p2 += f" That ERA sits in the {era_pct}th percentile among qualified pitchers — this has been an elite season, and last night was just the latest example."
-        elif era_pct is not None and era_pct <= 30:
-            p2 += f" That ERA is only the {era_pct}th percentile among qualified pitchers, so last night reads as a genuine bright spot in what's otherwise been a difficult season."
-        else:
-            p2 += " That's a solidly average season by ERA, with a standout outing mixed in — the kind of start that can be a real building block."
-        if k9_pct is not None and k9_pct >= 85:
-            p2 += f" His {season_row['K_9']:.2f} strikeouts per nine also rank among the league's best ({k9_pct}th percentile)."
-    else:
-        p2 = f"{top_pitcher['Name']} hasn't reached the innings threshold to qualify for the league leaderboards yet, so last night's line is an early data point rather than part of an established season-long trend."
-
-    p3 = f"Starts like this are exactly what the {nickname} need more of down the stretch, and it's a strong sign for their rotation depth heading into the next turn through."
-
-    return {
-        "headline": f"{top_pitcher['Name']} deals",
-        "teaser": teaser, "paragraphs": [p1, p2, p3],
-        "mlbID": top_pitcher["mlbID"], "Tm": abbr, "color": color,
-    }
-
-
-def _injury_narrative(il_moves: pd.DataFrame, season_batting: pd.DataFrame, season_pitching: pd.DataFrame) -> dict | None:
-    """Picks the single most notable injured-list placement from yesterday's
-    `il_moves` (a Transactions-page-style DataFrame already filtered to new
-    IL placements — see the Daily Digest page) and writes it up, using each
-    candidate's season stats to judge how big a deal the injury is. A
-    'key player' here means an above-average season (60th+ percentile) or
-    clearly an everyday player/rotation piece by playing time — a September
-    call-up's IL trip isn't a story. Returns None if no placement clears
-    that bar, or if the transaction has no mlbID to match against (some
-    older Stats API entries don't)."""
-    qualified_batting = season_batting[season_batting["PA"] >= 50]
-    qualified_pitching = season_pitching[season_pitching["IP"] >= 20]
-
-    candidates = []
-    for _, row in il_moves.iterrows():
-        mlbID = row.get("mlbID")
-        if mlbID is None or pd.isna(mlbID):
-            continue
-        mlbID = int(mlbID)
-        b_row = season_batting[season_batting["mlbID"] == mlbID]
-        p_row = season_pitching[season_pitching["mlbID"] == mlbID]
-        if not b_row.empty and b_row.iloc[0]["PA"] >= 50:
-            pct = percentile_rank(qualified_batting["OPS"], b_row.iloc[0]["OPS"])
-            key = (pct is not None and pct >= 60) or b_row.iloc[0]["PA"] >= 300
-            if key:
-                candidates.append((pct or 0, row, b_row.iloc[0], "batting"))
-        elif not p_row.empty and p_row.iloc[0]["IP"] >= 20:
-            pct = percentile_rank(qualified_pitching["ERA"], p_row.iloc[0]["ERA"], lower_is_better=True)
-            key = (pct is not None and pct >= 60) or p_row.iloc[0]["IP"] >= 60
-            if key:
-                candidates.append((pct or 0, row, p_row.iloc[0], "pitching"))
-
-    if not candidates:
-        return None
-    candidates.sort(key=lambda c: c[0], reverse=True)
-    pct, tx_row, season_row, kind = candidates[0]
-
-    parts = tx_row["description"].split(". ")
-    detail = parts[-1].strip().rstrip(".") if len(parts) > 1 else None
-    tier = "60-day" if "60-day" in tx_row["description"] else (
-        "15-day" if "15-day" in tx_row["description"] else (
-        "10-day" if "10-day" in tx_row["description"] else "7-day"))
-    abbr = tx_row["to_abbr"] if isinstance(tx_row["to_abbr"], str) else tx_row["from_abbr"]
-    nickname = teams.nickname_for_abbr(abbr)
-    name = season_row["Name"]
-
-    teaser = f"{name} went on the {tier} injured list" + (f" ({detail})." if detail else ".")
-
-    p1 = f"The {abbr} placed {name} on the {tier} injured list yesterday" + (f", citing {detail.lower()}." if detail else ".")
-    if tier == "60-day":
-        p1 += " That's the roster move teams make when a return is weeks away rather than days — effectively ending the player's availability for the next two months."
-    elif tier == "15-day":
-        p1 += " A 15-day stint typically points to a more significant injury than a minimum rest — the team isn't expecting a quick turnaround."
-    else:
-        p1 += " That's the standard-length placement, which at least keeps a return within the next couple of weeks in play."
-
-    if kind == "batting":
-        p2 = (
-            f"{name} was hitting {season_row['BA']:.3f}/{season_row['OBP']:.3f}/{season_row['SLG']:.3f} with "
-            f"{int(season_row['HR'])} home runs and {int(season_row['RBI'])} RBI across {int(season_row['PA'])} "
-            f"plate appearances this season."
-        )
-        if pct >= 80:
-            p2 += f" That OPS ranks in the {pct}th percentile among qualified hitters league-wide — this is a genuine middle-of-the-order bat going down, not a bench piece."
-        elif pct >= 60:
-            p2 += f" That's a solidly above-average season ({pct}th percentile OPS), and an everyday regular the lineup will miss."
-        else:
-            p2 += f" The counting stats ({int(season_row['PA'])} PA) make clear this is a regular contributor, even if the rate stats haven't been eye-popping."
-    else:
-        p2 = (
-            f"{name} carried a {season_row['ERA']:.2f} ERA over {season_row['IP']:.1f} innings this season, "
-            f"with {int(season_row['SO'])} strikeouts."
-        )
-        if pct >= 80:
-            p2 += f" That ERA sits in the {pct}th percentile among qualified pitchers — a real front-line piece heading to the IL."
-        elif pct >= 60:
-            p2 += f" That's an above-average season on the mound ({pct}th percentile ERA), from a pitcher the staff will lean on to replace."
-        else:
-            p2 += f" The workload ({season_row['IP']:.1f} innings) alone makes this a rotation or bullpen piece the {nickname} will need to cover for."
-
-    p3 = f"Expect the {nickname} to lean on internal depth or a corresponding roster move in the meantime — how well they cover the gap could matter a great deal to their outlook the rest of the way."
-
-    return {
-        "headline": f"Injury Watch: {name}",
-        "teaser": teaser, "paragraphs": [p1, p2, p3],
-        "mlbID": int(season_row["mlbID"]), "Tm": abbr, "color": teams.color_for_abbr(abbr),
-    }
-
-
-def daily_articles(season: int, db_mtime_val: float, il_moves: pd.DataFrame) -> list[dict]:
-    """Assembles the Daily Digest page's "Today's Storylines" — up to three
-    template-generated write-ups (batting, pitching, injury) about
-    yesterday's most notable happenings. See _batting_narrative(),
-    _pitching_narrative(), _injury_narrative() for the actual generation
-    logic; this just calls each and drops the Nones. Not AI-written."""
-    recent_batting = load_recent_batting(season, db_mtime_val)
-    recent_pitching = load_recent_pitching(season, db_mtime_val)
-    season_batting = load_batting(season, db_mtime_val)
-    season_pitching = load_pitching(season, db_mtime_val)
-
-    articles = []
-    top_batter = top_recent_performer(recent_batting, "day")
-    if top_batter is not None:
-        article = _batting_narrative(top_batter, season_batting)
-        if article:
-            articles.append(article)
-
-    top_pitcher = top_recent_pitcher(recent_pitching, "day")
-    if top_pitcher is not None:
-        article = _pitching_narrative(top_pitcher, season_pitching)
-        if article:
-            articles.append(article)
-
-    if not il_moves.empty:
-        article = _injury_narrative(il_moves, season_batting, season_pitching)
-        if article:
-            articles.append(article)
-
-    return articles
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_daily_articles(db_mtime_val: float) -> list[dict]:
+    """AI-written "Today's Storylines" articles for the Daily Digest page.
+    These are generated once during the daily ingest run — see
+    build_daily_articles() in ingest/refresh_data.py, which picks the day's
+    most notable batting/pitching/injury storylines and has Claude research
+    and write each one (web search included) — NOT generated here at
+    page-load time, since each article costs a real API call. Returns []
+    if the table doesn't exist yet (fresh install) or the ingest run had no
+    ANTHROPIC_API_KEY configured that day, in which case the Daily Digest
+    page just shows its "nothing stood out" empty state."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM daily_articles", conn)
+        except pd.errors.DatabaseError:
+            return []
+    return [
+        {
+            "headline": row["headline"],
+            "teaser": row["teaser"],
+            "paragraphs": json.loads(row["paragraphs"]),
+            "mlbID": row["mlbID"],
+            "Tm": row["Tm"],
+            "color": row["color"],
+        }
+        for _, row in df.iterrows()
+    ]
 
 
 # Season home-run totals worth calling out when a player's most recent game
