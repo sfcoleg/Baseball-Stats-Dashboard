@@ -28,8 +28,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 st.markdown(
-    "<div style='display:flex;align-items:center;gap:16px;margin-bottom:0.5rem;"
-    "background-color:#4A6FA5;border-radius:24px;padding:20px 32px;width:fit-content'>"
+    "<div style='display:flex;align-items:center;gap:16px;margin-bottom:0.5rem'>"
     f"{style.diamond_logo(76)}"
     f"<h1 class='diamond-title'>Diamond Metrics</h1>"
     f"</div>",
