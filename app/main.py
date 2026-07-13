@@ -51,6 +51,12 @@ st.markdown(
     "  position: sticky; top: 0; z-index: 999; background-color: #33405F;"
     "  display: flex; align-items: center; gap: 14px; padding: 0.75rem 0;"
     "}"
+    # Streamlit's own toolbar (hamburger menu / Deploy button) is a short,
+    # absolutely-positioned bar, but the page's block-container still pads
+    # itself well below it by default — leaving a big empty gap above our
+    # header. Shrinking that padding to just the toolbar's own height pulls
+    # the logo/title up to sit right at the top of the page.
+    "[data-testid='stMainBlockContainer'] { padding-top: 3.75rem !important; }"
     "</style>",
     unsafe_allow_html=True,
 )
