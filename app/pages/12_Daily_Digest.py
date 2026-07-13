@@ -34,30 +34,6 @@ il_moves = txs_yesterday[
     & ~txs_yesterday["description"].str.contains("activated", case=False, na=False)
 ] if not txs_yesterday.empty else txs_yesterday
 
-style.colored_header("Today's Storylines", "headliners")
-st.caption("AI-written recaps generated from this app's own stats — click into a storyline for the full write-up.")
-articles = db.load_daily_articles(mtime)
-if not articles:
-    st.caption("Nothing stood out enough to write up yesterday.")
-else:
-    for i, a in enumerate(articles):
-        with st.container(border=True):
-            st.markdown(
-                f"<div style='display:flex;align-items:flex-start;gap:12px'>"
-                f"<img src='{style.headshot_url(a['mlbID'], width=180)}' style='width:80px;height:80px;"
-                f"border-radius:10px;object-fit:cover;flex-shrink:0' />"
-                f"<div style='flex:1;min-width:0'>"
-                f"<div style='font-size:1.1rem;font-weight:700;margin-bottom:4px'>{a['headline']} "
-                f"<span style='background-color:{a['color']}66;color:#FAFAFA;padding:2px 9px;"
-                f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{a['Tm']}</span></div>"
-                f"<div style='color:#DCE1EA'>{a['teaser']}</div>"
-                f"</div></div>",
-                unsafe_allow_html=True,
-            )
-            if st.button("Read more →", key=f"read_more_{i}"):
-                st.session_state["selected_article"] = a
-                st.switch_page("pages/_Article.py")
-
 style.colored_header("Milestones", "headliners")
 if milestones:
     for m in milestones:

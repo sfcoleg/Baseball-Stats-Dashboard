@@ -1,5 +1,4 @@
 """Shared helpers for reading the cached stats database."""
-import json
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
@@ -187,35 +186,6 @@ def top_n_recent_pitchers(recent_pitching: pd.DataFrame, period: str, n: int = 5
     if period == "day" and "GSc" in qualified.columns:
         return qualified.sort_values("GSc", ascending=False).head(n)
     return qualified.sort_values("ERA", ascending=True).head(n)
-
-
-@st.cache_data(show_spinner=False, max_entries=4)
-def load_daily_articles(db_mtime_val: float) -> list[dict]:
-    """AI-written "Today's Storylines" articles for the Daily Digest page.
-    These are generated once during the daily ingest run — see
-    build_daily_articles() in ingest/refresh_data.py, which picks the day's
-    most notable batting/pitching/injury storylines and has Claude research
-    and write each one (web search included) — NOT generated here at
-    page-load time, since each article costs a real API call. Returns []
-    if the table doesn't exist yet (fresh install) or the ingest run had no
-    ANTHROPIC_API_KEY configured that day, in which case the Daily Digest
-    page just shows its "nothing stood out" empty state."""
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            df = pd.read_sql("SELECT * FROM daily_articles", conn)
-        except pd.errors.DatabaseError:
-            return []
-    return [
-        {
-            "headline": row["headline"],
-            "teaser": row["teaser"],
-            "paragraphs": json.loads(row["paragraphs"]),
-            "mlbID": row["mlbID"],
-            "Tm": row["Tm"],
-            "color": row["color"],
-        }
-        for _, row in df.iterrows()
-    ]
 
 
 # Season home-run totals worth calling out when a player's most recent game

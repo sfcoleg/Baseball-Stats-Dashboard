@@ -22,7 +22,6 @@ This also runs automatically every day at 6am via a `launchd` job (`~/Library/La
 - Python **3.13** (not 3.14 — see "Known issues" below). Venv at `venv/`.
 - Install deps: `./venv/bin/pip install -r requirements.txt`
 - Config: `.streamlit/config.toml` sets theme (colors, `baseRadius`) and disables the file watcher (`fileWatcherType = "none"`) and usage stats.
-- **`ANTHROPIC_API_KEY`** (optional): needed only for the Daily Digest page's AI-written "Today's Storylines" (see `ingest/refresh_data.py`'s `build_daily_articles()`/`_generate_article()`). Must be set in whatever environment runs `ingest/refresh_data.py` — export it in your shell for a manual run, and add an `EnvironmentVariables` dict to the `launchd` plist for the daily automated run (not present by default; `launchd` jobs don't inherit your shell's exported vars). Missing key = that section of the Daily Digest just stays empty for the day, not an error — nothing else in the app depends on this key.
 
 **The file watcher is disabled**, so Streamlit does NOT auto-reload on code changes. After editing any `app/*.py` file, you must manually restart the server:
 ```bash
@@ -91,48 +90,6 @@ app/
                            # placements carved out of that same transactions pull (Status Change + "injured
                            # list" in the description, minus "activated" ones). Placed second in nav, right
                            # after Home, in main.py's PAGES list.
-                           #
-                           # "Today's Storylines" (top of the page) is db.load_daily_articles() reading a
-                           # `daily_articles` SQLite table — 3 AI-written multi-paragraph articles (Claude, NO
-                           # web search — written purely from this app's own stats, fed to the model as a full
-                           # data dump rather than a summarized sentence or two) covering: the day's best
-                           # batting line, best pitching line, and either the most notable injury or (if none
-                           # clears the bar that day) a third notable performance, so the digest reliably gets
-                           # 3 stories rather than however many happened to clear a threshold. Generation
-                           # happens once during the DAILY INGEST RUN, not at page-load time — see
-                           # build_daily_articles()/_generate_article() in ingest/refresh_data.py — since each
-                           # article is a real, billed API call. The page just reads the cached result; if
-                           # ANTHROPIC_API_KEY isn't set in the ingest environment (see "Required environment
-                           # variables" below), the table ends up empty for that day and the page shows its
-                           # "nothing stood out" state, not an error — a missing/failed key should never break
-                           # the daily refresh.
-                           #
-                           # _batting_stat_dump()/_pitching_stat_dump() build that data dump — the player's
-                           # full season line (BA/OBP/SLG/HR/RBI/ISO/BABIP/K%/BB%/wOBA/xwOBA/WAR/OPS+/wRC+ for
-                           # batting; ERA/WHIP/IP/SO/K9/BB9/FIP/xERA/WAR/ERA+ for pitching) plus a few
-                           # percentile ranks, handed to _generate_article() alongside a one-line "trigger"
-                           # describing yesterday's specific performance. _generate_article() calls the
-                           # Anthropic Messages API and asks for a JSON response
-                           # ({"headline","teaser","paragraphs"}), parsed via a `re.search(r"\{.*\}", ...)`
-                           # grab of the JSON object out of the response text. Any failure (missing key,
-                           # network/API error, bad JSON) returns None for that one candidate rather than
-                           # raising, so one flaky call can't take down the rest of the ingest run.
-                           # _batting_article()/_pitching_article() wrap a single day-window row into one
-                           # article and track a `used_ids` set so the guaranteed-3rd-article fallback (next-
-                           # best batting/pitching performance when there's no notable injury) can't write up
-                           # the same player twice. The injury path needs its own fetch_il_moves() (a
-                           # lightweight duplicate of app/db.py's load_transactions(), since the ingest script
-                           # deliberately doesn't import app/db.py's Streamlit-heavy module) to join a
-                           # placement's description back to that player's season stats.
-                           #
-                           # `daily_articles` is replaced wholesale every ingest run (current day's storylines
-                           # only, like todays_games/standings) — paragraphs are stored JSON-encoded in a single
-                           # TEXT column since SQLite has no array type.
-                           #
-                           # Each storyline card shows only the "teaser" with a "Read more →" button; clicking
-                           # it stashes the full article dict in st.session_state["selected_article"] and
-                           # st.switch_page()s to pages/_Article.py (hidden from nav, same pattern as
-                           # _Player.py) to render the full multi-paragraph piece.
     13_Following.py        # Follow teams/players, get a personalized feed: today's games for followed teams
                            # (todays_games filtered to rows where either side's normalized abbr is followed,
                            # same predict_game()/live_scores rendering as 8_Todays_Games.py, just simplified)
@@ -179,11 +136,6 @@ app/
                      # nav (see "Navigation" below) — it's registered as a valid destination but has no
                      # page_link, so it's reachable only via the search box. Visiting it directly with no
                      # prior search shows a "use the sidebar search" prompt instead of erroring.
-    _Article.py      # Full-article view for one Daily Digest storyline — same hidden-page pattern as
-                     # _Player.py. Reads st.session_state["selected_article"] (the whole article dict, not
-                     # just an id — nothing to re-fetch/re-generate) and renders headline/photo/team badge
-                     # plus each of the 3 paragraphs. A "← Back to Daily Digest" button switches back.
-                     # Visiting it directly with nothing selected shows a prompt instead of erroring.
 ingest/
   refresh_data.py   # Pulls all data from pybaseball + MLB Stats API, computes sabermetrics, writes to data/stats.db
 data/
