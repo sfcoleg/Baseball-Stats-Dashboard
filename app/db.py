@@ -1,4 +1,5 @@
 """Shared helpers for reading the cached stats database."""
+import math
 import sqlite3
 import unicodedata
 from datetime import datetime, timedelta
@@ -362,6 +363,76 @@ def load_linescore(game_pk) -> dict | None:
         return resp.json()
     except Exception:
         return None
+
+
+# Win-probability model constants (see load_win_probability()). SIGMA_FULL_GAME
+# is the approximate standard deviation of a full 9-inning MLB game's final
+# score margin; WP_HOME_EDGE_RUNS is a small constant home-field mean shift
+# (rough run-equivalent of predict_game()'s HOME_FIELD_ADVANTAGE probability
+# edge), applied at every point in the game rather than just pre-game.
+SIGMA_FULL_GAME = 3.0
+WP_HOME_EDGE_RUNS = 0.15
+REGULATION_OUTS = 54  # 3 outs x 2 halves x 9 innings
+
+
+def _normal_cdf(z: float) -> float:
+    return 0.5 * (1 + math.erf(z / math.sqrt(2)))
+
+
+@st.cache_data(show_spinner=False, ttl=30, max_entries=20)
+def load_win_probability(game_pk) -> pd.DataFrame:
+    """Estimated home-team win probability at each completed play of one
+    live/finished game — NOT an official MLB stat (the Stats API doesn't
+    publish one; this is our own estimate, same spirit as predict_game()'s
+    pre-game odds). Model: treat the final score margin as normally
+    distributed around the current differential (plus a small constant
+    home-field edge), with a standard deviation that shrinks from
+    SIGMA_FULL_GAME toward 0 as outs remaining in the game shrink toward 0
+    (scaled by sqrt(outs_remaining / REGULATION_OUTS) — variance falls off
+    roughly linearly with scoring opportunities remaining). This has no
+    leverage-index / base-out-state precision (a bases-loaded jam and a
+    solo-runner situation with the same score/outs get the same number) —
+    it's a simplified, score-and-time-based estimate, not a real WP model.
+    Returns columns: seq, label ("Top 3"/"Bot 5"), home_win_prob (0-1),
+    away_score, home_score. Empty (but correctly-columned) if the live feed
+    isn't available yet or the game has no completed plays."""
+    empty = pd.DataFrame(columns=["seq", "label", "home_win_prob", "away_score", "home_score"])
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{int(game_pk)}/feed/live", timeout=10
+        )
+        resp.raise_for_status()
+        plays = resp.json().get("liveData", {}).get("plays", {}).get("allPlays", [])
+    except Exception:
+        return empty
+
+    rows = []
+    for play in plays:
+        about = play.get("about", {})
+        if not about.get("isComplete"):
+            continue
+        inning, is_top = about.get("inning"), about.get("isTopInning")
+        result, count = play.get("result", {}), play.get("count", {})
+        away_score, home_score, outs = result.get("awayScore"), result.get("homeScore"), count.get("outs")
+        if inning is None or is_top is None or away_score is None or home_score is None or outs is None:
+            continue
+
+        half_index = (inning - 1) * 2 + (0 if is_top else 1)
+        outs_elapsed = half_index * 3 + min(outs, 3)
+        total_outs = max(REGULATION_OUTS, inning * 6)
+        outs_remaining = max(total_outs - outs_elapsed, 1)
+
+        sigma = max(SIGMA_FULL_GAME * math.sqrt(outs_remaining / REGULATION_OUTS), 0.35)
+        diff = (home_score - away_score) + WP_HOME_EDGE_RUNS
+        rows.append({
+            "seq": len(rows),
+            "label": f"{'Top' if is_top else 'Bot'} {inning}",
+            "home_win_prob": round(_normal_cdf(diff / sigma), 4),
+            "away_score": away_score,
+            "home_score": home_score,
+        })
+
+    return pd.DataFrame(rows, columns=["seq", "label", "home_win_prob", "away_score", "home_score"])
 
 
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}

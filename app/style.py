@@ -388,3 +388,33 @@ def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, 
         margin=dict(l=50, r=50, t=30, b=30),
     )
     return fig
+
+
+def win_probability_chart(wp_df, home_abbr, home_color):
+    """Live win-probability line (home team's %, see db.load_win_probability())
+    across a game's completed plays, with a dotted 50% reference line and a
+    shaded fill under the curve. x-axis is just play sequence — the play
+    labels ("Top 3", "Bot 5") show on hover instead of as tick labels, since
+    a full game has too many plays to label every tick without crowding."""
+    fig = go.Figure()
+    hover = [
+        f"{label}: {away}-{home}<br>{home_abbr} win prob: {wp*100:.0f}%"
+        for label, away, home, wp in zip(
+            wp_df["label"], wp_df["away_score"], wp_df["home_score"], wp_df["home_win_prob"]
+        )
+    ]
+    fig.add_trace(go.Scatter(
+        x=wp_df["seq"], y=wp_df["home_win_prob"] * 100,
+        mode="lines", line=dict(color=home_color, width=2.5),
+        fill="tozeroy", fillcolor=_hex_to_rgba(home_color, 0.15),
+        text=hover, hoverinfo="text",
+    ))
+    fig.add_hline(y=50, line_dash="dot", line_color="#9AA3B5", line_width=1)
+    fig.update_layout(
+        height=260, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font_color="#FAFAFA", showlegend=False,
+        yaxis=dict(range=[0, 100], ticksuffix="%", title=f"{home_abbr} win probability"),
+        xaxis=dict(showticklabels=False, title=None),
+    )
+    return fig

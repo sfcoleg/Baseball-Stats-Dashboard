@@ -122,6 +122,12 @@ for _, row in games.iterrows():
                     st.session_state[box_key] = not is_shown
                     st.rerun()
 
+                wp_key = f"show_wp_{row['game_pk']}"
+                wp_shown = st.session_state.get(wp_key, False)
+                if st.button("Hide win probability" if wp_shown else "Show win probability", key=f"wp_btn_{row['game_pk']}", use_container_width=True):
+                    st.session_state[wp_key] = not wp_shown
+                    st.rerun()
+
         with hcol:
             st.markdown(
                 f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
@@ -155,6 +161,22 @@ for _, row in games.iterrows():
                         linescore, row["away_abbr"], row["home_abbr"], away_color, home_color,
                     ),
                     unsafe_allow_html=True,
+                )
+
+        if started and st.session_state.get(f"show_wp_{row['game_pk']}", False):
+            wp_df = db.load_win_probability(row["game_pk"])
+            if wp_df.empty:
+                st.caption("Win probability not available yet.")
+            else:
+                st.caption(
+                    "Our own live estimate from the score and outs remaining — not an official "
+                    "MLB stat, and it doesn't account for base-out state (e.g. bases loaded vs. "
+                    "empty with the same score/outs looks identical here)."
+                )
+                st.plotly_chart(
+                    style.win_probability_chart(wp_df, row["home_abbr"], home_color),
+                    use_container_width=True,
+                    key=f"wp_chart_{row['game_pk']}",
                 )
 
 # Converts each game's UTC start time (stored in data-utc, e.g. "2026-07-12T23:10:00Z")
