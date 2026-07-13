@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -279,6 +280,35 @@ if (batting is not None or pitching is not None) and db.player_season_count(mlbI
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.caption("Not enough cached seasons yet to show a career arc for this stat.")
+
+if batting is not None or pitching is not None:
+    style.colored_header("Aging Curve", "chart")
+    aging_stat_label = "OPS" if arc_is_batter else "ERA"
+    league_curve = db.league_aging_curve(arc_is_batter, mtime)
+    player_points = db.player_aging_points(mlbID, arc_is_batter, mtime)
+    if len(player_points) >= 2 and len(league_curve) >= 2:
+        st.caption(
+            f"Dotted line = league average {aging_stat_label} by age (qualified players, every cached season). "
+            f"Solid line = {selected_name}'s own {aging_stat_label} by age."
+        )
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(
+            x=league_curve["Age"], y=league_curve["stat"], mode="lines",
+            name="League average", line=dict(color="#9AA3B5", width=2, dash="dot"),
+        ))
+        fig.add_trace(go.Scatter(
+            x=player_points["Age"], y=player_points["stat"], mode="lines+markers",
+            name=selected_name, line=dict(color="#3B82F6", width=3), marker=dict(size=8),
+        ))
+        fig.update_layout(
+            height=340, margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#FAFAFA", xaxis_title="Age", yaxis_title=aging_stat_label,
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        )
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.caption("Not enough cached seasons yet to show an aging curve for this player.")
 
 if batting is not None or pitching is not None:
     style.colored_header("League Distribution", "chart")
