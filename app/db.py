@@ -681,6 +681,57 @@ def load_all_star_roster(season: int, league: str, db_mtime_val: float) -> pd.Da
     return df.sort_values(["Pos", "Name"]).reset_index(drop=True)
 
 
+# Round-number career counting-stat milestones — mirrors
+# ingest/refresh_data.py's CAREER_MILESTONES (kept as a separate copy
+# rather than a shared import since the ingest script and the app are
+# deliberately independent processes with no shared module).
+CAREER_MILESTONES = {
+    "HR": [300, 400, 500, 600, 700, 800],
+    "H": [2000, 2500, 3000, 3500, 4000],
+    "RBI": [1000, 1500, 2000],
+    "SB": [300, 400, 500, 600],
+    "W": [150, 200, 250, 300],
+    "SO": [2000, 2500, 3000, 3500, 4000],
+    "SV": [200, 300, 400, 500],
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6)
+def milestone_watch(db_mtime_val: float, limit: int = 40) -> pd.DataFrame:
+    """Every active player's distance to their next uncrossed career
+    counting-stat milestone (500 HR, 3000 K, ...), sourced from true
+    career totals (see ingest/refresh_data.py's fetch_career_totals()) —
+    not just this app's own 2010+ cached seasons, so a player whose
+    career started before then is still tracked correctly. One row per
+    (player, stat) — a two-way threat like a 400-SB/300-HR player would
+    appear twice. Sorted closest-first."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM career_totals", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame(columns=["mlbID", "Name", "Tm", "Lev", "Stat", "Total", "Milestone", "Remaining"])
+
+    rows = []
+    for row in df.itertuples():
+        for stat, thresholds in CAREER_MILESTONES.items():
+            total = getattr(row, stat, None)
+            if total is None or pd.isna(total):
+                continue
+            total = int(total)
+            upcoming = [m for m in thresholds if m > total]
+            if not upcoming:
+                continue
+            milestone = min(upcoming)
+            rows.append({
+                "mlbID": int(row.mlbID), "Name": row.Name, "Tm": row.Tm, "Lev": row.Lev,
+                "Stat": stat, "Total": total, "Milestone": milestone, "Remaining": milestone - total,
+            })
+    watch = pd.DataFrame(rows)
+    if watch.empty:
+        return watch
+    return watch.sort_values("Remaining").head(limit).reset_index(drop=True)
+
+
 @st.cache_data(show_spinner=False, max_entries=2)
 def load_standings(db_mtime_val: float) -> pd.DataFrame:
     """Current MLB standings from the Stats API (current standings only,

@@ -469,6 +469,82 @@ def fetch_standings():
     return pd.DataFrame(rows)
 
 
+# Round-number career counting-stat milestones worth watching for. Kept
+# small/well-known on purpose (this is a "who's about to do something
+# historic" list, not an exhaustive stat dump).
+CAREER_MILESTONES = {
+    "HR": [300, 400, 500, 600, 700, 800],
+    "H": [2000, 2500, 3000, 3500, 4000],
+    "RBI": [1000, 1500, 2000],
+    "SB": [300, 400, 500, 600],
+    "W": [150, 200, 250, 300],
+    "SO": [2000, 2500, 3000, 3500, 4000],
+    "SV": [200, 300, 400, 500],
+}
+
+
+def fetch_career_totals():
+    """True career (not just our 2010+ cached seasons) counting stats for
+    every player active in the current season, from the MLB Stats API's
+    own career totals — a player who debuted in, say, 2005 is still
+    tracked accurately, since this doesn't depend on how far back this
+    app's own batting/pitching tables go. Feeds the Milestone Watch page.
+
+    Batched: the API 414s (URI too long) past roughly ~300 comma-joined
+    personIds in one request, so this chunks the current season's full
+    player list into batches rather than fetching one player at a time
+    (which would be ~1000+ requests) or all at once (which 414s)."""
+    print("Fetching career totals for current-season players...")
+    with sqlite3.connect(DB_PATH) as conn:
+        bat_df = pd.read_sql(
+            "SELECT DISTINCT mlbID, Tm, Lev FROM batting WHERE season = ?", conn, params=(CURRENT_SEASON,),
+        )
+        pit_df = pd.read_sql(
+            "SELECT DISTINCT mlbID, Tm, Lev FROM pitching WHERE season = ?", conn, params=(CURRENT_SEASON,),
+        )
+    # A player's own row (whichever table it came from) already carries
+    # their own Tm/Lev — no cross-table merge needed, just pick one map,
+    # preferring batting (a two-way player's "primary" role, matching the
+    # precedent set by db.player_primary_role for how ties are resolved
+    # elsewhere in the app).
+    team_by_id = {row.mlbID: (row.Tm, row.Lev) for row in pit_df.itertuples()}
+    team_by_id.update({row.mlbID: (row.Tm, row.Lev) for row in bat_df.itertuples()})
+    all_ids = sorted({int(i) for i in pd.concat([bat_df["mlbID"], pit_df["mlbID"]]).dropna().unique()})
+
+    rows = []
+    CHUNK = 300
+    for i in range(0, len(all_ids), CHUNK):
+        chunk = all_ids[i:i + CHUNK]
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/people",
+                params={
+                    "personIds": ",".join(str(pid) for pid in chunk),
+                    "hydrate": "stats(group=[hitting,pitching],type=career)",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            people = resp.json().get("people", [])
+        except Exception as e:
+            print(f"  skipped a batch of {len(chunk)} players ({e})")
+            continue
+        for p in people:
+            tm, lev = team_by_id.get(p["id"], (None, None))
+            row = {"mlbID": p["id"], "Name": p.get("fullName"), "Tm": tm, "Lev": lev}
+            for s in p.get("stats", []):
+                if not s.get("splits"):
+                    continue
+                stat = s["splits"][0]["stat"]
+                if s["group"]["displayName"] == "hitting":
+                    row["HR"], row["H"] = stat.get("homeRuns"), stat.get("hits")
+                    row["RBI"], row["SB"] = stat.get("rbi"), stat.get("stolenBases")
+                elif s["group"]["displayName"] == "pitching":
+                    row["W"], row["SO"], row["SV"] = stat.get("wins"), stat.get("strikeOuts"), stat.get("saves")
+            rows.append(row)
+    return pd.DataFrame(rows)
+
+
 def fetch_all_star_roster(season):
     """That season's All-Star Game roster (both leagues) from the MLB Stats
     API. There's no dedicated "All-Star roster" endpoint — instead, the ASG
@@ -603,6 +679,7 @@ def fetch_and_store():
     todays_games = fetch_todays_games()
     standings = fetch_standings()
     all_star_roster = fetch_all_star_roster(CURRENT_SEASON)
+    career_totals = fetch_career_totals()
     history = build_player_history(batting, pitching, recent_batting, recent_pitching)
 
     conn = sqlite3.connect(DB_PATH)
@@ -623,6 +700,11 @@ def fetch_and_store():
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
         if not all_star_roster.empty:
             _store_season_table(conn, "all_star_rosters", all_star_roster, CURRENT_SEASON)
+        # career_totals is a "right now" snapshot (not tied to one cached
+        # season), so it's fully replaced each run like standings/todays_games
+        # rather than appended via _store_season_table.
+        if not career_totals.empty:
+            career_totals.to_sql("career_totals", conn, if_exists="replace", index=False)
         if not recent_batting.empty:
             recent_batting.to_sql("recent_batting", conn, if_exists="replace", index=False)
         if not recent_pitching.empty:
@@ -653,7 +735,7 @@ def fetch_and_store():
         f"{len(fielding)} fielders, {len(recent_batting)} recent-batting rows, "
         f"{len(recent_pitching)} recent-pitching rows, {len(history)} history rows, "
         f"{len(todays_games)} today's games, {len(standings)} standings rows, "
-        f"{len(all_star_roster)} All-Star roster rows to {DB_PATH}"
+        f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows to {DB_PATH}"
     )
 
 

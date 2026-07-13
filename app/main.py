@@ -60,6 +60,7 @@ PAGES = [
     st.Page("pages/9_Standings.py", title="Standings"),
     st.Page("pages/10_Injury_Report.py", title="Injury Report"),
     st.Page("pages/11_Transactions.py", title="Transactions"),
+    st.Page("pages/14_Milestone_Watch.py", title="Milestone Watch"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
 ]
 
