@@ -914,6 +914,34 @@ def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     return grouped.sort_values("Name").reset_index(drop=True)
 
 
+# pybaseball has no Hall of Fame data, and there's no live source wired up
+# here to scrape Baseball-Reference's HOF page — so this is a hand-curated
+# list, not a query. Only covers players confirmed inducted as of when this
+# list was last updated who also have a row somewhere in our 2010+ cached
+# range (anyone who retired before 2010 never appears in this app at all,
+# so there's no point listing them). MLB announces a new class each January
+# and inducts in July — add a line here when that happens; this list may
+# already be behind by the time you're reading it.
+HALL_OF_FAME_MLBIDS = {
+    116539: "Derek Jeter",
+    121250: "Mariano Rivera",
+    136880: "Roy Halladay",
+    116706: "Chipper Jones",
+    123272: "Jim Thome",
+    116034: "Trevor Hoffman",
+    115223: "Vladimir Guerrero",
+    121358: "Iván Rodríguez",
+    115135: "Ken Griffey Jr.",
+    134181: "Adrian Beltré",
+    115732: "Todd Helton",
+    408045: "Joe Mauer",
+    400085: "Ichiro Suzuki",
+    282332: "CC Sabathia",
+    123790: "Billy Wagner",
+    120074: "David Ortiz",
+}
+
+
 # Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
 # the player profile's "Career Arc" stat selector (see pages/_Player.py)
 # offers exactly these, depending on the player's role.

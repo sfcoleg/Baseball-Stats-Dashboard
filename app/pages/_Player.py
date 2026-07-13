@@ -85,11 +85,16 @@ with header_col:
         "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600;margin-left:6px'>RETIRED</span>"
         if is_retired else ""
     )
+    hof_badge = (
+        "<span style='background-color:#FFD70066;color:#3A2F00;padding:4px 12px;"
+        "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:700;margin-left:6px'>HOF</span>"
+        if mlbID in db.HALL_OF_FAME_MLBIDS else ""
+    )
     st.markdown(
         f"# {selected_name} "
         f"<span style='background-color:{color}66;color:#FAFAFA;padding:4px 12px;"
         f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>"
-        f"{retired_badge}",
+        f"{retired_badge}{hof_badge}",
         unsafe_allow_html=True,
     )
     st.caption(f"{nickname} · Age {age} · {selected_roles}")
