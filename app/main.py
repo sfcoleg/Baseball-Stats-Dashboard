@@ -52,7 +52,7 @@ st.markdown(
     "}"
     ".diamond-header {"
     f"  position: fixed; top: 0; left: 230px; height: {HEADER_HEIGHT}; z-index: 1000000;"
-    "  display: flex; align-items: center; gap: 8px; padding-left: 1rem;"
+    "  display: flex; align-items: center; gap: 8px; padding-left: 3rem;"
     "}"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
     f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
