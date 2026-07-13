@@ -8,8 +8,8 @@ baseRadius = "large"
 font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
 
 [theme.sidebar]
-backgroundColor = "#1E3A66"
-secondaryBackgroundColor = "#2A4A7A"
+backgroundColor = "#3D5A8A"
+secondaryBackgroundColor = "#4A6B9E"
 
 [browser]
 gatherUsageStats = false
