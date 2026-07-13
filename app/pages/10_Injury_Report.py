@@ -8,7 +8,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Injury Report | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Injury Report | Diamond Metrics", layout="wide")
 st.title("Injury Report")
 st.caption("Every player currently on a major-league injured list.")
 

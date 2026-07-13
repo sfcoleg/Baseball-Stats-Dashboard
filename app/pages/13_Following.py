@@ -10,7 +10,7 @@ import following
 import style
 import teams
 
-st.set_page_config(page_title="Following | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Following | Diamond Metrics", layout="wide")
 st.title("Following")
 st.caption(
     "Follow teams and players to get a personalized feed: today's games for your teams, "

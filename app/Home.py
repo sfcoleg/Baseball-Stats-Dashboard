@@ -11,9 +11,9 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
-st.title("Sabermetrics Dashboard")
+st.title("Diamond Metrics")
 
 if not db.DB_PATH.exists():
     st.error(

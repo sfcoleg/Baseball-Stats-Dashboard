@@ -10,7 +10,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Baserunning | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Baserunning | Diamond Metrics", layout="wide")
 st.title("Baserunning Stats")
 st.caption("BsR = baserunning runs above average. Sprint Speed/BsR are current-season only.")
 

@@ -9,7 +9,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Pitching | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Pitching | Diamond Metrics", layout="wide")
 st.title("Pitching Stats")
 
 if not db.DB_PATH.exists():

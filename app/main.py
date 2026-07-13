@@ -24,7 +24,7 @@ sys.path.append(str(Path(__file__).resolve().parent))
 import following
 import sidebar
 
-st.set_page_config(page_title="Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them.

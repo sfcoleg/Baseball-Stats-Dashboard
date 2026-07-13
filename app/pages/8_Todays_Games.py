@@ -10,7 +10,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Today's Games | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
 st.caption("Our own win probabilities/odds — not real sportsbook lines. Based on Log5 + starter/bullpen ERA, lineup wOBA, and platoon splits.")
 

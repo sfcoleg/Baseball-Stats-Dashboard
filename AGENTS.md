@@ -1,6 +1,6 @@
-# Sabermetrics Dashboard — Agent Guide
+# Diamond Metrics — Agent Guide
 
-A Streamlit dashboard for MLB batting/pitching/fielding stats and sabermetrics, backed by a local SQLite cache populated from Baseball-Reference and Statcast (via `pybaseball`), plus today's schedule from the MLB Stats API.
+A Streamlit dashboard for MLB batting/pitching/fielding stats and sabermetrics, backed by a local SQLite cache populated from Baseball-Reference and Statcast (via `pybaseball`), plus today's schedule from the MLB Stats API. (App name: Diamond Metrics. The project's folder/repo is still named "Sabermetrics Dashboard" — that's a filesystem/directory-name detail, not the app's branding, and hasn't been renamed.)
 
 ## Running the app
 

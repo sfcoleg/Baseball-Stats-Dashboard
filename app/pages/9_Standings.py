@@ -8,7 +8,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Standings | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Standings | Diamond Metrics", layout="wide")
 
 clicked_team = st.query_params.get("team")
 if clicked_team:

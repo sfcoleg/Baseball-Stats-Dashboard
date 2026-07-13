@@ -10,7 +10,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Player | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Player | Diamond Metrics", layout="wide")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

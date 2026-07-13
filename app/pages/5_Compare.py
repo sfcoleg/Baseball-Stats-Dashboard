@@ -9,7 +9,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Compare | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Compare | Diamond Metrics", layout="wide")
 st.title("Compare Players")
 
 if not db.DB_PATH.exists():

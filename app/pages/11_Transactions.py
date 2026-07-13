@@ -7,7 +7,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import teams
 
-st.set_page_config(page_title="Transactions | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Transactions | Diamond Metrics", layout="wide")
 st.title("Transactions")
 st.caption("Recent MLB roster moves — trades, signings, DFAs, and more.")
 

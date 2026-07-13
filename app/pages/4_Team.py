@@ -9,7 +9,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Team | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Team | Diamond Metrics", layout="wide")
 st.title("Team")
 
 if not db.DB_PATH.exists():

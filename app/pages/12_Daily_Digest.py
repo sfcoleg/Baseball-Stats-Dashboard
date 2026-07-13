@@ -10,7 +10,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Daily Digest | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Daily Digest | Diamond Metrics", layout="wide")
 st.title("Daily Digest")
 
 yesterday = date.today() - timedelta(days=1)

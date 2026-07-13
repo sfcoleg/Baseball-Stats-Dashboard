@@ -8,7 +8,7 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Fielding | Sabermetrics Dashboard", layout="wide")
+st.set_page_config(page_title="Fielding | Diamond Metrics", layout="wide")
 st.title("Fielding Stats")
 st.caption("OAA = outs above average. FRP = fielding runs prevented.")
 
