@@ -40,9 +40,9 @@ following.bootstrap()
 HEADER_HEIGHT = "2.5rem"
 st.markdown(
     "<style>"
-    "@import url('https://fonts.googleapis.com/css2?family=Anton&display=swap');"
+    "@import url('https://fonts.googleapis.com/css2?family=Russo+One&display=swap');"
     ".diamond-title {"
-    "  font-family: 'Anton', sans-serif !important;"
+    "  font-family: 'Russo One', sans-serif !important;"
     "  font-weight: 400 !important;"
     "  font-size: 1.6rem !important;"
     "  line-height: 1.6rem !important;"
