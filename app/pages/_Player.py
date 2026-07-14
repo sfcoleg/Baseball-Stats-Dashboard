@@ -258,8 +258,7 @@ if pitching is not None:
                 st.dataframe(
                     style.style_stats_table(
                         arsenal_display,
-                        higher_better=["Usage %", "Velo (mph)", "Whiff %"],
-                        lower_better=["Run Value"],
+                        higher_better=["Usage %", "Velo (mph)", "Whiff %", "Run Value"],
                         precision={"Usage %": "{:.1f}", "Velo (mph)": "{:.1f}", "Whiff %": "{:.1f}",
                                    "Vert Break (in)": "{:.1f}", "Horz Break (in)": "{:.1f}"},
                     ),
