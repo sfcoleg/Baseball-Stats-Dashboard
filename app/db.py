@@ -1268,3 +1268,16 @@ def current_scoreless_streak(history: pd.DataFrame) -> int | None:
 
 def db_mtime() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
+
+
+def guesser_pool(season: int, _db_mtime: float) -> pd.DataFrame:
+    """Eligible player pool for the Player Guesser mini-game: batters with
+    at least 50 AB or pitchers with at least 20 IP that season, so nobody
+    gets asked to identify someone from a nearly-blank stat line. Two-way
+    players who clear both bars appear once."""
+    batting = load_batting(season, _db_mtime)
+    pitching = load_pitching(season, _db_mtime)
+    eligible_batters = batting.loc[batting["AB"] >= 50, ["mlbID", "Name"]]
+    eligible_pitchers = pitching.loc[pitching["IP"] >= 20, ["mlbID", "Name"]]
+    pool = pd.concat([eligible_batters, eligible_pitchers], ignore_index=True)
+    return pool.drop_duplicates(subset="mlbID").reset_index(drop=True)
