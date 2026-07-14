@@ -205,7 +205,7 @@ if pitching is not None:
     for col, (label, value, pct) in zip(cols, metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
+    std_tab, adv_tab, sc_tab, arsenal_tab = st.tabs(["Standard", "Advanced", "Statcast", "Pitch Arsenal"])
     with std_tab:
         st.dataframe(
             pitching[["G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]]
@@ -233,6 +233,30 @@ if pitching is not None:
             use_container_width=True,
             hide_index=True,
         )
+    with arsenal_tab:
+        arsenal = db.get_player_pitch_arsenal(mlbID, season, mtime)
+        if arsenal.empty:
+            st.caption("No pitch-level Statcast data for this season.")
+        else:
+            arsenal_display = arsenal[[
+                "pitch_name", "usage_pct", "velocity", "whiff_pct",
+                "vert_break", "horz_break", "run_value",
+            ]].rename(columns={
+                "pitch_name": "Pitch", "usage_pct": "Usage %", "velocity": "Velo (mph)",
+                "whiff_pct": "Whiff %", "vert_break": "Vert Break (in)",
+                "horz_break": "Horz Break (in)", "run_value": "Run Value",
+            })
+            st.dataframe(
+                style.style_stats_table(
+                    arsenal_display,
+                    higher_better=["Usage %", "Velo (mph)", "Whiff %"],
+                    lower_better=["Run Value"],
+                    precision={"Usage %": "{:.1f}", "Velo (mph)": "{:.1f}", "Whiff %": "{:.1f}",
+                               "Vert Break (in)": "{:.1f}", "Horz Break (in)": "{:.1f}"},
+                ),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 if not fielding.empty:
     style.colored_header("Fielding", "fielding")

@@ -1217,6 +1217,22 @@ def get_player_fielding(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame
     return fielding[fielding["player_id"] == mlbID].reset_index(drop=True)
 
 
+def get_player_pitch_arsenal(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
+    """One row per pitch type a pitcher threw that season (velocity, usage%,
+    whiff%, run value, movement), sorted by usage — most-thrown pitch
+    first. Empty if the season has no pitch_arsenal table yet (older
+    backfilled seasons) or the pitcher didn't clear Savant's attempt floor."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT * FROM pitch_arsenal WHERE season = ? AND mlbID = ?",
+                conn, params=(season, mlbID),
+            )
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+    return df.sort_values("usage_pct", ascending=False).reset_index(drop=True)
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_player_history(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
     """Day-over-day OPS/ERA (season-to-date) and day_PA/day_H/day_IP/day_ER
@@ -1268,6 +1284,19 @@ def current_scoreless_streak(history: pd.DataFrame) -> int | None:
 
 def db_mtime() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
+
+
+@st.cache_data(show_spinner=False, max_entries=1)
+def load_player_bio(_db_mtime: float) -> pd.DataFrame:
+    """Birthplace (country/state/city) for every player fetch_player_bio has
+    covered so far — powers the World Map page. Empty if the ingest hasn't
+    populated player_bio yet (older DB snapshot)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql("SELECT * FROM player_bio", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame(columns=["mlbID", "Name", "birth_country", "birth_state", "birth_city"])
+    return df
 
 
 def guesser_pool(season: int, _db_mtime: float) -> pd.DataFrame:

@@ -323,6 +323,66 @@ def fetch_fielding(season=CURRENT_SEASON):
     return fielding
 
 
+PITCH_TYPES = ["FF", "SI", "FC", "SL", "CH", "CU", "FS", "KN", "ST", "SV"]
+
+
+def fetch_pitch_arsenal(season=CURRENT_SEASON):
+    """Per-pitcher, per-pitch-type breakdown for the season: usage%, whiff%,
+    and run value from Baseball Savant's pitch-arsenal-stats leaderboard,
+    joined with velocity and movement (induced vertical / horizontal break)
+    from its pitch-movement leaderboard. pybaseball has no wrapper for
+    either, so both are direct CSV fetches like fetch_arm_strength. Movement
+    is only reported per pitch type (not "all" in one call), so this makes
+    one request per type in PITCH_TYPES and concatenates the results."""
+    print(f"Fetching {season} Statcast pitch arsenal (usage/whiff/run value)...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/pitch-arsenal-stats",
+            params={"type": "pitcher", "pitchType": "", "year": season, "team": "", "min": 5, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        stats = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped pitch arsenal stats ({e})")
+        return pd.DataFrame()
+    stats = stats.rename(columns={
+        "last_name, first_name": "Name", "player_id": "mlbID",
+        "pitch_usage": "usage_pct", "whiff_percent": "whiff_pct",
+    })
+
+    print(f"Fetching {season} Statcast pitch movement (velocity/break)...")
+    movement_frames = []
+    for pt in PITCH_TYPES:
+        try:
+            resp = requests.get(
+                "https://baseballsavant.mlb.com/leaderboard/pitch-movement",
+                params={"year": season, "team": "", "min": 5, "pitch_type": pt, "csv": "true"},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            df = pd.read_csv(io.StringIO(resp.text))
+        except Exception as e:
+            print(f"  skipped movement for {pt} ({e})")
+            continue
+        if df.empty:
+            continue
+        movement_frames.append(df.rename(columns={
+            "pitcher_id": "mlbID", "avg_speed": "velocity",
+            "pitcher_break_z_induced": "vert_break", "pitcher_break_x": "horz_break",
+        })[["mlbID", "pitch_type", "velocity", "vert_break", "horz_break"]])
+    movement = pd.concat(movement_frames, ignore_index=True) if movement_frames else pd.DataFrame(
+        columns=["mlbID", "pitch_type", "velocity", "vert_break", "horz_break"]
+    )
+
+    arsenal = stats.merge(movement, on=["mlbID", "pitch_type"], how="left")
+    arsenal["season"] = season
+    return arsenal[[
+        "mlbID", "Name", "pitch_type", "pitch_name", "usage_pct", "whiff_pct",
+        "run_value", "run_value_per_100", "velocity", "vert_break", "horz_break", "season",
+    ]]
+
+
 def fetch_recent_batting():
     """Batting stats over the last day/week/month, for 'headliner' cards that
     highlight hot recent performances rather than just season-to-date bests.
@@ -568,6 +628,51 @@ def fetch_career_totals():
     return pd.DataFrame(rows)
 
 
+def fetch_player_bio():
+    """Birthplace (country/state/city) for every player who's ever appeared
+    in our cached batting/pitching tables, powering the World Map page.
+    Incremental and append-only: player_bio isn't season-keyed, and a
+    player's birthplace never changes, so this only fetches mlbIDs not
+    already in the table — the first run pays for the whole roster, every
+    run after that is just that day's new call-ups."""
+    with sqlite3.connect(DB_PATH) as conn:
+        bat_ids = pd.read_sql("SELECT DISTINCT mlbID FROM batting", conn)["mlbID"]
+        pit_ids = pd.read_sql("SELECT DISTINCT mlbID FROM pitching", conn)["mlbID"]
+        try:
+            existing_ids = set(pd.read_sql("SELECT mlbID FROM player_bio", conn)["mlbID"])
+        except (pd.errors.DatabaseError, sqlite3.OperationalError):
+            existing_ids = set()
+    all_ids = sorted({int(i) for i in pd.concat([bat_ids, pit_ids]).dropna().unique()} - existing_ids)
+    if not all_ids:
+        return pd.DataFrame(columns=["mlbID", "Name", "birth_country", "birth_state", "birth_city"])
+
+    print(f"Fetching birthplace info for {len(all_ids)} new players...")
+    rows = []
+    CHUNK = 300
+    for i in range(0, len(all_ids), CHUNK):
+        chunk = all_ids[i:i + CHUNK]
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/people",
+                params={"personIds": ",".join(str(pid) for pid in chunk)},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            people = resp.json().get("people", [])
+        except Exception as e:
+            print(f"  skipped a batch of {len(chunk)} players ({e})")
+            continue
+        for p in people:
+            rows.append({
+                "mlbID": p["id"],
+                "Name": p.get("fullName"),
+                "birth_country": p.get("birthCountry"),
+                "birth_state": p.get("birthStateProvince"),
+                "birth_city": p.get("birthCity"),
+            })
+    return pd.DataFrame(rows)
+
+
 def record_milestone_achievements(conn, career_totals):
     """Log the first day we notice a player's true career total crossing
     one of CAREER_MILESTONES's thresholds — powers the Milestone Watch
@@ -753,6 +858,7 @@ def fetch_and_store():
     batting = fetch_batting(CURRENT_SEASON)
     pitching = fetch_pitching(CURRENT_SEASON)
     fielding = fetch_fielding(CURRENT_SEASON)
+    pitch_arsenal = fetch_pitch_arsenal(CURRENT_SEASON)
     recent_batting = fetch_recent_batting()
     recent_pitching = fetch_recent_pitching()
     todays_games = fetch_todays_games()
@@ -777,6 +883,12 @@ def fetch_and_store():
         _store_season_table(conn, "batting", batting, CURRENT_SEASON)
         _store_season_table(conn, "pitching", pitching, CURRENT_SEASON)
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
+        if not pitch_arsenal.empty:
+            _store_season_table(conn, "pitch_arsenal", pitch_arsenal, CURRENT_SEASON)
+        conn.commit()  # fetch_player_bio() below queries batting/pitching back out, so they must be committed first
+        player_bio = fetch_player_bio()
+        if not player_bio.empty:
+            player_bio.to_sql("player_bio", conn, if_exists="append", index=False)
         if not all_star_roster.empty:
             _store_season_table(conn, "all_star_rosters", all_star_roster, CURRENT_SEASON)
         # career_totals is a "right now" snapshot (not tied to one cached
