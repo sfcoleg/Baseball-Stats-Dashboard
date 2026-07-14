@@ -21,7 +21,7 @@ if not db.DB_PATH.exists():
 mtime = db.db_mtime()
 season = db.get_seasons("batting")[0]
 
-game_guesser, game_grid = st.tabs(["Player Guesser", "Diamond Grid"])
+game_guesser, game_grid, game_hl = st.tabs(["Player Guesser", "Diamond Grid", "Higher or Lower"])
 
 
 def _guess_and_skip(form_key: str, skip_label: str = "Skip"):
@@ -259,3 +259,81 @@ with game_grid:
             st.session_state["grid_practice"] = _new_grid_state(None)
             st.rerun()
         _render_grid("grid_practice", st.session_state["grid_practice"], "gridpractice")
+
+# ========================================================= Higher or Lower ==
+with game_hl:
+    batters = db.load_batting(season, mtime)
+    batters = batters.loc[batters["AB"] >= 50]
+    if len(batters) < 2:
+        st.info("Not enough player data yet to play — check back once more of the season is in.")
+        st.stop()
+    hl_lookup = batters.set_index("mlbID").to_dict("index")
+    hl_ids = list(hl_lookup)
+
+    style.colored_header("Higher or Lower", "batting")
+    st.caption(
+        f"Two {season} batters (50+ AB), one random stat each round — WAR, HR, RBI, SB, Age, OPS, "
+        "BA, Hits, or Runs. Guess whether the right player is higher or lower than the left, and "
+        "keep the streak alive. The stat changes every round."
+    )
+
+    def _start_hl():
+        first, second = random.sample(hl_ids, 2)
+        st.session_state["hl_game"] = {
+            "current_id": first,
+            "next_id": second,
+            "stat": random.choice(list(minigames.HL_STATS)),
+            "score": 0,
+            "used_ids": {first, second},
+            "ended": False,
+            "reveal": None,
+        }
+
+    hl_game = st.session_state.get("hl_game")
+
+    if hl_game is None:
+        st.write("Build the longest streak you can.")
+        if st.button("Start", key="hl_start"):
+            _start_hl()
+            st.rerun()
+    elif hl_game["ended"]:
+        st.error(f"Streak over — final score: {hl_game['score']}. {hl_game['reveal']}")
+        if st.button("Play Again", key="hl_replay"):
+            _start_hl()
+            st.rerun()
+    else:
+        stat = hl_game["stat"]
+        stat_label = minigames.HL_STATS[stat]["label"]
+        current = hl_lookup[hl_game["current_id"]]
+        nxt = hl_lookup[hl_game["next_id"]]
+
+        st.caption(f"Score: {hl_game['score']}")
+        col1, col2 = st.columns(2)
+        with col1:
+            _show_photo(hl_game["current_id"], width=250)
+            st.markdown(f"**{current['Name']}**")
+            st.metric(stat_label, minigames.hl_format(stat, current[stat]))
+        with col2:
+            _show_photo(hl_game["next_id"], width=250)
+            st.markdown(f"**{nxt['Name']}**")
+            st.metric(stat_label, "?")
+            higher_col, lower_col = st.columns(2)
+            higher_clicked = higher_col.button("Higher ⬆️", key="hl_higher", use_container_width=True)
+            lower_clicked = lower_col.button("Lower ⬇️", key="hl_lower", use_container_width=True)
+
+        if higher_clicked or lower_clicked:
+            correct = minigames.hl_check(current[stat], nxt[stat], guess_higher=higher_clicked)
+            actual = minigames.hl_format(stat, nxt[stat])
+            if correct:
+                st.toast(f"✅ {nxt['Name']}: {actual} {stat_label}")
+                hl_game["score"] += 1
+                hl_game["current_id"] = hl_game["next_id"]
+                remaining = [i for i in hl_ids if i not in hl_game["used_ids"]] or \
+                    [i for i in hl_ids if i != hl_game["current_id"]]
+                hl_game["next_id"] = random.choice(remaining)
+                hl_game["used_ids"].add(hl_game["next_id"])
+                hl_game["stat"] = random.choice(list(minigames.HL_STATS))
+            else:
+                hl_game["ended"] = True
+                hl_game["reveal"] = f"{nxt['Name']} was {actual} {stat_label} vs. {current['Name']}'s {minigames.hl_format(stat, current[stat])}."
+            st.rerun()

@@ -1,5 +1,5 @@
-"""Shared helpers for the Mini Games tab's Player Guesser and Diamond Grid
-games.
+"""Shared helpers for the Mini Games tab's Player Guesser, Diamond Grid, and
+Higher or Lower games.
 
 Streak persistence uses the same browser-localStorage pattern as
 following.py (see that file's docstring for the full rationale) — there's
@@ -152,3 +152,34 @@ def check_grid_guess(guess: str, categories: dict, names: dict, row_key: str, co
     if match in used_ids:
         return {"correct": False, "reason": "already_used", "mlbID": match, "name": names[match]}
     return {"correct": True, "mlbID": match, "name": names[match]}
+
+
+# ------------------------------------------------------------ Higher/Lower --
+
+# Batters only (per the game's design) — a mix of counting stats, rate
+# stats, and bio (Age), so the same two players can flip who's "ahead"
+# depending which stat comes up next round.
+HL_STATS = {
+    "WAR": {"label": "WAR", "fmt": "{:.1f}"},
+    "HR": {"label": "Home Runs", "fmt": "{:.0f}"},
+    "RBI": {"label": "RBI", "fmt": "{:.0f}"},
+    "SB": {"label": "Stolen Bases", "fmt": "{:.0f}"},
+    "Age": {"label": "Age", "fmt": "{:.0f}"},
+    "OPS": {"label": "OPS", "fmt": "{:.3f}"},
+    "BA": {"label": "Batting Average", "fmt": "{:.3f}"},
+    "H": {"label": "Hits", "fmt": "{:.0f}"},
+    "R": {"label": "Runs", "fmt": "{:.0f}"},
+}
+
+
+def hl_format(stat_key: str, value) -> str:
+    return HL_STATS[stat_key]["fmt"].format(value)
+
+
+def hl_check(current_value, next_value, guess_higher: bool) -> bool:
+    """A tie always counts as correct (whichever way you guessed) — it's a
+    less frustrating rule than an arbitrary tie-break, and standard for
+    this style of game."""
+    if next_value == current_value:
+        return True
+    return (next_value > current_value) if guess_higher else (next_value < current_value)
