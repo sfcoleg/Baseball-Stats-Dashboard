@@ -10,6 +10,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import minigames
 import style
+import teams
 
 st.set_page_config(page_title="Mini Games | Diamond Metrics", layout="wide")
 st.title("Mini Games")
@@ -21,7 +22,9 @@ if not db.DB_PATH.exists():
 mtime = db.db_mtime()
 season = db.get_seasons("batting")[0]
 
-game_guesser, game_grid, game_hl = st.tabs(["Player Guesser", "Diamond Grid", "Higher or Lower"])
+game_guesser, game_grid, game_hl, game_cp = st.tabs(
+    ["Player Guesser", "Diamond Grid", "Higher or Lower", "Career Path"]
+)
 
 
 def _guess_and_skip(form_key: str, skip_label: str = "Skip"):
@@ -336,4 +339,95 @@ with game_hl:
             else:
                 hl_game["ended"] = True
                 hl_game["reveal"] = f"{nxt['Name']} was {actual} {stat_label} vs. {current['Name']}'s {minigames.hl_format(stat, current[stat])}."
+            st.rerun()
+
+# =============================================================== Career Path
+with game_cp:
+    cp_pool = db.career_paths_pool(mtime)
+    cp_ids = list(cp_pool)
+    if len(cp_ids) < 10:
+        st.info("Not enough player data yet to play — check back once more of the season is in.")
+        st.stop()
+
+    CP_ROUNDS = 10
+
+    style.colored_header("Career Path", "chart")
+    st.caption(
+        "Teams revealed oldest-first, one at a time — guess the player before you run out of "
+        "clues. Fewer reveals = more points. Full name or last name both work."
+    )
+
+    def _cp_new_round(exclude_id=None):
+        candidates = [i for i in cp_ids if i != exclude_id] or cp_ids
+        pid = random.choice(candidates)
+        return {"mlbID": pid, "revealed": 1}
+
+    def _start_cp():
+        st.session_state["cp_game"] = {
+            "round_num": 1,
+            "total_score": 0,
+            "current": _cp_new_round(),
+            "done": False,
+        }
+
+    if "cp_game" not in st.session_state:
+        _start_cp()
+    cp_game = st.session_state["cp_game"]
+
+    if cp_game["done"]:
+        st.success(f"Final score: {cp_game['total_score']} (out of a possible {CP_ROUNDS * 100})")
+        if st.button("Play Again", key="cp_replay"):
+            _start_cp()
+            st.rerun()
+    else:
+        current = cp_game["current"]
+        player = cp_pool[current["mlbID"]]
+        team_seq, name = player["teams"], player["name"]
+
+        st.caption(f"Round {cp_game['round_num']} of {CP_ROUNDS}  ·  Score: {cp_game['total_score']}")
+
+        chip_cols = st.columns(len(team_seq))
+        for i, abbr in enumerate(team_seq):
+            with chip_cols[i]:
+                if i < current["revealed"]:
+                    color = teams.color_for_abbr(abbr)
+                    st.markdown(
+                        f"<div style='background-color:{color}33;border:1px solid {color};"
+                        f"border-radius:8px;padding:10px;text-align:center;font-weight:700'>"
+                        f"{abbr}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "<div style='background-color:#ffffff11;border:1px dashed #ffffff44;"
+                        "border-radius:8px;padding:10px;text-align:center;color:#ffffff66'>?</div>",
+                        unsafe_allow_html=True,
+                    )
+
+        def _cp_advance(points_earned):
+            cp_game["total_score"] += points_earned
+            if cp_game["round_num"] >= CP_ROUNDS:
+                cp_game["done"] = True
+            else:
+                cp_game["round_num"] += 1
+                cp_game["current"] = _cp_new_round(exclude_id=current["mlbID"])
+
+        guess, reveal_clicked = _guess_and_skip("cp_guess", skip_label="Reveal Next Team")
+        if guess is not None:
+            if minigames.is_correct_guess(guess, name):
+                points = minigames.cp_points(current["revealed"])
+                st.toast(f"✅ {name}! +{points} pts")
+                _cp_advance(points)
+            elif current["revealed"] < len(team_seq):
+                current["revealed"] += 1
+            else:
+                st.toast(f"❌ It was {name}")
+                _cp_advance(0)
+            st.rerun()
+        elif reveal_clicked:
+            if current["revealed"] < len(team_seq):
+                current["revealed"] += 1
+            else:
+                st.toast(f"It was {name}")
+                _cp_advance(0)
             st.rerun()

@@ -1366,3 +1366,32 @@ def grid_pool(_db_mtime: float) -> dict:
                 categories[f"career:{stat}"] = {"label": label, "ids": ids}
 
     return {"categories": categories, "names": names, "current_team": current_team}
+
+
+@st.cache_data(show_spinner=False, max_entries=1)
+def career_paths_pool(_db_mtime: float) -> dict:
+    """mlbID -> {"name", "teams"} for the Career Path mini-game: each
+    player's team stints in chronological order (season by season,
+    consecutive duplicate teams collapsed), spanning every cached season
+    (2010+). Only players who changed teams at least once are included —
+    a single-team career would give away the answer on the very first
+    reveal."""
+    with sqlite3.connect(DB_PATH) as conn:
+        batting = pd.read_sql("SELECT mlbID, Name, Tm, Lev, season FROM batting", conn)
+        pitching = pd.read_sql("SELECT mlbID, Name, Tm, Lev, season FROM pitching", conn)
+
+    batting = teams.add_team_abbr(batting)
+    pitching = teams.add_team_abbr(pitching)
+    combined = pd.concat([batting, pitching], ignore_index=True)
+    combined = combined.dropna(subset=["mlbID", "Tm"]).sort_values(["mlbID", "season"])
+    combined = combined.drop_duplicates(subset=["mlbID", "season"], keep="first")
+
+    paths = {}
+    for mlbID, group in combined.groupby("mlbID"):
+        stints = []
+        for tm in group["Tm"]:
+            if not stints or stints[-1] != tm:
+                stints.append(tm)
+        if len(stints) >= 2:
+            paths[int(mlbID)] = {"name": group["Name"].iloc[-1], "teams": stints}
+    return paths

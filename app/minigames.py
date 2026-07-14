@@ -183,3 +183,18 @@ def hl_check(current_value, next_value, guess_higher: bool) -> bool:
     if next_value == current_value:
         return True
     return (next_value > current_value) if guess_higher else (next_value < current_value)
+
+
+# -------------------------------------------------------------- Career Path --
+
+# Points for guessing correctly after N teams have been revealed (1st entry
+# = correct on just the earliest team, the hardest possible clue). Reveals
+# beyond the table's length (a long-tenured journeyman) all score the
+# floor value — still worth something, since exhausting every clue and
+# still landing the right name isn't nothing.
+CP_POINTS = [100, 70, 50, 30, 15]
+
+
+def cp_points(reveals_used: int) -> int:
+    idx = min(reveals_used, len(CP_POINTS)) - 1
+    return CP_POINTS[idx]
