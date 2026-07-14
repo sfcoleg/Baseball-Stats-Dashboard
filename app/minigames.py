@@ -1,4 +1,5 @@
-"""Shared helpers for the Mini Games tab's Player Guesser game.
+"""Shared helpers for the Mini Games tab's Player Guesser and Diamond Grid
+games.
 
 Streak persistence uses the same browser-localStorage pattern as
 following.py (see that file's docstring for the full rationale) — there's
@@ -7,6 +8,7 @@ per-browser, not server-side.
 """
 import hashlib
 import json
+import random
 from datetime import date, timedelta
 
 import streamlit as st
@@ -113,3 +115,40 @@ def save_daily() -> None:
     payload = json.dumps(st.session_state.get("guesser_daily", {}))
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
     components.html(f"<script>localStorage.setItem('{_STORAGE_KEY}', {js_literal});</script>", height=0)
+
+
+# ------------------------------------------------------------ Diamond Grid --
+
+def pick_grid_categories(categories: dict, seed_source: str | None, attempts: int = 300):
+    """Randomly picks 3 row + 3 column category keys such that every one of
+    the 9 row x column intersections has at least one real answer. Passing
+    a seed_source (e.g. today's date) makes the pick reproducible — so a
+    daily grid is the same for every visitor — while None gives a fresh
+    random grid each time (practice mode). Returns (row_keys, col_keys), or
+    None in the astronomically unlikely case no valid combo is found."""
+    keys = list(categories.keys())
+    rng = random.Random(seed_source) if seed_source is not None else random
+    for _ in range(attempts):
+        chosen = rng.sample(keys, 6)
+        row_keys, col_keys = chosen[:3], chosen[3:]
+        if all(categories[r]["ids"] & categories[c]["ids"] for r in row_keys for c in col_keys):
+            return row_keys, col_keys
+    return None
+
+
+def check_grid_guess(guess: str, categories: dict, names: dict, row_key: str, col_key: str, used_ids: set) -> dict:
+    """Checks a typed guess against a grid cell's eligible players (the
+    intersection of its row and column category). Requires a normalized
+    full-name match — no last-name leniency here, since a grid's answer
+    pool is large enough that last names collide often. Returns a dict
+    with at least 'correct'; on a correct guess also 'mlbID' and 'name'."""
+    eligible = categories[row_key]["ids"] & categories[col_key]["ids"]
+    guess_norm = normalize_guess(guess)
+    if not guess_norm:
+        return {"correct": False, "reason": "empty"}
+    match = next((pid for pid in eligible if normalize_guess(names.get(pid, "")) == guess_norm), None)
+    if match is None:
+        return {"correct": False, "reason": "not_eligible"}
+    if match in used_ids:
+        return {"correct": False, "reason": "already_used", "mlbID": match, "name": names[match]}
+    return {"correct": True, "mlbID": match, "name": names[match]}

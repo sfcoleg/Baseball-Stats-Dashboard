@@ -1281,3 +1281,88 @@ def guesser_pool(season: int, _db_mtime: float) -> pd.DataFrame:
     eligible_pitchers = pitching.loc[pitching["IP"] >= 20, ["mlbID", "Name"]]
     pool = pd.concat([eligible_batters, eligible_pitchers], ignore_index=True)
     return pool.drop_duplicates(subset="mlbID").reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=1)
+def grid_pool(_db_mtime: float) -> dict:
+    """Category -> eligible-player data for the Diamond Grid mini-game
+    (team affiliation + single-season achievements span every cached
+    season, 2010+; career milestones come from career_totals — the MLB
+    API's true career totals for this season's active players, same
+    source Milestone Watch uses). Returns {"categories": {key: {"label",
+    "ids"}}, "names": {mlbID: Name}, "current_team": {mlbID: abbr}}."""
+    with sqlite3.connect(DB_PATH) as conn:
+        batting = pd.read_sql("SELECT mlbID, Name, Tm, Lev, AB, HR, SB, BA, WAR FROM batting", conn)
+        pitching = pd.read_sql("SELECT mlbID, Name, Tm, Lev, IP, W, SO, SV, ERA, WAR FROM pitching", conn)
+        try:
+            career = pd.read_sql("SELECT * FROM career_totals", conn)
+        except pd.errors.DatabaseError:
+            career = pd.DataFrame()
+        try:
+            all_stars = pd.read_sql("SELECT DISTINCT mlbID FROM all_star_rosters", conn)
+        except pd.errors.DatabaseError:
+            all_stars = pd.DataFrame(columns=["mlbID"])
+
+    batting = teams.add_team_abbr(batting)
+    pitching = teams.add_team_abbr(pitching)
+
+    names = {}
+    for df in (batting, pitching):
+        for row in df.itertuples():
+            if pd.notna(row.mlbID):
+                names[int(row.mlbID)] = row.Name
+
+    categories = {}
+
+    for abbr, nickname in teams.all_teams():
+        ids = set(batting.loc[batting["Tm"] == abbr, "mlbID"]) | set(pitching.loc[pitching["Tm"] == abbr, "mlbID"])
+        ids = {int(i) for i in ids if pd.notna(i)}
+        if ids:
+            categories[f"team:{abbr}"] = {"label": f"Played for the {nickname}", "ids": ids}
+
+    season_stats = [
+        ("40+ HR in a season", batting.loc[batting["HR"] >= 40, "mlbID"]),
+        ("30+ SB in a season", batting.loc[batting["SB"] >= 30, "mlbID"]),
+        (".320+ AVG in a season (200+ AB)", batting.loc[(batting["BA"] >= .320) & (batting["AB"] >= 200), "mlbID"]),
+        ("30-30 season (30+ HR & 30+ SB)", batting.loc[(batting["HR"] >= 30) & (batting["SB"] >= 30), "mlbID"]),
+        ("6+ WAR season (batter)", batting.loc[batting["WAR"] >= 6, "mlbID"]),
+        ("20+ Wins in a season", pitching.loc[pitching["W"] >= 20, "mlbID"]),
+        ("200+ Strikeouts in a season", pitching.loc[pitching["SO"] >= 200, "mlbID"]),
+        ("40+ Saves in a season", pitching.loc[pitching["SV"] >= 40, "mlbID"]),
+        ("Sub-3.00 ERA in a season (100+ IP)", pitching.loc[(pitching["ERA"] < 3.00) & (pitching["IP"] >= 100), "mlbID"]),
+        ("6+ WAR season (pitcher)", pitching.loc[pitching["WAR"] >= 6, "mlbID"]),
+    ]
+    for label, id_series in season_stats:
+        ids = {int(i) for i in id_series.dropna().unique()}
+        if ids:
+            categories[f"season:{label}"] = {"label": label, "ids": ids}
+
+    if not all_stars.empty:
+        ids = {int(i) for i in all_stars["mlbID"].dropna().unique()}
+        if ids:
+            categories["career:allstar"] = {"label": "All-Star selection", "ids": ids}
+
+    current_team = {}
+    if not career.empty:
+        career = teams.add_team_abbr(career)
+        for row in career.itertuples():
+            if pd.notna(row.mlbID):
+                mlbID = int(row.mlbID)
+                names.setdefault(mlbID, row.Name)
+                if row.Tm:
+                    current_team[mlbID] = row.Tm
+
+        career_bars = {
+            "HR": ("400+ Career Home Runs", 400), "H": ("2,500+ Career Hits", 2500),
+            "RBI": ("1,200+ Career RBI", 1200), "SB": ("300+ Career Stolen Bases", 300),
+            "W": ("150+ Career Wins", 150), "SO": ("2,000+ Career Strikeouts", 2000),
+            "SV": ("250+ Career Saves", 250),
+        }
+        for stat, (label, bar) in career_bars.items():
+            if stat not in career.columns:
+                continue
+            ids = {int(i) for i in career.loc[career[stat] >= bar, "mlbID"].dropna().unique()}
+            if ids:
+                categories[f"career:{stat}"] = {"label": label, "ids": ids}
+
+    return {"categories": categories, "names": names, "current_team": current_team}
