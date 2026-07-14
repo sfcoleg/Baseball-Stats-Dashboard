@@ -628,51 +628,6 @@ def fetch_career_totals():
     return pd.DataFrame(rows)
 
 
-def fetch_player_bio():
-    """Birthplace (country/state/city) for every player who's ever appeared
-    in our cached batting/pitching tables, powering the World Map page.
-    Incremental and append-only: player_bio isn't season-keyed, and a
-    player's birthplace never changes, so this only fetches mlbIDs not
-    already in the table — the first run pays for the whole roster, every
-    run after that is just that day's new call-ups."""
-    with sqlite3.connect(DB_PATH) as conn:
-        bat_ids = pd.read_sql("SELECT DISTINCT mlbID FROM batting", conn)["mlbID"]
-        pit_ids = pd.read_sql("SELECT DISTINCT mlbID FROM pitching", conn)["mlbID"]
-        try:
-            existing_ids = set(pd.read_sql("SELECT mlbID FROM player_bio", conn)["mlbID"])
-        except (pd.errors.DatabaseError, sqlite3.OperationalError):
-            existing_ids = set()
-    all_ids = sorted({int(i) for i in pd.concat([bat_ids, pit_ids]).dropna().unique()} - existing_ids)
-    if not all_ids:
-        return pd.DataFrame(columns=["mlbID", "Name", "birth_country", "birth_state", "birth_city"])
-
-    print(f"Fetching birthplace info for {len(all_ids)} new players...")
-    rows = []
-    CHUNK = 300
-    for i in range(0, len(all_ids), CHUNK):
-        chunk = all_ids[i:i + CHUNK]
-        try:
-            resp = requests.get(
-                "https://statsapi.mlb.com/api/v1/people",
-                params={"personIds": ",".join(str(pid) for pid in chunk)},
-                timeout=30,
-            )
-            resp.raise_for_status()
-            people = resp.json().get("people", [])
-        except Exception as e:
-            print(f"  skipped a batch of {len(chunk)} players ({e})")
-            continue
-        for p in people:
-            rows.append({
-                "mlbID": p["id"],
-                "Name": p.get("fullName"),
-                "birth_country": p.get("birthCountry"),
-                "birth_state": p.get("birthStateProvince"),
-                "birth_city": p.get("birthCity"),
-            })
-    return pd.DataFrame(rows)
-
-
 def record_milestone_achievements(conn, career_totals):
     """Log the first day we notice a player's true career total crossing
     one of CAREER_MILESTONES's thresholds — powers the Milestone Watch
@@ -885,10 +840,6 @@ def fetch_and_store():
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
         if not pitch_arsenal.empty:
             _store_season_table(conn, "pitch_arsenal", pitch_arsenal, CURRENT_SEASON)
-        conn.commit()  # fetch_player_bio() below queries batting/pitching back out, so they must be committed first
-        player_bio = fetch_player_bio()
-        if not player_bio.empty:
-            player_bio.to_sql("player_bio", conn, if_exists="append", index=False)
         if not all_star_roster.empty:
             _store_season_table(conn, "all_star_rosters", all_star_roster, CURRENT_SEASON)
         # career_totals is a "right now" snapshot (not tied to one cached

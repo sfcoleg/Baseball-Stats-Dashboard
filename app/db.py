@@ -70,7 +70,7 @@ def _select(cols: list[str]) -> str:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def load_batting(season: int, _db_mtime: float) -> pd.DataFrame:
+def load_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
             f"SELECT {_select(BATTING_COLS)} FROM batting WHERE season = ?", conn, params=(season,)
@@ -79,7 +79,7 @@ def load_batting(season: int, _db_mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def load_pitching(season: int, _db_mtime: float) -> pd.DataFrame:
+def load_pitching(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
             f"SELECT {_select(PITCHING_COLS)} FROM pitching WHERE season = ?", conn, params=(season,)
@@ -88,7 +88,7 @@ def load_pitching(season: int, _db_mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def load_fielding(season: int, _db_mtime: float) -> pd.DataFrame:
+def load_fielding(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
             f"SELECT {_select(FIELDING_COLS)} FROM fielding WHERE season = ?", conn, params=(season,)
@@ -101,7 +101,7 @@ RECENT_MIN_IP = {"day": 1, "week": 8, "month": 20}
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def load_recent_batting(season: int, _db_mtime: float) -> pd.DataFrame:
+def load_recent_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
@@ -114,7 +114,7 @@ def load_recent_batting(season: int, _db_mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
-def load_recent_pitching(season: int, _db_mtime: float) -> pd.DataFrame:
+def load_recent_pitching(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
@@ -545,7 +545,7 @@ _COMPOSITE_MIN_RP_IP = 15
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=5)
-def load_league_catchers(_db_mtime: float) -> pd.DataFrame:
+def load_league_catchers(db_mtime_val: float) -> pd.DataFrame:
     """Every team's primary catcher (mlbID/Name/Tm), assembled from each
     team's live depth chart (see load_depth_chart) — the only source of
     catcher identity available here, since Statcast Outs Above Average
@@ -1286,26 +1286,13 @@ def db_mtime() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
 
 
-@st.cache_data(show_spinner=False, max_entries=1)
-def load_player_bio(_db_mtime: float) -> pd.DataFrame:
-    """Birthplace (country/state/city) for every player fetch_player_bio has
-    covered so far — powers the World Map page. Empty if the ingest hasn't
-    populated player_bio yet (older DB snapshot)."""
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            df = pd.read_sql("SELECT * FROM player_bio", conn)
-        except pd.errors.DatabaseError:
-            return pd.DataFrame(columns=["mlbID", "Name", "birth_country", "birth_state", "birth_city"])
-    return df
-
-
-def guesser_pool(season: int, _db_mtime: float) -> pd.DataFrame:
+def guesser_pool(season: int, db_mtime_val: float) -> pd.DataFrame:
     """Eligible player pool for the Player Guesser mini-game: batters with
     at least 50 AB or pitchers with at least 20 IP that season, so nobody
     gets asked to identify someone from a nearly-blank stat line. Two-way
     players who clear both bars appear once."""
-    batting = load_batting(season, _db_mtime)
-    pitching = load_pitching(season, _db_mtime)
+    batting = load_batting(season, db_mtime_val)
+    pitching = load_pitching(season, db_mtime_val)
     eligible_batters = batting.loc[batting["AB"] >= 50, ["mlbID", "Name"]]
     eligible_pitchers = pitching.loc[pitching["IP"] >= 20, ["mlbID", "Name"]]
     pool = pd.concat([eligible_batters, eligible_pitchers], ignore_index=True)
@@ -1313,7 +1300,7 @@ def guesser_pool(season: int, _db_mtime: float) -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False, max_entries=1)
-def grid_pool(_db_mtime: float) -> dict:
+def grid_pool(db_mtime_val: float) -> dict:
     """Category -> eligible-player data for the Diamond Grid mini-game
     (team affiliation + single-season achievements span every cached
     season, 2010+; career milestones come from career_totals — the MLB
@@ -1398,7 +1385,7 @@ def grid_pool(_db_mtime: float) -> dict:
 
 
 @st.cache_data(show_spinner=False, max_entries=1)
-def career_paths_pool(_db_mtime: float) -> dict:
+def career_paths_pool(db_mtime_val: float) -> dict:
     """mlbID -> {"name", "teams"} for the Career Path mini-game: each
     player's team stints in chronological order (season by season,
     consecutive duplicate teams collapsed), spanning every cached season

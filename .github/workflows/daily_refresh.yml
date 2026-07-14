@@ -2,9 +2,12 @@ name: Daily data refresh
 
 on:
   schedule:
-    # 11:00 UTC ≈ 6-7am US Eastern depending on daylight saving.
-    # Adjust the hour below if you want a different local time.
-    - cron: "0 11 * * *"
+    # 13:00 UTC = 6:00am Pacific Daylight Time (UTC-7, in effect roughly
+    # Mar-Nov). During Pacific Standard Time (UTC-8, winter) this runs at
+    # 5:00am instead — GitHub Actions' cron has no DST awareness, so a
+    # single UTC hour can't hit 6:00am Pacific year-round. Bump to "0 14"
+    # if you'd rather it be exact in winter and 7am in summer.
+    - cron: "0 13 * * *"
   workflow_dispatch: {}  # lets you trigger a refresh manually from the Actions tab
 
 permissions:
