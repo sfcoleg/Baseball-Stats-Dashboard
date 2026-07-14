@@ -1,6 +1,7 @@
 import sys
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import plotly.express as px
 import streamlit as st
@@ -12,15 +13,25 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
+# The data refresh cron runs at 6:00am Pacific, so "today" for this app's
+# purposes means the Pacific calendar day — not the server process's own
+# local date. Streamlit Community Cloud runs its servers in UTC, which is
+# far enough ahead of Pacific that plain date.today() rolls over to the
+# next day while it's still evening in Pacific time, showing "tomorrow's"
+# content hours too early. today_pacific() is the one source of truth for
+# "what day is it" anywhere on this page.
+def today_pacific() -> date:
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
+
+
 # Temporary: All-Star week has no regular-season games, so the normal "Hot
 # Yesterday" query has nothing to show on the day right after the Home Run
-# Derby / All-Star Game. Keyed by the date this page is being VIEWED on
-# (i.e. "today"), since "yesterday" is computed from that. The Derby-winner
-# name is a placeholder until the user confirms who won — update it then.
+# Derby / All-Star Game. Keyed by the Pacific date this page is being
+# VIEWED on (i.e. "today"), since "yesterday" is computed from that.
 # Remove this whole block once the 2026 All-Star break has passed.
 HOT_YESTERDAY_OVERRIDES = {
     "2026-07-14": {
-        "batting": {"name": "TBD — Home Run Derby Winner", "note": "2026 Home Run Derby champion"},
+        "batting": {"name": "Jordan Walker", "note": "2026 Home Run Derby champion"},
         "pitching": "No pitcher pitched yesterday — it's All-Star week.",
     },
 }
@@ -59,10 +70,10 @@ if milestones:
                 style.milestone_card(m["mlbID"], m["Name"], abbr, color, m["text"])
     st.divider()
 
-if season == date.today().year:
+if season == today_pacific().year:
     style.colored_header("Batting Headliners", "batting")
     h1, h2, h3 = st.columns(3)
-    batting_override = HOT_YESTERDAY_OVERRIDES.get(date.today().isoformat(), {}).get("batting")
+    batting_override = HOT_YESTERDAY_OVERRIDES.get(today_pacific().isoformat(), {}).get("batting")
     for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
@@ -83,7 +94,7 @@ if season == date.today().year:
 
     style.colored_header("Pitching Headliners", "pitching")
     p1, p2, p3 = st.columns(3)
-    pitching_override = HOT_YESTERDAY_OVERRIDES.get(date.today().isoformat(), {}).get("pitching")
+    pitching_override = HOT_YESTERDAY_OVERRIDES.get(today_pacific().isoformat(), {}).get("pitching")
     for col, period, label in [(p1, "day", "Hot Yesterday"), (p2, "week", "Hot This Week"), (p3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):

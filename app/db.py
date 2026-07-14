@@ -60,7 +60,7 @@ PITCHING_COLS = [
     "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR",
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against", "season",
 ]
-FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "season"]
+FIELDING_COLS = ["Name", "player_id", "Tm", "Pos", "OAA", "FRP", "success_rate", "arm_strength", "season"]
 RECENT_BATTING_COLS = ["mlbID", "Name", "Tm", "Lev", "PA", "H", "2B", "3B", "HR", "RBI", "SB", "OPS", "period", "season"]
 RECENT_PITCHING_COLS = ["mlbID", "Name", "Tm", "Lev", "IP", "ERA", "GSc", "SO", "ER", "BB", "HBP", "H", "SV", "period", "season"]
 

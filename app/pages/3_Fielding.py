@@ -10,7 +10,7 @@ import teams
 
 st.set_page_config(page_title="Fielding | Diamond Metrics", layout="wide")
 st.title("Fielding Stats")
-st.caption("OAA = outs above average. FRP = fielding runs prevented.")
+st.caption("OAA = outs above average. FRP = fielding runs prevented. Arm Strength = average recorded throw velocity (mph).")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -38,14 +38,15 @@ filtered = filtered.sort_values("OAA", ascending=False).reset_index(drop=True)
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 display = teams.add_team_abbr_from_nickname(table_rows)[
-    ["Name", "Tm", "Pos", "OAA", "FRP", "success_rate"]
-].rename(columns={"success_rate": "Success Rate"})
+    ["Name", "Tm", "Pos", "OAA", "FRP", "success_rate", "arm_strength"]
+].rename(columns={"success_rate": "Success Rate", "arm_strength": "Arm Strength"})
 st.dataframe(
     style.style_stats_table(
         display,
-        higher_better=["OAA", "FRP"],
+        higher_better=["OAA", "FRP", "Arm Strength"],
         team_col="Tm",
         team_color_fn=teams.color_for_abbr,
+        precision={"Arm Strength": "{:.1f}"},
     ),
     use_container_width=True,
     height=600,

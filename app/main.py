@@ -57,11 +57,22 @@ st.markdown(
     "}"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
     f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
+    # Mobile: Streamlit's sidebar becomes an off-canvas overlay below this
+    # width rather than a permanent 230px column, so the desktop offset
+    # above (left: 230px, padding-left: 4.5rem — pushing the header clear
+    # of the sidebar AND its own collapse arrow) leaves nothing but empty
+    # space on a phone and shoves the logo/title towards the right edge.
+    # Anchor to the left edge instead and shrink both down to fit.
+    "@media (max-width: 640px) {"
+    "  .diamond-header { left: 0 !important; padding-left: 0.75rem !important; gap: 6px !important; }"
+    "  .diamond-logo svg { width: 20px !important; height: 20px !important; }"
+    "  .diamond-title { font-size: 1.05rem !important; line-height: 1.05rem !important; }"
+    "}"
     "</style>",
     unsafe_allow_html=True,
 )
 st.markdown(
-    f"<div class='diamond-header'>{style.diamond_logo(26)}"
+    f"<div class='diamond-header'><span class='diamond-logo'>{style.diamond_logo(26)}</span>"
     f"<h1 class='diamond-title'>Diamond Metrics</h1></div>",
     unsafe_allow_html=True,
 )
@@ -76,6 +87,25 @@ st.markdown(
     "<style>"
     "[data-testid='stSidebarHeader'] { height: 1.5rem; }"
     "[data-testid='stSidebar'] { min-width: 230px; max-width: 230px; }"
+    "</style>",
+    unsafe_allow_html=True,
+)
+
+# Site-wide mobile pass — everything here was sized for a wide desktop
+# layout (Streamlit's own default heading sizes, plus this app's custom
+# stat badges/cards), which reads as oversized once a phone shrinks
+# everything else around it down to a ~375-430px viewport. Scoped to a
+# single breakpoint so desktop is untouched.
+st.markdown(
+    "<style>"
+    "@media (max-width: 640px) {"
+    "  [data-testid='stMainBlockContainer'] { padding-left: 1rem !important; padding-right: 1rem !important; }"
+    "  h1 { font-size: 1.5rem !important; }"
+    "  h2 { font-size: 1.25rem !important; }"
+    "  h3 { font-size: 1.05rem !important; }"
+    "  [data-testid='stMetricValue'] { font-size: 1.3rem !important; }"
+    "  [data-testid='stMetricLabel'] { font-size: 0.8rem !important; }"
+    "}"
     "</style>",
     unsafe_allow_html=True,
 )

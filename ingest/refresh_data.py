@@ -285,6 +285,27 @@ def fetch_pitching(season=CURRENT_SEASON):
     return pitching
 
 
+def fetch_arm_strength(season=CURRENT_SEASON):
+    """Statcast's arm-strength leaderboard (average recorded throw velocity,
+    mph, across every tracked throw) for every fielder. pybaseball has no
+    wrapper for this specific leaderboard, so this hits Baseball Savant's
+    CSV export directly — the same approach fetch_all_star_roster uses for
+    an endpoint pybaseball doesn't cover."""
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/arm-strength",
+            params={"type": "Fielder", "year": season, "team": "", "drop": "",
+                    "min": 1, "sort": 1, "sortDir": "desc", "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped arm strength ({e})")
+        return pd.DataFrame(columns=["player_id", "arm_strength"])
+    return df.rename(columns={"arm_overall": "arm_strength"})[["player_id", "arm_strength"]].dropna(subset=["player_id"])
+
+
 def fetch_fielding(season=CURRENT_SEASON):
     print(f"Fetching {season} Statcast fielding (Outs Above Average)...")
     fielding = statcast_outs_above_average(season, "all")
@@ -296,6 +317,8 @@ def fetch_fielding(season=CURRENT_SEASON):
         "fielding_runs_prevented": "FRP",
         "actual_success_rate_formatted": "success_rate",
     })
+    arm_strength = fetch_arm_strength(season)
+    fielding = fielding.merge(arm_strength, on="player_id", how="left")
     fielding["season"] = season
     return fielding
 
