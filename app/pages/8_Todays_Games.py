@@ -45,6 +45,11 @@ def team_color(abbr):
     return teams.color_for_abbr(teams.normalize_mlb_abbr(abbr))
 
 
+def team_logo(abbr):
+    team_id = teams.team_id_for_abbr(teams.normalize_mlb_abbr(abbr))
+    return style.team_logo_for_season(teams.normalize_mlb_abbr(abbr), team_id, season) if team_id else None
+
+
 def pitcher_era(mlbID):
     if mlbID is None or pd.isna(mlbID):
         return None
@@ -55,6 +60,7 @@ def pitcher_era(mlbID):
 for _, row in games.iterrows():
     pred = db.predict_game(row, pitching, batting, pitcher_hands)
     away_color, home_color = team_color(row["away_abbr"]), team_color(row["home_abbr"])
+    away_logo, home_logo = team_logo(row["away_abbr"]), team_logo(row["home_abbr"])
     live = live_scores.get(row["game_pk"], {})
     status = live.get("status") or row["status"]
     started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
@@ -71,10 +77,15 @@ for _, row in games.iterrows():
         acol, mid, hcol = st.columns([3, 2, 3])
 
         with acol:
+            logo_html = (
+                f"<img src='{away_logo}' style='height:32px;width:32px;object-fit:contain;"
+                f"vertical-align:middle;margin-right:6px'>" if away_logo else ""
+            )
             st.markdown(
+                f"<div style='display:flex;align-items:center'>{logo_html}"
                 f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
                 f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
-                f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span>",
+                f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span></div>",
                 unsafe_allow_html=True,
             )
             era = pitcher_era(row.get("away_pitcher_mlbID"))
@@ -123,10 +134,15 @@ for _, row in games.iterrows():
                     st.rerun()
 
         with hcol:
+            logo_html = (
+                f"<img src='{home_logo}' style='height:32px;width:32px;object-fit:contain;"
+                f"vertical-align:middle;margin-right:6px'>" if home_logo else ""
+            )
             st.markdown(
+                f"<div style='display:flex;align-items:center'>{logo_html}"
                 f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
                 f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
-                f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span>",
+                f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span></div>",
                 unsafe_allow_html=True,
             )
             era = pitcher_era(row.get("home_pitcher_mlbID"))
