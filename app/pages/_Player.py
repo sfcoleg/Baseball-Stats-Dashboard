@@ -65,6 +65,12 @@ selected_name = st.session_state.get("selected_name", "")
 # of times under the old NL rules, or a position player who mopped up an
 # inning in a blowout, isn't mislabeled with a dual role.
 selected_roles = db.player_roles_label(mlbID, mtime)
+# Gates which sections/tabs render below — a pitcher with one incidental PA
+# (or a position player who mopped up an inning) still has a `batting`/
+# `pitching` row, but shouldn't get that section unless it's actually their
+# role (or they're a two-way player per TWO_WAY_PLAYER_MLBIDS).
+is_batter_role = "Batter" in selected_roles
+is_pitcher_role = "Pitcher" in selected_roles
 
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
@@ -111,11 +117,11 @@ with header_col:
 
 history = db.load_player_history(mlbID, season, mtime)
 streak_badges = []
-if batting is not None:
+if batting is not None and is_batter_role:
     hit_streak = db.current_hit_streak(history[history["role"] == "Batter"])
     if hit_streak is not None and hit_streak >= 2:
         streak_badges.append(f"{hit_streak}-Game Hit Streak")
-if pitching is not None:
+if pitching is not None and is_pitcher_role:
     scoreless_streak = db.current_scoreless_streak(history[history["role"] == "Pitcher"])
     if scoreless_streak is not None and scoreless_streak >= 2:
         streak_badges.append(f"{scoreless_streak}-Outing Scoreless Streak")
@@ -127,7 +133,7 @@ if streak_badges:
     )
     st.markdown(badges_html, unsafe_allow_html=True)
 
-if batting is not None:
+if batting is not None and is_batter_role:
     style.colored_header("Batting", "batting")
     metrics = [
         ("AVG", f"{batting['BA']:.3f}", db.percentile_rank(qualified_batting["BA"], batting["BA"])),
@@ -191,7 +197,7 @@ if batting is not None:
             hide_index=True,
         )
 
-if pitching is not None:
+if pitching is not None and is_pitcher_role:
     style.colored_header("Pitching", "pitching")
     metrics = [
         ("ERA", f"{pitching['ERA']:.2f}", db.percentile_rank(qualified_pitching["ERA"], pitching["ERA"], lower_is_better=True)),
@@ -293,7 +299,7 @@ if not is_retired and (batting is not None or pitching is not None):
     else:
         st.caption("Trend builds up day by day from the daily refresh — check back after a few more days of data.")
 
-arc_is_batter = batting is not None
+arc_is_batter = is_batter_role
 if batting is not None or pitching is not None:
     style.colored_header("Career Arc", "headliners")
     arc_col1, arc_col2 = st.columns([2, 1])
@@ -350,7 +356,7 @@ if batting is not None or pitching is not None:
 
 if batting is not None or pitching is not None:
     style.colored_header("League Distribution", "chart")
-    if batting is not None:
+    if batting is not None and is_batter_role:
         dist_df = qualified_batting.dropna(subset=["OPS"])
         fig = px.histogram(dist_df, x="OPS", nbins=40, labels={"OPS": "OPS (min 50 PA)"})
         fig.add_vline(x=batting["OPS"], line_color="#3B82F6", line_width=3)
@@ -361,7 +367,7 @@ if batting is not None or pitching is not None:
         )
         st.caption(f"Blue line = {selected_name}'s OPS against all qualified batters.")
         st.plotly_chart(fig, use_container_width=True)
-    if pitching is not None:
+    if pitching is not None and is_pitcher_role:
         dist_df = qualified_pitching.dropna(subset=["ERA"])
         fig = px.histogram(dist_df, x="ERA", nbins=40, labels={"ERA": "ERA (min 20 IP)"})
         fig.add_vline(x=pitching["ERA"], line_color="#3B82F6", line_width=3)

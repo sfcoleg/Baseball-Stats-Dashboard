@@ -91,20 +91,36 @@ qualified_batting = qualified_batting[qualified_batting["PA"] >= 50]
 qualified_pitching = db.load_pitching(season, mtime)
 qualified_pitching = qualified_pitching[qualified_pitching["IP"] >= 20]
 
+# Gates which Batting/Pitching sections render below — a pitcher with one
+# incidental PA (or a position player who mopped up an inning) still has a
+# `batting`/`pitching` row, but shouldn't be compared on that section unless
+# it's actually their role (or they're a two-way player per
+# db.TWO_WAY_PLAYER_MLBIDS). Mirrors the fix in _Player.py. `batting_a` /
+# `pitching_a` etc. are kept raw (unmasked) for things like the team badge
+# and the "no stats" fallback, which care about data existence, not role.
+roles_a = db.player_roles_label(selected_a["mlbID"], mtime)
+roles_b = db.player_roles_label(selected_b["mlbID"], mtime)
+is_batter_a, is_pitcher_a = "Batter" in roles_a, "Pitcher" in roles_a
+is_batter_b, is_pitcher_b = "Batter" in roles_b, "Pitcher" in roles_b
+batting_role_a = batting_a if is_batter_a else None
+batting_role_b = batting_b if is_batter_b else None
+pitching_role_a = pitching_a if is_pitcher_a else None
+pitching_role_b = pitching_b if is_pitcher_b else None
+
 h1, h2 = st.columns(2)
 h1.image(style.headshot_url(selected_a["mlbID"], width=150), width=110)
 h1.markdown(f"### {selected_a['Name']} {team_badge(batting_a if batting_a is not None else pitching_a)}", unsafe_allow_html=True)
 h2.image(style.headshot_url(selected_b["mlbID"], width=150), width=110)
 h2.markdown(f"### {selected_b['Name']} {team_badge(batting_b if batting_b is not None else pitching_b)}", unsafe_allow_html=True)
 
-if batting_a is not None and batting_b is not None:
+if batting_role_a is not None and batting_role_b is not None:
     style.colored_header("Batting Profile", "batting")
     radar_fields = [
         ("BA", "BA", False), ("OBP", "OBP", False), ("SLG", "SLG", False),
         ("HR", "HR", False), ("SB", "SB", False), ("BB%", "BB_PCT", False), ("K%", "K_PCT", True),
     ]
-    values_a = [db.percentile_rank(qualified_batting[col], batting_a[col], lower) or 0 for _, col, lower in radar_fields]
-    values_b = [db.percentile_rank(qualified_batting[col], batting_b[col], lower) or 0 for _, col, lower in radar_fields]
+    values_a = [db.percentile_rank(qualified_batting[col], batting_role_a[col], lower) or 0 for _, col, lower in radar_fields]
+    values_b = [db.percentile_rank(qualified_batting[col], batting_role_b[col], lower) or 0 for _, col, lower in radar_fields]
     st.caption("Percentile rank (0-100) against qualified batters (min 50 PA) league-wide.")
     st.plotly_chart(
         style.radar_chart(
@@ -114,7 +130,7 @@ if batting_a is not None and batting_b is not None:
         use_container_width=True,
     )
 
-if batting_a is not None or batting_b is not None:
+if batting_role_a is not None or batting_role_b is not None:
     style.colored_header("Batting", "batting")
     std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
 
@@ -125,7 +141,7 @@ if batting_a is not None or batting_b is not None:
             ("BA", "BA"), ("OBP", "OBP"), ("SLG", "SLG"), ("OPS", "OPS"),
         ]
         table = build_compare_table(
-            batting_a, batting_b, fields,
+            batting_role_a, batting_role_b, fields,
             round_map={"BA": 3, "OBP": 3, "SLG": 3, "OPS": 3},
         )
         st.dataframe(
@@ -142,7 +158,7 @@ if batting_a is not None or batting_b is not None:
             ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("WAR", "WAR"), ("OPS+", "OPS_plus"), ("wRC+", "wRC_plus"),
         ]
         table = build_compare_table(
-            batting_a, batting_b, fields,
+            batting_role_a, batting_role_b, fields,
             round_map={"ISO": 3, "BABIP": 3, "K%": 1, "BB%": 1, "wOBA": 3, "xwOBA": 3, "WAR": 1, "OPS+": 0, "wRC+": 0},
         )
         st.dataframe(
@@ -161,7 +177,7 @@ if batting_a is not None or batting_b is not None:
             ("xBA", "xBA"), ("xSLG", "xSLG"),
         ]
         table = build_compare_table(
-            batting_a, batting_b, fields,
+            batting_role_a, batting_role_b, fields,
             round_map={"Avg EV": 1, "Max EV": 1, "Hard-Hit%": 1, "Barrel%": 1, "xBA": 3, "xSLG": 3},
         )
         st.dataframe(
@@ -172,14 +188,14 @@ if batting_a is not None or batting_b is not None:
             use_container_width=True,
         )
 
-if pitching_a is not None and pitching_b is not None:
+if pitching_role_a is not None and pitching_role_b is not None:
     style.colored_header("Pitching Profile", "pitching")
     radar_fields = [
         ("ERA", "ERA", True), ("WHIP", "WHIP", True), ("K/9", "K_9", False),
         ("BB/9", "BB_9", True), ("SV", "SV", False), ("SO", "SO", False),
     ]
-    values_a = [db.percentile_rank(qualified_pitching[col], pitching_a[col], lower) or 0 for _, col, lower in radar_fields]
-    values_b = [db.percentile_rank(qualified_pitching[col], pitching_b[col], lower) or 0 for _, col, lower in radar_fields]
+    values_a = [db.percentile_rank(qualified_pitching[col], pitching_role_a[col], lower) or 0 for _, col, lower in radar_fields]
+    values_b = [db.percentile_rank(qualified_pitching[col], pitching_role_b[col], lower) or 0 for _, col, lower in radar_fields]
     st.caption("Percentile rank (0-100) against qualified pitchers (min 20 IP) league-wide.")
     st.plotly_chart(
         style.radar_chart(
@@ -189,7 +205,7 @@ if pitching_a is not None and pitching_b is not None:
         use_container_width=True,
     )
 
-if pitching_a is not None or pitching_b is not None:
+if pitching_role_a is not None or pitching_role_b is not None:
     style.colored_header("Pitching", "pitching")
     std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
 
@@ -199,7 +215,7 @@ if pitching_a is not None or pitching_b is not None:
             ("IP", "IP"), ("ERA", "ERA"), ("WHIP", "WHIP"), ("SO", "SO"), ("BB", "BB"),
         ]
         table = build_compare_table(
-            pitching_a, pitching_b, fields, round_map={"ERA": 2, "WHIP": 3},
+            pitching_role_a, pitching_role_b, fields, round_map={"ERA": 2, "WHIP": 3},
         )
         st.dataframe(
             style.style_comparison(
@@ -216,7 +232,7 @@ if pitching_a is not None or pitching_b is not None:
             ("WAR", "WAR"), ("ERA+", "ERA_plus"),
         ]
         table = build_compare_table(
-            pitching_a, pitching_b, fields,
+            pitching_role_a, pitching_role_b, fields,
             round_map={"FIP": 2, "K/9": 2, "BB/9": 2, "K/BB": 2, "WAR": 1, "ERA+": 0},
         )
         st.dataframe(
@@ -235,7 +251,7 @@ if pitching_a is not None or pitching_b is not None:
             ("Barrel% Against", "barrel_pct_against"),
         ]
         table = build_compare_table(
-            pitching_a, pitching_b, fields,
+            pitching_role_a, pitching_role_b, fields,
             round_map={"Avg EV Against": 1, "Hard-Hit% Against": 1, "Barrel% Against": 1},
         )
         st.dataframe(
