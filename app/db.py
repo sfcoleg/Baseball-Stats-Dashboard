@@ -965,8 +965,16 @@ def player_primary_role(mlbID: int, db_mtime_val: float) -> str:
     row = totals[totals["mlbID"] == mlbID]
     if row.empty:
         return "Batter"
-    total_pa = row.iloc[0]["total_pa"] or 0
-    total_ip = row.iloc[0]["total_ip"] or 0
+    # A player with zero rows in one table (e.g. a pure pitcher who has
+    # never batted) has NaN, not 0, for that side after the outer merge in
+    # _player_role_totals -- "NaN or 0" evaluates to NaN (NaN is truthy in
+    # Python), so a plain `or 0` fallback silently leaves it as NaN, which
+    # then makes total_ip > total_pa always False (any comparison against
+    # NaN is False) and wrongly returns "Batter" for real pitchers.
+    total_pa = row.iloc[0]["total_pa"]
+    total_pa = 0 if pd.isna(total_pa) else total_pa
+    total_ip = row.iloc[0]["total_ip"]
+    total_ip = 0 if pd.isna(total_ip) else total_ip
     return "Pitcher" if total_ip > total_pa else "Batter"
 
 
