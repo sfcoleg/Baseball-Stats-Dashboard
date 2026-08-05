@@ -170,6 +170,95 @@ def fetch_savant_leaderboard_csv(path, year):
     return pd.read_csv(io.StringIO(resp.content.decode("utf-8")))
 
 
+def resolve_traded_player_current_teams(mlb_ids):
+    """For players whose Baseball-Reference Tm is a comma-joined multi-team
+    string (traded mid-season), resolve their TRUE current team via the MLB
+    Stats API's currentTeam hydrate — BRef's comma order looks
+    alphabetical-by-city rather than chronological, so trusting "the last
+    entry is the most recent team" (the old behavior) is wrong as often as
+    it's right. Returns {mlbID: bref-style city string}, one entry per id
+    that resolved successfully; an id that fails at any step (network error,
+    unexpected payload shape, unmappable team) is simply omitted so the
+    caller can leave that row's original (possibly-stale) Tm alone rather
+    than crash the whole ingest.
+
+    A player currently optioned to a minor-league affiliate has a
+    currentTeam that isn't one of the 30 MLB teams; in that case this
+    resolves the affiliate's parent MLB organization instead (one extra
+    request per distinct affiliate, cached across players within this call
+    so the same affiliate is never looked up twice in one run)."""
+    mlb_ids = sorted({int(i) for i in mlb_ids})
+    if not mlb_ids:
+        return {}
+
+    current_team_id = {}
+    CHUNK = 300
+    for i in range(0, len(mlb_ids), CHUNK):
+        chunk = mlb_ids[i:i + CHUNK]
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/people",
+                params={
+                    "personIds": ",".join(str(pid) for pid in chunk),
+                    "hydrate": "currentTeam",
+                },
+                timeout=30,
+            )
+            resp.raise_for_status()
+            people = resp.json().get("people", [])
+        except Exception as e:
+            print(f"  skipped a batch of {len(chunk)} traded-player team lookups ({e})")
+            continue
+        for p in people:
+            team_id = p.get("currentTeam", {}).get("id")
+            if team_id is not None:
+                current_team_id[p["id"]] = team_id
+
+    mlb_team_ids = set(app_teams._TEAM_IDS.values())
+    parent_org_cache = {}
+    resolved = {}
+    for mlb_id, team_id in current_team_id.items():
+        final_team_id = team_id
+        if final_team_id not in mlb_team_ids:
+            if team_id not in parent_org_cache:
+                try:
+                    resp = requests.get(
+                        f"https://statsapi.mlb.com/api/v1/teams/{team_id}", timeout=30,
+                    )
+                    resp.raise_for_status()
+                    affiliate_teams = resp.json().get("teams", [])
+                    parent_org_cache[team_id] = affiliate_teams[0].get("parentOrgId") if affiliate_teams else None
+                except Exception as e:
+                    print(f"  skipped parent-org lookup for affiliate team {team_id} ({e})")
+                    parent_org_cache[team_id] = None
+            final_team_id = parent_org_cache[team_id]
+        if final_team_id not in mlb_team_ids:
+            continue
+        abbr = app_teams.abbr_for_team_id(final_team_id)
+        if abbr:
+            resolved[mlb_id] = app_teams.city_for_abbr(abbr)
+    return resolved
+
+
+def correct_traded_player_teams(df):
+    """Overwrite Tm for rows where Baseball-Reference reports a comma-joined
+    multi-team string (a mid-season trade) with the player's true CURRENT
+    team, resolved via resolve_traded_player_current_teams. Best-effort: any
+    row that fails to resolve keeps its original comma-joined Tm, which
+    team_meta_from_city already handles (if imperfectly) via its
+    last-comma-entry heuristic."""
+    multi_team = df["Tm"].astype(str).str.contains(",", na=False)
+    if not multi_team.any():
+        return df
+    ids = df.loc[multi_team, "mlbID"].dropna().astype(int).unique()
+    print(f"  resolving current team for {len(ids)} traded player(s)...")
+    resolved = resolve_traded_player_current_teams(ids)
+    if resolved:
+        mask = multi_team & df["mlbID"].isin(resolved.keys())
+        df.loc[mask, "Tm"] = df.loc[mask, "mlbID"].map(resolved)
+    return df
+
+
 def fetch_batting(season=CURRENT_SEASON):
     print(f"Fetching {season} batting stats (Baseball-Reference)...")
     batting = batting_stats_bref(season)
@@ -228,6 +317,7 @@ def fetch_batting(season=CURRENT_SEASON):
         batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
         batting = batting.drop(columns="player_id")
 
+    batting = correct_traded_player_teams(batting)
     batting = add_batting_plus_stats(batting)
     batting["season"] = season
     return batting
@@ -280,6 +370,7 @@ def fetch_pitching(season=CURRENT_SEASON):
         pitching = pitching.merge(stats_df, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
         pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
 
+    pitching = correct_traded_player_teams(pitching)
     pitching = add_pitching_plus_stats(pitching)
     pitching["season"] = season
     return pitching

@@ -65,6 +65,20 @@ _COLOR_BY_ABBR = {info[0]: info[2] for info in _BY_CITY_LEAGUE.values()}
 # "the PIT" (grammatically fine for a table cell, not for a sentence).
 _NICKNAME_BY_ABBR = {info[0]: info[1] for info in _BY_CITY_LEAGUE.values()}
 
+# abbreviation -> Baseball-Reference-style city name, the reverse of
+# _BY_CITY_LEAGUE (used by ingest to resolve a player's current team back to
+# a Tm-column-shaped city string, given only an abbreviation). Unlike the
+# city->abbr direction, this is unambiguous — each abbreviation maps to
+# exactly one city — EXCEPT that _BY_CITY_LEAGUE itself has two (city, abbr)
+# aliases for the same franchise (Athletics/Oakland both -> ATH, Miami/
+# Florida both -> MIA, see the comments above). setdefault keeps the first
+# (current) city name for those and ignores the legacy alias that follows
+# it in iteration order, so ATH -> "Athletics" and MIA -> "Miami", not the
+# pre-relocation/pre-rename names.
+_CITY_BY_ABBR = {}
+for (_city, _league_key), (_abbr, _nick, _color) in _BY_CITY_LEAGUE.items():
+    _CITY_BY_ABBR.setdefault(_abbr, _city)
+
 
 def color_for_abbr(abbr: str) -> str:
     return _COLOR_BY_ABBR.get(abbr, "#666666")
@@ -72,6 +86,12 @@ def color_for_abbr(abbr: str) -> str:
 
 def nickname_for_abbr(abbr: str) -> str:
     return _NICKNAME_BY_ABBR.get(abbr, abbr)
+
+
+def city_for_abbr(abbr: str) -> str:
+    """Reverse of team_meta_from_city's city->abbr resolution: given an
+    abbreviation, return the current Baseball-Reference-style city name."""
+    return _CITY_BY_ABBR.get(abbr, abbr)
 
 
 def franchise_display_name(abbr: str, season: int | None) -> str:
