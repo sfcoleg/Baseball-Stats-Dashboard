@@ -79,6 +79,23 @@ _CITY_BY_ABBR = {}
 for (_city, _league_key), (_abbr, _nick, _color) in _BY_CITY_LEAGUE.items():
     _CITY_BY_ABBR.setdefault(_abbr, _city)
 
+# abbreviation -> league ("AL"/"NL"), every team's real league regardless of
+# whether its city is shared (unlike _BY_CITY_LEAGUE's league key, which is
+# None for the 24 teams in a single-team city). Used to keep a corrected
+# Tm/Lev pair consistent — see ingest's correct_traded_player_teams, which
+# needs the *new* team's league, not whatever league the player's stats
+# happened to carry over from their previous team.
+_LEAGUE_BY_ABBR = {
+    **{a: "AL" for a in ["BAL", "BOS", "NYY", "TB", "TOR", "CWS", "CLE", "DET", "KC", "MIN",
+                          "HOU", "LAA", "ATH", "SEA", "TEX"]},
+    **{a: "NL" for a in ["ATL", "MIA", "NYM", "PHI", "WSH", "CHC", "CIN", "MIL", "PIT", "STL",
+                          "ARI", "COL", "LAD", "SD", "SF"]},
+}
+
+
+def league_for_abbr(abbr: str) -> str | None:
+    return _LEAGUE_BY_ABBR.get(abbr)
+
 
 def color_for_abbr(abbr: str) -> str:
     return _COLOR_BY_ABBR.get(abbr, "#666666")

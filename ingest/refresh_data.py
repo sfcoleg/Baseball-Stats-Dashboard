@@ -236,17 +236,32 @@ def resolve_traded_player_current_teams(mlb_ids):
             continue
         abbr = app_teams.abbr_for_team_id(final_team_id)
         if abbr:
-            resolved[mlb_id] = app_teams.city_for_abbr(abbr)
+            # Tm and Lev must be resolved from the SAME abbreviation and
+            # written back together — see correct_traded_player_teams for
+            # why leaving Lev on its old (possibly comma-joined, possibly
+            # wrong-league) value silently breaks the city->team lookup for
+            # any shared city (New York, Chicago, Los Angeles).
+            resolved[mlb_id] = (app_teams.city_for_abbr(abbr), f"Maj-{app_teams.league_for_abbr(abbr)}")
     return resolved
 
 
 def correct_traded_player_teams(df):
-    """Overwrite Tm for rows where Baseball-Reference reports a comma-joined
-    multi-team string (a mid-season trade) with the player's true CURRENT
-    team, resolved via resolve_traded_player_current_teams. Best-effort: any
-    row that fails to resolve keeps its original comma-joined Tm, which
-    team_meta_from_city already handles (if imperfectly) via its
-    last-comma-entry heuristic."""
+    """Overwrite Tm/Lev for rows where Baseball-Reference reports a
+    comma-joined multi-team string (a mid-season trade) with the player's
+    true CURRENT team, resolved via resolve_traded_player_current_teams.
+
+    Both columns are overwritten together, not just Tm: team_meta_from_city
+    disambiguates a shared city (New York, Chicago, Los Angeles) using Lev,
+    so if Lev were left as Baseball-Reference's original value — which for
+    a traded player is itself comma-joined, e.g. "Maj-NL,Maj-AL" for a
+    Giants-to-Yankees trade — _league_code's simple .endswith("AL") check
+    can land on the WRONG league and silently resolve a Yankee to the Mets
+    (or an Angel to the Dodgers, etc.). This is what caused Heliot Ramos and
+    Luis García Jr. to show up as Mets after their trade to the Yankees.
+
+    Best-effort: any row that fails to resolve keeps its original
+    comma-joined Tm/Lev, which team_meta_from_city still handles (if
+    imperfectly) via its last-comma-entry heuristic."""
     multi_team = df["Tm"].astype(str).str.contains(",", na=False)
     if not multi_team.any():
         return df
@@ -255,7 +270,10 @@ def correct_traded_player_teams(df):
     resolved = resolve_traded_player_current_teams(ids)
     if resolved:
         mask = multi_team & df["mlbID"].isin(resolved.keys())
-        df.loc[mask, "Tm"] = df.loc[mask, "mlbID"].map(resolved)
+        resolved_tm = {mlb_id: tm for mlb_id, (tm, lev) in resolved.items()}
+        resolved_lev = {mlb_id: lev for mlb_id, (tm, lev) in resolved.items()}
+        df.loc[mask, "Tm"] = df.loc[mask, "mlbID"].map(resolved_tm)
+        df.loc[mask, "Lev"] = df.loc[mask, "mlbID"].map(resolved_lev)
     return df
 
 
