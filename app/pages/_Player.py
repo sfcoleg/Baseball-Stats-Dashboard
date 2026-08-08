@@ -92,6 +92,19 @@ else:
     abbr, nickname, color = "—", "Unknown", "#666666"
     age = "—"
 
+# Tints this page's bordered cards/tabs toward the player's own team color
+# instead of the site-wide fixed blue — scoped to this script run only
+# (Streamlit fully re-executes the page on navigation, so this never
+# leaks onto another player's or another page's colors).
+st.markdown(
+    f"<style>"
+    f"[data-testid='stVerticalBlockBorderWrapper'] {{ border-color: {color}55 !important; }}"
+    f"[data-testid='stTabs'] [aria-selected='true'] {{ color: {color} !important; }}"
+    f"[data-testid='stTabs'] [data-baseweb='tab-highlight'] {{ background-color: {color} !important; }}"
+    f"</style>",
+    unsafe_allow_html=True,
+)
+
 photo_col, header_col = st.columns([1, 6])
 with photo_col:
     st.image(style.headshot_url(mlbID, width=180), width=120)
@@ -134,7 +147,7 @@ if streak_badges:
     st.markdown(badges_html, unsafe_allow_html=True)
 
 if batting is not None and is_batter_role:
-    style.colored_header("Batting", "batting")
+    style.colored_header("Batting", "batting", color)
     metrics = [
         ("AVG", f"{batting['BA']:.3f}", db.percentile_rank(qualified_batting["BA"], batting["BA"])),
         ("OBP", f"{batting['OBP']:.3f}", db.percentile_rank(qualified_batting["OBP"], batting["OBP"])),
@@ -147,7 +160,7 @@ if batting is not None and is_batter_role:
     for col, (label, value, pct) in zip(cols, metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    style.colored_header("Baserunning", "batting")
+    style.colored_header("Baserunning", "batting", color)
     sb, cs = batting.get("SB"), batting.get("CS")
     attempts = (sb or 0) + (cs or 0)
     sb_pct_val = (sb / attempts * 100) if attempts and pd.notna(sb) and pd.notna(cs) else None
@@ -228,7 +241,7 @@ if batting is not None and is_batter_role:
             )
 
 if pitching is not None and is_pitcher_role:
-    style.colored_header("Pitching", "pitching")
+    style.colored_header("Pitching", "pitching", color)
     metrics = [
         ("ERA", f"{pitching['ERA']:.2f}", db.percentile_rank(qualified_pitching["ERA"], pitching["ERA"], lower_is_better=True)),
         ("WHIP", f"{pitching['WHIP']:.3f}", db.percentile_rank(qualified_pitching["WHIP"], pitching["WHIP"], lower_is_better=True)),
@@ -334,7 +347,7 @@ if pitching is not None and is_pitcher_role:
                     )
 
 if not fielding.empty:
-    style.colored_header("Fielding", "fielding")
+    style.colored_header("Fielding", "fielding", color)
     st.caption("Outs Above Average (OAA) by position — Statcast.")
     st.dataframe(
         fielding[["Pos", "OAA", "FRP", "success_rate"]].rename(columns={"success_rate": "Success Rate"}),
@@ -381,7 +394,7 @@ if not fielding.empty:
             )
 
 if not is_retired and (batting is not None or pitching is not None):
-    style.colored_header("Season Trend", "headliners")
+    style.colored_header("Season Trend", "headliners", color)
     stat_col, stat_label, role_filter = (
         ("ERA", "ERA", "Pitcher") if selected_roles == "Pitcher" else ("OPS", "OPS", "Batter")
     )
@@ -400,7 +413,7 @@ if not is_retired and (batting is not None or pitching is not None):
 
 arc_is_batter = is_batter_role
 if batting is not None or pitching is not None:
-    style.colored_header("Career Arc", "headliners")
+    style.colored_header("Career Arc", "headliners", color)
     arc_col1, arc_col2 = st.columns([2, 1])
     with arc_col1:
         arc_stat = st.selectbox(

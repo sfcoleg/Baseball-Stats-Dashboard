@@ -134,7 +134,7 @@ else:
                     st.markdown(
                         "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"
                         "<span style='background-color:#D32F2F;color:#FFFFFF;padding:3px 12px;"
-                        "border-radius:8px;font-weight:700;font-size:0.75rem;letter-spacing:0.5px'>"
+                        "border-radius:8px;font-weight:700;font-size:0.75rem;letter-spacing:0.5px' class='live-badge'>"
                         "LIVE</span></div>",
                         unsafe_allow_html=True,
                     )

@@ -104,9 +104,11 @@ CATEGORY_COLORS = {
 }
 
 
-def colored_header(text, category):
-    """A subheader with a colored left accent bar, keyed by CATEGORY_COLORS."""
-    color = CATEGORY_COLORS.get(category, ACCENT)
+def colored_header(text, category, color=None):
+    """A subheader with a colored left accent bar, keyed by CATEGORY_COLORS
+    — or `color` (a hex string) to override it, e.g. tinting toward a
+    player's own team color on their profile page."""
+    color = color or CATEGORY_COLORS.get(category, ACCENT)
     st.markdown(
         f"<h3 style='border-left: 5px solid {color}; padding-left: 14px; "
         f"margin-top: 1.2em; margin-bottom: 0.6em;'>{text}</h3>",
