@@ -159,9 +159,10 @@ with corr_tab:
 with proj_tab:
     st.caption(
         "A gradient-boosted model trained on every season-to-season pair since 2008 — the same "
-        "regress-to-a-baseline idea behind projection systems like Marcel or Steamer, but the "
-        "aging/regression curve is learned from the data instead of hand-set. Projects each "
-        "qualified player's rate stat for the season immediately after the one selected below."
+        "regress-to-a-baseline idea behind projection systems like Marcel or Steamer (weight recent "
+        "seasons, regress based on how much track record exists), but the weighting is learned from "
+        "the data instead of hand-set. Uses each player's current season plus their trailing 1-2 "
+        "seasons of the stat to project the season immediately after the one selected below."
     )
     role4 = st.radio("Player type", ["Batting", "Pitching"], horizontal=True, key="proj_role")
     table4 = "batting" if role4 == "Batting" else "pitching"
