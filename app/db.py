@@ -364,6 +364,67 @@ def load_linescore(game_pk) -> dict | None:
         return None
 
 
+@st.cache_data(show_spinner=False, ttl=60, max_entries=20)
+def load_boxscore_players(game_pk) -> dict | None:
+    """Live per-player batting/pitching lines for one game (that game's
+    stats only, not season totals) — fetched on demand like load_linescore,
+    same short TTL so an in-progress game's lines keep moving. Returns
+    {"away": {"batters": [...], "pitchers": [...]}, "home": {...}} or None
+    on failure; batters are ordered by the lineup's battingOrder (subs sort
+    after starters), pitchers by order of appearance."""
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{int(game_pk)}/boxscore", timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return None
+
+    def _side(side):
+        team = data.get("teams", {}).get(side, {})
+        players = team.get("players", {})
+
+        batters = []
+        for pid in team.get("batters", []):
+            p = players.get(f"ID{pid}")
+            stat = (p or {}).get("stats", {}).get("batting", {})
+            if not p or not stat:
+                continue
+            batters.append({
+                "Name": p["person"]["fullName"],
+                "Pos": p.get("position", {}).get("abbreviation", ""),
+                "AB": stat.get("atBats", 0),
+                "R": stat.get("runs", 0),
+                "H": stat.get("hits", 0),
+                "RBI": stat.get("rbi", 0),
+                "BB": stat.get("baseOnBalls", 0),
+                "SO": stat.get("strikeOuts", 0),
+                "_order": p.get("battingOrder") or "999",
+            })
+        batters.sort(key=lambda b: b["_order"])
+        for b in batters:
+            del b["_order"]
+
+        pitchers = []
+        for pid in team.get("pitchers", []):
+            p = players.get(f"ID{pid}")
+            stat = (p or {}).get("stats", {}).get("pitching", {})
+            if not p or not stat:
+                continue
+            pitchers.append({
+                "Name": p["person"]["fullName"],
+                "IP": stat.get("inningsPitched", "0.0"),
+                "H": stat.get("hits", 0),
+                "R": stat.get("runs", 0),
+                "ER": stat.get("earnedRuns", 0),
+                "BB": stat.get("baseOnBalls", 0),
+                "SO": stat.get("strikeOuts", 0),
+                "Pitches": stat.get("numberOfPitches", 0),
+            })
+        return {"batters": batters, "pitchers": pitchers}
+
+    return {"away": _side("away"), "home": _side("home")}
+
+
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 

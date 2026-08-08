@@ -173,6 +173,20 @@ for _, row in games.iterrows():
                     unsafe_allow_html=True,
                 )
 
+            player_box = db.load_boxscore_players(row["game_pk"])
+            if player_box:
+                pbcol1, pbcol2 = st.columns(2)
+                for col, side, abbr in ((pbcol1, "away", row["away_abbr"]), (pbcol2, "home", row["home_abbr"])):
+                    with col:
+                        batters = pd.DataFrame(player_box[side]["batters"])
+                        if not batters.empty:
+                            st.caption(f"{abbr} Batting")
+                            st.dataframe(batters, hide_index=True, use_container_width=True)
+                        pitchers = pd.DataFrame(player_box[side]["pitchers"])
+                        if not pitchers.empty:
+                            st.caption(f"{abbr} Pitching")
+                            st.dataframe(pitchers, hide_index=True, use_container_width=True)
+
 # Converts each game's UTC start time (stored in data-utc, e.g. "2026-07-12T23:10:00Z")
 # to the viewer's own local time/timezone client-side, so a West Coast visitor sees
 # PDT and an East Coast visitor sees EDT for the same game. st.markdown's
