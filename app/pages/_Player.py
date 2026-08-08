@@ -5,6 +5,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
@@ -16,6 +17,26 @@ st.set_page_config(page_title="Player | Diamond Metrics", layout="wide")
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
+
+# Hydrates a shared link (?mlbid=...&season=...) into session_state — the
+# normal path only ever gets here via the sidebar search setting
+# selected_mlbID directly, so a link opened fresh (new tab/visitor) would
+# otherwise always hit the "use the search box" dead end below.
+if "selected_mlbID" not in st.session_state and "mlbid" in st.query_params:
+    try:
+        _qp_mlbid = int(st.query_params["mlbid"])
+    except (TypeError, ValueError):
+        _qp_mlbid = None
+    if _qp_mlbid is not None:
+        _qp_name = db.get_player_name(_qp_mlbid, db.db_mtime())
+        if _qp_name:
+            st.session_state["selected_mlbID"] = _qp_mlbid
+            st.session_state["selected_name"] = _qp_name
+            if "season" in st.query_params:
+                try:
+                    st.session_state["selected_season"] = int(st.query_params["season"])
+                except (TypeError, ValueError):
+                    pass
 
 if "selected_mlbID" not in st.session_state:
     st.title("Player Profile")
@@ -127,6 +148,44 @@ with header_col:
         unsafe_allow_html=True,
     )
     st.caption(f"{nickname} · Age {age} · {selected_roles}")
+    st.markdown(
+        "<button id='share-link-btn' style='background-color:#3B4A8244;color:#B9C4FF;"
+        "border:1px solid #3B4A8288;border-radius:8px;padding:3px 12px;font-size:0.8rem;"
+        "cursor:pointer;margin-top:4px'>\U0001F517 Copy share link</button>"
+        "<span id='share-link-copied' style='display:none;color:#7CFC9A;font-size:0.8rem;"
+        "margin-left:8px'>Copied!</span>",
+        unsafe_allow_html=True,
+    )
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            function setup() {{
+                const btn = window.parent.document.getElementById('share-link-btn');
+                if (!btn || btn.dataset.wired) return;
+                btn.dataset.wired = '1';
+                btn.addEventListener('click', function() {{
+                    const url = window.parent.location.origin + '/Player?mlbid={mlbID}&season={season}';
+                    // Uses the PARENT document's clipboard permission, not this
+                    // sandboxed iframe's — the iframe alone often lacks the
+                    // clipboard-write permission grant, same reasoning as the
+                    // parent-initiated navigation workaround in following.py.
+                    window.parent.navigator.clipboard.writeText(url).then(function() {{
+                        const msg = window.parent.document.getElementById('share-link-copied');
+                        if (msg) {{
+                            msg.style.display = 'inline';
+                            setTimeout(function() {{ msg.style.display = 'none'; }}, 2000);
+                        }}
+                    }});
+                }});
+            }}
+            setup();
+            new MutationObserver(setup).observe(window.parent.document.body, {{childList: true, subtree: true}});
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 
 history = db.load_player_history(mlbID, season, mtime)
 streak_badges = []
@@ -146,19 +205,50 @@ if streak_badges:
     )
     st.markdown(badges_html, unsafe_allow_html=True)
 
+# Lets the headline stat rows below show "+0.023 vs 2025" instead of a
+# percentile — same st.metric delta slot, just a different source, so
+# toggling doesn't change layout. Off by default since percentile-vs-
+# league is the more broadly useful view for someone who doesn't already
+# know this player's prior season off the top of their head.
+compare_mode = st.checkbox("Compare to last season", key=f"compare_toggle_{mlbID}_{season}")
+prior_batting = prior_pitching = None
+if compare_mode:
+    if batting is not None:
+        prior_batting = db.get_player_batting(mlbID, season - 1, mtime)
+    if pitching is not None:
+        prior_pitching = db.get_player_pitching(mlbID, season - 1, mtime)
+    if (batting is not None and prior_batting is None) or (pitching is not None and prior_pitching is None):
+        st.caption(f"No {season - 1} data for this player in at least one section — showing percentiles there instead.")
+
+
+def stat_delta(prior_row, col, current_val, fmt, lower_is_better=False):
+    """(delta_text, delta_color) for st.metric comparing `current_val` to
+    the same stat in `prior_row` (a season-(N-1) Series). None/'off' if
+    there's no prior-season row or the stat is missing from it."""
+    if prior_row is None or col not in prior_row.index or pd.isna(prior_row.get(col)) or pd.isna(current_val):
+        return None, "off"
+    diff = current_val - prior_row[col]
+    delta_color = "off" if diff == 0 else ("inverse" if lower_is_better else "normal")
+    return f"{fmt.format(diff)} vs {season - 1}", delta_color
+
+
 if batting is not None and is_batter_role:
     style.colored_header("Batting", "batting", color)
     metrics = [
-        ("AVG", f"{batting['BA']:.3f}", db.percentile_rank(qualified_batting["BA"], batting["BA"])),
-        ("OBP", f"{batting['OBP']:.3f}", db.percentile_rank(qualified_batting["OBP"], batting["OBP"])),
-        ("SLG", f"{batting['SLG']:.3f}", db.percentile_rank(qualified_batting["SLG"], batting["SLG"])),
-        ("OPS", f"{batting['OPS']:.3f}", db.percentile_rank(qualified_batting["OPS"], batting["OPS"])),
-        ("HR", int(batting["HR"]), db.percentile_rank(qualified_batting["HR"], batting["HR"])),
-        ("RBI", int(batting["RBI"]), db.percentile_rank(qualified_batting["RBI"], batting["RBI"])),
+        ("AVG", f"{batting['BA']:.3f}", db.percentile_rank(qualified_batting["BA"], batting["BA"]), "BA", "{:+.3f}"),
+        ("OBP", f"{batting['OBP']:.3f}", db.percentile_rank(qualified_batting["OBP"], batting["OBP"]), "OBP", "{:+.3f}"),
+        ("SLG", f"{batting['SLG']:.3f}", db.percentile_rank(qualified_batting["SLG"], batting["SLG"]), "SLG", "{:+.3f}"),
+        ("OPS", f"{batting['OPS']:.3f}", db.percentile_rank(qualified_batting["OPS"], batting["OPS"]), "OPS", "{:+.3f}"),
+        ("HR", int(batting["HR"]), db.percentile_rank(qualified_batting["HR"], batting["HR"]), "HR", "{:+.0f}"),
+        ("RBI", int(batting["RBI"]), db.percentile_rank(qualified_batting["RBI"], batting["RBI"]), "RBI", "{:+.0f}"),
     ]
     cols = st.columns(6)
-    for col, (label, value, pct) in zip(cols, metrics):
-        col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
+    for col, (label, value, pct, raw_col, fmt) in zip(cols, metrics):
+        if compare_mode and prior_batting is not None:
+            delta_text, delta_color = stat_delta(prior_batting, raw_col, batting[raw_col], fmt)
+        else:
+            delta_text, delta_color = (f"{pct}th pctile" if pct is not None else None), "off"
+        col.metric(label, value, delta_text, delta_color=delta_color)
 
     style.colored_header("Baserunning", "batting", color)
     sb, cs = batting.get("SB"), batting.get("CS")
@@ -243,16 +333,20 @@ if batting is not None and is_batter_role:
 if pitching is not None and is_pitcher_role:
     style.colored_header("Pitching", "pitching", color)
     metrics = [
-        ("ERA", f"{pitching['ERA']:.2f}", db.percentile_rank(qualified_pitching["ERA"], pitching["ERA"], lower_is_better=True)),
-        ("WHIP", f"{pitching['WHIP']:.3f}", db.percentile_rank(qualified_pitching["WHIP"], pitching["WHIP"], lower_is_better=True)),
-        ("W-L", f"{int(pitching['W'])}-{int(pitching['L'])}", None),
-        ("SV", int(pitching["SV"]), db.percentile_rank(qualified_pitching["SV"], pitching["SV"])),
-        ("IP", pitching["IP"], None),
-        ("SO", int(pitching["SO"]), db.percentile_rank(qualified_pitching["SO"], pitching["SO"])),
+        ("ERA", f"{pitching['ERA']:.2f}", db.percentile_rank(qualified_pitching["ERA"], pitching["ERA"], lower_is_better=True), "ERA", "{:+.2f}", True),
+        ("WHIP", f"{pitching['WHIP']:.3f}", db.percentile_rank(qualified_pitching["WHIP"], pitching["WHIP"], lower_is_better=True), "WHIP", "{:+.3f}", True),
+        ("W-L", f"{int(pitching['W'])}-{int(pitching['L'])}", None, None, None, False),
+        ("SV", int(pitching["SV"]), db.percentile_rank(qualified_pitching["SV"], pitching["SV"]), "SV", "{:+.0f}", False),
+        ("IP", pitching["IP"], None, None, None, False),
+        ("SO", int(pitching["SO"]), db.percentile_rank(qualified_pitching["SO"], pitching["SO"]), "SO", "{:+.0f}", False),
     ]
     cols = st.columns(6)
-    for col, (label, value, pct) in zip(cols, metrics):
-        col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
+    for col, (label, value, pct, raw_col, fmt, lower_better) in zip(cols, metrics):
+        if compare_mode and prior_pitching is not None and raw_col:
+            delta_text, delta_color = stat_delta(prior_pitching, raw_col, pitching[raw_col], fmt, lower_better)
+        else:
+            delta_text, delta_color = (f"{pct}th pctile" if pct is not None else None), "off"
+        col.metric(label, value, delta_text, delta_color=delta_color)
 
     # Pitch Arsenal only makes sense for an actual pitcher — a position
     # player who mopped up an inning in a blowout still has a pitching row

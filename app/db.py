@@ -1287,6 +1287,21 @@ def player_aging_points(mlbID: int, is_batter: bool, stat_col: str, db_mtime_val
 
 
 @st.cache_data(show_spinner=False, max_entries=300)
+def get_player_name(mlbID: int, db_mtime_val: float) -> str | None:
+    """This player's Name from their most recent batting or pitching row —
+    used to hydrate a shared player-page link (?mlbid=...), which only
+    carries the ID, not the display name."""
+    with sqlite3.connect(DB_PATH) as conn:
+        for table in ("batting", "pitching"):
+            row = conn.execute(
+                f"SELECT Name FROM {table} WHERE mlbID = ? ORDER BY season DESC LIMIT 1", (mlbID,),
+            ).fetchone()
+            if row:
+                return row[0]
+    return None
+
+
+@st.cache_data(show_spinner=False, max_entries=300)
 def player_seasons(mlbID: int, db_mtime_val: float) -> list[int]:
     """Every season a player has a row in — batting, pitching, or fielding
     combined — sorted most recent first. Feeds the "Season" selectbox on
