@@ -9,6 +9,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import projections
 import style
 import teams
 
@@ -16,7 +17,7 @@ st.set_page_config(page_title="Research | Diamond Metrics", layout="wide")
 st.title("Research")
 st.caption(
     "Sabermetric analysis tools: stack filters across any stat, test whether two stats actually "
-    "correlate, and see how much a stat sticks year over year."
+    "correlate, and project next season's numbers."
 )
 
 if not db.DB_PATH.exists():
@@ -42,7 +43,7 @@ OPS = {
     ">": lambda s, v: s > v, "<": lambda s, v: s < v, "==": lambda s, v: s == v,
 }
 
-screener_tab, corr_tab, stability_tab = st.tabs(["Stat Screener", "Correlation Explorer", "Stat Stability"])
+screener_tab, corr_tab, proj_tab = st.tabs(["Stat Screener", "Correlation Explorer", "Projections"])
 
 # ------------------------------------------------------------ Stat Screener -
 with screener_tab:
@@ -154,55 +155,41 @@ with corr_tab:
         m2.metric("Correlation (r)", f"{r:.3f}")
         m3.metric("Sample size", len(chart_df))
 
-# ---------------------------------------------------------- Stat Stability -
-with stability_tab:
+# ------------------------------------------------------------- Projections -
+with proj_tab:
     st.caption(
-        "How much a stat 'sticks' year to year — the classic sabermetric signal-vs-noise question. "
-        "Computed as the season-N to season-(N+1) correlation among players who qualified in both "
-        "years, at increasing minimum-sample thresholds. A skill-driven stat should show a rising, "
-        "fairly high correlation as the minimum sample grows; a mostly-luck stat stays low no matter "
-        "how much playing time you require."
+        "A gradient-boosted model trained on every season-to-season pair since 2008 — the same "
+        "regress-to-a-baseline idea behind projection systems like Marcel or Steamer, but the "
+        "aging/regression curve is learned from the data instead of hand-set. Projects each "
+        "qualified player's rate stat for the season immediately after the one selected below."
     )
-    role3 = st.radio("Player type", ["Batting", "Pitching"], horizontal=True, key="stability_role")
-    stats_list3 = BATTING_STATS if role3 == "Batting" else PITCHING_STATS
-    default_stat = "OPS" if role3 == "Batting" else "ERA"
-    stat3 = st.selectbox("Stat", stats_list3, index=stats_list3.index(default_stat), key="stability_stat")
-    min_col3 = "PA" if role3 == "Batting" else "IP"
-    thresholds = [50, 100, 150, 250, 350, 500] if role3 == "Batting" else [20, 40, 60, 90, 120, 160]
+    role4 = st.radio("Player type", ["Batting", "Pitching"], horizontal=True, key="proj_role")
+    table4 = "batting" if role4 == "Batting" else "pitching"
+    targets4 = projections.BATTING_TARGETS if role4 == "Batting" else projections.PITCHING_TARGETS
+    default_target = "OPS" if role4 == "Batting" else "ERA"
+    target4 = st.selectbox("Stat to project", targets4, index=targets4.index(default_target), key="proj_target")
+    season4 = st.selectbox("Base season", seasons, index=0, key="proj_season")
 
-    table_name = "batting" if role3 == "Batting" else "pitching"
-    history_df = db.load_stat_across_seasons(table_name, stat3, min_col3, mtime)
-    by_season = {s: g for s, g in history_df.groupby("season")}
+    with st.spinner("Training model..."):
+        proj_df, proj_metrics = projections.project_next_season(table4, target4, season4, mtime)
 
-    rows = []
-    for th in thresholds:
-        pair_frames = []
-        for s in seasons:
-            if s not in by_season or (s + 1) not in by_season:
-                continue
-            cur = by_season[s][by_season[s][min_col3] >= th][["mlbID", stat3]].rename(columns={stat3: "y1"})
-            nxt = by_season[s + 1][by_season[s + 1][min_col3] >= th][["mlbID", stat3]].rename(columns={stat3: "y2"})
-            merged = cur.merge(nxt, on="mlbID")
-            if not merged.empty:
-                pair_frames.append(merged)
-        if not pair_frames:
-            continue
-        pairs = pd.concat(pair_frames, ignore_index=True)
-        if len(pairs) >= 10:
-            r = float(np.corrcoef(pairs["y1"], pairs["y2"])[0, 1])
-            rows.append({f"Min {min_col3}": th, "Year-over-year r": round(r, 3), "Pairs": len(pairs)})
-
-    if not rows:
-        st.info("Not enough year-over-year pairs to compute stability for this stat.")
+    if proj_df is None:
+        st.info("Not enough historical season-to-season pairs yet to train a projection model for this stat.")
     else:
-        stability_df = pd.DataFrame(rows)
-        fig = px.bar(
-            stability_df, x=f"Min {min_col3}", y="Year-over-year r", text="Pairs",
-            color_discrete_sequence=["#3B82F6"],
+        if proj_metrics:
+            m1, m2, m3 = st.columns(3)
+            m1.metric("Out-of-sample R²", f"{proj_metrics['r2']:.3f}")
+            m2.metric("Mean absolute error", f"{proj_metrics['mae']:.3f}")
+            m3.metric(f"Tested on {proj_metrics['test_season']} → {proj_metrics['test_season'] + 1}", f"{proj_metrics['n']} players")
+        proj_col, delta_col = f"{season4 + 1} Projected", "Δ"
+        display4 = teams.add_team_abbr(proj_df).rename(columns={"Current": f"{season4} {target4}", "Projected": proj_col})
+        cols4 = ["Name", "Tm", "Age", f"{season4} {target4}", proj_col, delta_col]
+        is_lower_better = target4 in projections.LOWER_BETTER
+        st.dataframe(
+            style.style_stats_table(
+                display4[cols4], team_col="Tm", team_color_fn=teams.color_for_abbr,
+                higher_better=[] if is_lower_better else [proj_col, delta_col],
+                lower_better=[proj_col, delta_col] if is_lower_better else [],
+            ),
+            use_container_width=True, height=500, hide_index=True,
         )
-        fig.update_layout(
-            height=380, margin=dict(l=0, r=0, t=10, b=0), yaxis_range=[-1, 1],
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
-        )
-        st.plotly_chart(fig, use_container_width=True)
-        st.dataframe(stability_df, use_container_width=True, hide_index=True)
