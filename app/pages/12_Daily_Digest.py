@@ -32,6 +32,29 @@ il_moves = txs_yesterday[
     & ~txs_yesterday["description"].str.contains("activated", case=False, na=False)
 ] if not txs_yesterday.empty else txs_yesterday
 
+style.colored_header("On This Day", "headliners")
+otd_games = db.load_on_this_day(date.today().month, date.today().day)
+if not otd_games:
+    st.caption("No historical games found for this date.")
+else:
+    notable = [g for g in otd_games if g["blowout"] or g["shutout"]]
+    shown = sorted(notable if notable else otd_games, key=lambda g: g["years_ago"])[:6]
+    for g in shown:
+        tag = "Blowout" if g["blowout"] else ("Shutout" if g["shutout"] else None)
+        tag_html = (
+            f"<span style='background-color:#3B82F666;color:#FAFAFA;padding:2px 8px;"
+            f"border-radius:6px;font-weight:700;font-size:0.75rem;margin-left:8px'>{tag}</span>"
+            if tag else ""
+        )
+        st.markdown(
+            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
+            f"border-radius:6px;margin:4px 0'>"
+            f"<span style='color:#9AA3B5;font-size:0.85rem'>{g['years_ago']} year{'s' if g['years_ago'] != 1 else ''} ago ({g['year']})</span>"
+            f"{tag_html}"
+            f"<div style='color:#DCE1EA'>{g['away_team']} {g['away_score']} @ {g['home_team']} {g['home_score']}</div></div>",
+            unsafe_allow_html=True,
+        )
+
 style.colored_header("Milestones", "headliners")
 if milestones:
     for m in milestones:

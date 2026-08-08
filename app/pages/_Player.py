@@ -303,6 +303,36 @@ if pitching is not None and is_pitcher_role:
                 )
                 st.caption("Active Spin % — 2020+ only; blank for older seasons or pitch types Statcast doesn't track it for.")
 
+                st.markdown("**Pitch Locations**")
+                with st.spinner("Loading pitch-by-pitch data — first load can take 20-30s..."):
+                    pitches = db.load_pitch_locations(mlbID, season)
+                if pitches.empty:
+                    st.caption("No pitch-level location data available for this season.")
+                else:
+                    pitch_types = sorted(pitches["pitch_name"].dropna().unique().tolist())
+                    loc_pitch = st.selectbox("Pitch type", ["All"] + pitch_types, key="pitch_loc_type")
+                    plot_df = pitches if loc_pitch == "All" else pitches[pitches["pitch_name"] == loc_pitch]
+                    fig = px.density_heatmap(
+                        plot_df, x="plate_x", y="plate_z", nbinsx=25, nbinsy=25,
+                        color_continuous_scale="Turbo",
+                    )
+                    fig.add_shape(
+                        type="rect", x0=-0.83, x1=0.83, y0=1.5, y1=3.5,
+                        line=dict(color="#FAFAFA", width=2),
+                    )
+                    fig.update_yaxes(range=[0, 5], scaleanchor="x", scaleratio=1)
+                    fig.update_xaxes(range=[-2.5, 2.5])
+                    fig.update_layout(
+                        height=460, margin=dict(l=0, r=0, t=10, b=0),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        xaxis_title="Horizontal — catcher's view (ft)", yaxis_title="Height (ft)",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+                    st.caption(
+                        f"{len(plot_df)} pitches shown. White box is a league-average strike zone "
+                        "(17in plate, 1.5-3.5ft off the ground) — an individual batter's real zone varies with height/stance."
+                    )
+
 if not fielding.empty:
     style.colored_header("Fielding", "fielding")
     st.caption("Outs Above Average (OAA) by position — Statcast.")

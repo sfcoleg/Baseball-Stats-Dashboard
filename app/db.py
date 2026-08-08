@@ -425,6 +425,55 @@ def load_boxscore_players(game_pk) -> dict | None:
     return {"away": _side("away"), "home": _side("home")}
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=1)
+def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
+    """Real completed MLB games played on this calendar date in each of the
+    past `years_back` years — one schedule API call per year (hydrate=
+    linescore), cached a full day since "today" only changes once daily.
+    Deliberately stays at schedule-level data (final score only) rather
+    than fetching a full boxscore per game, which would mean up to ~15
+    games x 15 years of boxscore calls just to find highlights; a blowout
+    (10+ run margin) or shutout is flagged from the score alone."""
+    current_year = date.today().year
+    results = []
+    for years_ago in range(1, years_back + 1):
+        year = current_year - years_ago
+        try:
+            d = date(year, month, day)
+        except ValueError:
+            continue  # Feb 29 in a non-leap year
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/schedule",
+                params={"sportId": 1, "date": d.isoformat(), "hydrate": "linescore"},
+                timeout=10,
+            )
+            resp.raise_for_status()
+            dates_ = resp.json().get("dates", [])
+            games = dates_[0].get("games", []) if dates_ else []
+        except Exception:
+            continue
+        for g in games:
+            if g.get("status", {}).get("codedGameState") != "F":
+                continue
+            away, home = g["teams"]["away"], g["teams"]["home"]
+            away_score, home_score = away.get("score"), home.get("score")
+            if away_score is None or home_score is None:
+                continue
+            margin = abs(away_score - home_score)
+            results.append({
+                "years_ago": years_ago,
+                "year": year,
+                "away_team": away["team"]["name"],
+                "home_team": home["team"]["name"],
+                "away_score": int(away_score),
+                "home_score": int(home_score),
+                "blowout": margin >= 10,
+                "shutout": min(away_score, home_score) == 0,
+            })
+    return results
+
+
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 
@@ -1300,6 +1349,30 @@ def get_player_pitch_arsenal(mlbID, season: int, db_mtime_val: float) -> pd.Data
         except pd.errors.DatabaseError:
             return pd.DataFrame()
     return df.sort_values("usage_pct", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=20)
+def load_pitch_locations(mlbID: int, season: int) -> pd.DataFrame:
+    """Every individual pitch a pitcher threw in `season` (plate_x/plate_z
+    location, pitch type, outcome), for plotting a strike-zone heatmap —
+    live per-pitch Statcast data via pybaseball, not part of the daily
+    ingest (the pitch_arsenal table only stores pre-aggregated per-pitch-
+    type summaries, not individual pitch coordinates, and pulling every
+    pitch for every pitcher every day would be a much heavier ingest for a
+    chart almost nobody will open). Cached a few hours since this is an
+    expensive network call (~20-30s) independent of stats.db, so it isn't
+    keyed to db_mtime — it refetches on its own schedule as the season
+    progresses, not when the daily batting/pitching refresh runs."""
+    import pybaseball as pb
+
+    try:
+        df = pb.statcast_pitcher(f"{season}-01-01", f"{season}-12-31", int(mlbID))
+    except Exception:
+        return pd.DataFrame()
+    if df is None or df.empty or "plate_x" not in df.columns:
+        return pd.DataFrame()
+    cols = ["plate_x", "plate_z", "pitch_type", "pitch_name", "description", "events"]
+    return df[[c for c in cols if c in df.columns]].dropna(subset=["plate_x", "plate_z"])
 
 
 def _load_optional_table(table: str, season: int, db_mtime_val: float) -> pd.DataFrame:
