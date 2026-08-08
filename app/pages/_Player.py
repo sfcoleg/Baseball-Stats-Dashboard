@@ -169,7 +169,7 @@ if batting is not None and is_batter_role:
     for col, (label, value, pct) in zip(br_cols, br_metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    std_tab, adv_tab, sc_tab = st.tabs(["Standard", "Advanced", "Statcast"])
+    std_tab, adv_tab, sc_tab, bb_tab = st.tabs(["Standard", "Advanced", "Statcast", "Batted Ball"])
     with std_tab:
         st.dataframe(
             batting[["G", "PA", "AB", "R", "H", "2B", "3B", "HR", "RBI", "BB", "SO", "SB", "CS"]]
@@ -196,6 +196,36 @@ if batting is not None and is_batter_role:
             use_container_width=True,
             hide_index=True,
         )
+    with bb_tab:
+        bb_row = db.load_batted_ball(season, mtime)
+        bb_row = bb_row[bb_row["mlbID"] == mlbID] if "mlbID" in bb_row.columns else bb_row.iloc[0:0]
+        bt_row = db.load_bat_tracking(season, mtime)
+        bt_row = bt_row[bt_row["mlbID"] == mlbID] if "mlbID" in bt_row.columns else bt_row.iloc[0:0]
+        if bb_row.empty and bt_row.empty:
+            st.caption("No batted-ball or bat-tracking data for this season.")
+        if not bb_row.empty:
+            st.caption("Batted-ball direction and type — how this player's contact is distributed.")
+            st.dataframe(
+                bb_row[["gb_rate", "fb_rate", "ld_rate", "pu_rate", "pull_rate", "straight_rate", "oppo_rate"]]
+                .rename(columns={
+                    "gb_rate": "GB%", "fb_rate": "FB%", "ld_rate": "LD%", "pu_rate": "PU%",
+                    "pull_rate": "Pull%", "straight_rate": "Straight%", "oppo_rate": "Oppo%",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
+        if not bt_row.empty:
+            st.caption("Bat tracking — 2023+ only.")
+            st.dataframe(
+                bt_row[["avg_bat_speed", "swing_length", "hard_swing_rate", "squared_up_per_swing", "blast_per_swing"]]
+                .rename(columns={
+                    "avg_bat_speed": "Bat Speed (mph)", "swing_length": "Swing Length (ft)",
+                    "hard_swing_rate": "Hard-Swing%", "squared_up_per_swing": "Squared-Up%",
+                    "blast_per_swing": "Blast%",
+                }),
+                use_container_width=True,
+                hide_index=True,
+            )
 
 if pitching is not None and is_pitcher_role:
     style.colored_header("Pitching", "pitching")
@@ -254,23 +284,24 @@ if pitching is not None and is_pitcher_role:
                 st.caption("No pitch-level Statcast data for this season.")
             else:
                 arsenal_display = arsenal[[
-                    "pitch_name", "usage_pct", "velocity", "whiff_pct",
+                    "pitch_name", "usage_pct", "velocity", "spin_rate", "whiff_pct",
                     "vert_break", "horz_break", "run_value",
                 ]].rename(columns={
                     "pitch_name": "Pitch", "usage_pct": "Usage %", "velocity": "Velo (mph)",
-                    "whiff_pct": "Whiff %", "vert_break": "Vert Break (in)",
+                    "spin_rate": "Active Spin %", "whiff_pct": "Whiff %", "vert_break": "Vert Break (in)",
                     "horz_break": "Horz Break (in)", "run_value": "Run Value",
                 })
                 st.dataframe(
                     style.style_stats_table(
                         arsenal_display,
                         higher_better=["Usage %", "Velo (mph)", "Whiff %", "Run Value"],
-                        precision={"Usage %": "{:.1f}", "Velo (mph)": "{:.1f}", "Whiff %": "{:.1f}",
-                                   "Vert Break (in)": "{:.1f}", "Horz Break (in)": "{:.1f}"},
+                        precision={"Usage %": "{:.1f}", "Velo (mph)": "{:.1f}", "Active Spin %": "{:.1f}",
+                                   "Whiff %": "{:.1f}", "Vert Break (in)": "{:.1f}", "Horz Break (in)": "{:.1f}"},
                     ),
                     use_container_width=True,
                     hide_index=True,
                 )
+                st.caption("Active Spin % — 2020+ only; blank for older seasons or pitch types Statcast doesn't track it for.")
 
 if not fielding.empty:
     style.colored_header("Fielding", "fielding")
@@ -280,6 +311,44 @@ if not fielding.empty:
         use_container_width=True,
         hide_index=True,
     )
+
+    positions_played = set(fielding["Pos"].dropna())
+    if positions_played & {"C"}:
+        framing = db.load_catcher_framing(season, mtime)
+        framing = framing[framing["mlbID"] == mlbID] if "mlbID" in framing.columns else framing.iloc[0:0]
+        poptime = db.load_catcher_poptime(season, mtime)
+        poptime = poptime[poptime["mlbID"] == mlbID] if "mlbID" in poptime.columns else poptime.iloc[0:0]
+        if not framing.empty or not poptime.empty:
+            st.caption("Catcher framing (pitch-framing runs saved) and pop time (throw speed to 2nd/3rd on steals).")
+            cols = st.columns(2)
+            with cols[0]:
+                if not framing.empty:
+                    st.dataframe(
+                        framing[["framing_runs", "framing_pct"]].rename(
+                            columns={"framing_runs": "Framing Runs", "framing_pct": "Framing Pctile"}
+                        ),
+                        use_container_width=True, hide_index=True,
+                    )
+            with cols[1]:
+                if not poptime.empty:
+                    st.dataframe(
+                        poptime[["pop_2b", "pop_3b", "exchange_time"]].rename(
+                            columns={"pop_2b": "Pop Time 2B (s)", "pop_3b": "Pop Time 3B (s)",
+                                     "exchange_time": "Exchange (s)"}
+                        ),
+                        use_container_width=True, hide_index=True,
+                    )
+    if positions_played & {"LF", "CF", "RF"}:
+        jump = db.load_outfield_jump(season, mtime)
+        jump = jump[jump["mlbID"] == mlbID] if "mlbID" in jump.columns else jump.iloc[0:0]
+        if not jump.empty:
+            st.caption("Outfielder jump — reaction/burst/route distance vs. league average (feet), on 2-star-or-harder plays.")
+            st.dataframe(
+                jump[["reaction", "burst", "routing"]].rename(
+                    columns={"reaction": "Reaction (ft)", "burst": "Burst (ft)", "routing": "Routing (ft)"}
+                ),
+                use_container_width=True, hide_index=True,
+            )
 
 if not is_retired and (batting is not None or pitching is not None):
     style.colored_header("Season Trend", "headliners")

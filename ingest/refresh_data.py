@@ -484,12 +484,170 @@ def fetch_pitch_arsenal(season=CURRENT_SEASON):
         columns=["mlbID", "pitch_type", "velocity", "vert_break", "horz_break"]
     )
 
+    spin = fetch_spin_rate(season)
     arsenal = stats.merge(movement, on=["mlbID", "pitch_type"], how="left")
+    arsenal = arsenal.merge(spin, on=["mlbID", "pitch_type"], how="left")
     arsenal["season"] = season
     return arsenal[[
         "mlbID", "Name", "pitch_type", "pitch_name", "usage_pct", "whiff_pct",
-        "run_value", "run_value_per_100", "velocity", "vert_break", "horz_break", "season",
+        "run_value", "run_value_per_100", "velocity", "vert_break", "horz_break", "spin_rate", "season",
     ]]
+
+
+SPIN_COL_TO_PITCH_TYPE = {
+    "active_spin_fourseam": "FF", "active_spin_sinker": "SI", "active_spin_cutter": "FC",
+    "active_spin_changeup": "CH", "active_spin_splitter": "FS", "active_spin_curve": "CU",
+    "active_spin_slider": "SL", "active_spin_sweeper": "ST", "active_spin_slurve": "SV",
+}
+
+
+def fetch_spin_rate(season=CURRENT_SEASON):
+    """Active spin % per pitch type (how much of a pitch's total spin
+    actually contributes to movement, vs. "gyro" spin that doesn't) from
+    Statcast's active-spin leaderboard. That leaderboard is wide (one
+    column per pitch type) — melted here into the same long (mlbID,
+    pitch_type) shape as the rest of the pitch arsenal data so it merges
+    straight in. Only supported 2020+ ("spin-based" method); Statcast
+    redirects to a plain HTML page for earlier years, which this treats
+    the same as any other empty/failed response."""
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/active-spin",
+            params={"year": f"{season}_spin-based", "min": 5, "hand": "", "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+        if df.empty or "entity_id" not in df.columns:
+            raise ValueError("no spin-based data for this season")
+    except Exception as e:
+        print(f"  skipped spin rate ({e})")
+        return pd.DataFrame(columns=["mlbID", "pitch_type", "spin_rate"])
+
+    frames = []
+    for col, pitch_type in SPIN_COL_TO_PITCH_TYPE.items():
+        if col not in df.columns:
+            continue
+        sub = df[["entity_id", col]].rename(columns={"entity_id": "mlbID", col: "spin_rate"})
+        sub["pitch_type"] = pitch_type
+        frames.append(sub.dropna(subset=["spin_rate"]))
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["mlbID", "pitch_type", "spin_rate"])
+
+
+def fetch_batted_ball_profile(season=CURRENT_SEASON):
+    """Batted-ball direction/type rates (ground ball / fly ball / line
+    drive / popup, and pull / straightaway / opposite field) for batters —
+    a hitter's approach, distinct from the outcome stats (BA/SLG/etc.)
+    already covered elsewhere."""
+    print(f"Fetching {season} Statcast batted-ball profile...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/batted-ball",
+            params={"type": "batter", "year": season, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped batted-ball profile ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    df = df.rename(columns={"id": "mlbID"})
+    df["season"] = season
+    return df[["mlbID", "gb_rate", "air_rate", "fb_rate", "ld_rate", "pu_rate",
+               "pull_rate", "straight_rate", "oppo_rate", "season"]]
+
+
+def fetch_bat_tracking(season=CURRENT_SEASON):
+    """Bat speed / swing length / swing-quality stats from Statcast's bat
+    tracking system, which only started recording in the 2023 season —
+    empty response for anything earlier is expected, not an error."""
+    print(f"Fetching {season} Statcast bat tracking...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/bat-tracking",
+            params={"type": "batter", "year": season, "min": 50, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped bat tracking ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    if df.empty:
+        return pd.DataFrame(columns=["mlbID", "season"])
+    df = df.rename(columns={"id": "mlbID"})
+    df["season"] = season
+    return df[["mlbID", "avg_bat_speed", "swing_length", "hard_swing_rate",
+               "squared_up_per_swing", "blast_per_swing", "whiff_per_swing", "season"]]
+
+
+def fetch_catcher_framing(season=CURRENT_SEASON):
+    """Catcher pitch-framing runs saved/cost — a real driver of catcher
+    value that plain fielding stats (OAA, errors) don't capture at all."""
+    print(f"Fetching {season} Statcast catcher framing...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/catcher-framing",
+            params={"year": season, "team": "", "min": 1, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped catcher framing ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    df = df.rename(columns={"id": "mlbID", "rv_tot": "framing_runs", "pct_tot": "framing_pct"})
+    df["season"] = season
+    return df[["mlbID", "framing_runs", "framing_pct", "season"]]
+
+
+def fetch_catcher_poptime(season=CURRENT_SEASON):
+    """Catcher pop time (glove-to-glove on a stolen-base attempt) — the
+    throwing-speed side of catcher defense, separate from framing."""
+    print(f"Fetching {season} Statcast catcher pop time...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/poptime",
+            params={"year": season, "team": "", "min2b": 1, "min3b": 0, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped catcher pop time ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    df = df.rename(columns={"entity_id": "mlbID", "pop_2b_sba": "pop_2b", "pop_3b_sba": "pop_3b"})
+    df["season"] = season
+    return df[["mlbID", "pop_2b", "pop_3b", "exchange_2b_3b_sba", "season"]].rename(
+        columns={"exchange_2b_3b_sba": "exchange_time"}
+    )
+
+
+def fetch_outfielder_jump(season=CURRENT_SEASON):
+    """Outfielder "jump" — reaction, burst, and route-efficiency distance
+    (feet gained/lost vs. league average) on two-star-or-harder plays, the
+    components that actually make up an outfielder's OAA rather than just
+    the final runs number."""
+    print(f"Fetching {season} Statcast outfielder jump...")
+    try:
+        resp = requests.get(
+            "https://baseballsavant.mlb.com/leaderboard/outfield_jump",
+            params={"year": season, "min": 1, "csv": "true"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        df = pd.read_csv(io.StringIO(resp.text))
+    except Exception as e:
+        print(f"  skipped outfielder jump ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    df = df.rename(columns={
+        "resp_fielder_id": "mlbID",
+        "rel_league_reaction_distance": "reaction",
+        "rel_league_burst_distance": "burst",
+        "rel_league_routing_distance": "routing",
+    })
+    df["season"] = season
+    return df[["mlbID", "reaction", "burst", "routing", "season"]]
 
 
 def fetch_recent_batting():
@@ -923,6 +1081,11 @@ def fetch_and_store():
     pitching = fetch_pitching(CURRENT_SEASON)
     fielding = fetch_fielding(CURRENT_SEASON)
     pitch_arsenal = fetch_pitch_arsenal(CURRENT_SEASON)
+    batted_ball = fetch_batted_ball_profile(CURRENT_SEASON)
+    bat_tracking = fetch_bat_tracking(CURRENT_SEASON)
+    catcher_framing = fetch_catcher_framing(CURRENT_SEASON)
+    catcher_poptime = fetch_catcher_poptime(CURRENT_SEASON)
+    outfield_jump = fetch_outfielder_jump(CURRENT_SEASON)
     recent_batting = fetch_recent_batting()
     recent_pitching = fetch_recent_pitching()
     todays_games = fetch_todays_games()
@@ -949,6 +1112,16 @@ def fetch_and_store():
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
         if not pitch_arsenal.empty:
             _store_season_table(conn, "pitch_arsenal", pitch_arsenal, CURRENT_SEASON)
+        if not batted_ball.empty:
+            _store_season_table(conn, "batted_ball", batted_ball, CURRENT_SEASON)
+        if not bat_tracking.empty:
+            _store_season_table(conn, "bat_tracking", bat_tracking, CURRENT_SEASON)
+        if not catcher_framing.empty:
+            _store_season_table(conn, "catcher_framing", catcher_framing, CURRENT_SEASON)
+        if not catcher_poptime.empty:
+            _store_season_table(conn, "catcher_poptime", catcher_poptime, CURRENT_SEASON)
+        if not outfield_jump.empty:
+            _store_season_table(conn, "outfield_jump", outfield_jump, CURRENT_SEASON)
         if not all_star_roster.empty:
             _store_season_table(conn, "all_star_rosters", all_star_roster, CURRENT_SEASON)
         # career_totals is a "right now" snapshot (not tied to one cached
@@ -1005,12 +1178,30 @@ def backfill_season(season):
     batting = fetch_batting(season)
     pitching = fetch_pitching(season)
     fielding = fetch_fielding(season)
+    pitch_arsenal = fetch_pitch_arsenal(season)
+    batted_ball = fetch_batted_ball_profile(season)
+    bat_tracking = fetch_bat_tracking(season)
+    catcher_framing = fetch_catcher_framing(season)
+    catcher_poptime = fetch_catcher_poptime(season)
+    outfield_jump = fetch_outfielder_jump(season)
 
     conn = sqlite3.connect(DB_PATH)
     try:
         _store_season_table(conn, "batting", batting, season)
         _store_season_table(conn, "pitching", pitching, season)
         _store_season_table(conn, "fielding", fielding, season)
+        if not pitch_arsenal.empty:
+            _store_season_table(conn, "pitch_arsenal", pitch_arsenal, season)
+        if not batted_ball.empty:
+            _store_season_table(conn, "batted_ball", batted_ball, season)
+        if not bat_tracking.empty:
+            _store_season_table(conn, "bat_tracking", bat_tracking, season)
+        if not catcher_framing.empty:
+            _store_season_table(conn, "catcher_framing", catcher_framing, season)
+        if not catcher_poptime.empty:
+            _store_season_table(conn, "catcher_poptime", catcher_poptime, season)
+        if not outfield_jump.empty:
+            _store_season_table(conn, "outfield_jump", outfield_jump, season)
         conn.commit()
     finally:
         conn.close()

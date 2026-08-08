@@ -1241,6 +1241,45 @@ def get_player_pitch_arsenal(mlbID, season: int, db_mtime_val: float) -> pd.Data
     return df.sort_values("usage_pct", ascending=False).reset_index(drop=True)
 
 
+def _load_optional_table(table: str, season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Generic loader for the newer season-keyed Statcast tables (batted
+    ball, bat tracking, catcher framing/pop time, outfielder jump) that
+    may not exist yet on an older DB snapshot, or have no rows for a
+    season the underlying Statcast system didn't cover (bat tracking
+    pre-2023, any of them pre-2015, catcher/outfield ones for a season
+    with no qualifying catchers/outfielders)."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql(f"SELECT * FROM {table} WHERE season = ?", conn, params=(season,))
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_batted_ball(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("batted_ball", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_bat_tracking(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("bat_tracking", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_catcher_framing(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("catcher_framing", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_catcher_poptime(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("catcher_poptime", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_outfield_jump(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("outfield_jump", season, db_mtime_val)
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_player_history(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
     """Day-over-day OPS/ERA (season-to-date) and day_PA/day_H/day_IP/day_ER
