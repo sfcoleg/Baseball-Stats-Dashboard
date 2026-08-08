@@ -1255,6 +1255,22 @@ def _load_optional_table(table: str, season: int, db_mtime_val: float) -> pd.Dat
             return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_stat_across_seasons(table: str, stat: str, min_col: str, db_mtime_val: float) -> pd.DataFrame:
+    """(mlbID, season, min_col, stat) for every season in one query — used
+    by the Research page's Stat Stability tab, which needs every season at
+    once but only 2 columns from it. Pulling that via the season-by-season
+    load_batting/load_pitching (30+ columns, one query per season) would
+    mean re-querying and downcasting the full table 19+ times just to
+    throw away all but two columns; this is a single lightweight query
+    instead. `table` must be "batting" or "pitching" — never
+    user-supplied, so it's safe to interpolate directly."""
+    with sqlite3.connect(DB_PATH) as conn:
+        return pd.read_sql(
+            f'SELECT "mlbID", "season", "{min_col}", "{stat}" FROM {table} WHERE "{stat}" IS NOT NULL', conn,
+        )
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_batted_ball(season: int, db_mtime_val: float) -> pd.DataFrame:
     return _load_optional_table("batted_ball", season, db_mtime_val)
