@@ -6,6 +6,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import style
 
 st.set_page_config(page_title="Minor Leagues | Diamond Metrics", layout="wide")
 st.title("Minor Leagues")
@@ -37,11 +38,15 @@ with bat_tab:
     else:
         bat_df = bat_df[bat_df["PA"].fillna(0) >= min_pa].sort_values("OPS", ascending=False)
         st.caption(f"{len(bat_df)} players")
+        bat_cols = [
+            "Name", "Tm", "League", "Age", "G", "PA", "AB", "R", "H", "2B", "3B",
+            "HR", "RBI", "BB", "SO", "SB", "AVG", "OBP", "SLG", "OPS",
+        ]
         st.dataframe(
-            bat_df[[
-                "Name", "Tm", "League", "Age", "G", "PA", "AB", "R", "H", "2B", "3B",
-                "HR", "RBI", "BB", "SO", "SB", "AVG", "OBP", "SLG", "OPS",
-            ]],
+            style.style_stats_table(
+                bat_df[bat_cols],
+                higher_better=["HR", "RBI", "SB", "AVG", "OBP", "SLG", "OPS"],
+            ),
             use_container_width=True, hide_index=True, height=600,
         )
 
@@ -61,7 +66,12 @@ with pit_tab:
     else:
         pit_df = pit_df[pit_df["IP"].fillna(0) >= min_ip].sort_values("ERA", ascending=True)
         st.caption(f"{len(pit_df)} players")
+        pit_cols = ["Name", "Tm", "League", "Age", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]
         st.dataframe(
-            pit_df[["Name", "Tm", "League", "Age", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]],
+            style.style_stats_table(
+                pit_df[pit_cols],
+                higher_better=["W", "SV", "SO"],
+                lower_better=["ERA", "WHIP", "L", "BB"],
+            ),
             use_container_width=True, hide_index=True, height=600,
         )
