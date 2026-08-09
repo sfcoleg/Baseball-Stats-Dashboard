@@ -78,20 +78,35 @@ def _todays_games_strip():
         live = live_scores.get(row["game_pk"], {})
         status = live.get("status") or row["status"]
         started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
+        is_live = status == "In Progress"
         away_score = live.get("away_score")
         home_score = live.get("home_score")
         away_txt = str(int(away_score)) if started and away_score is not None else "-"
         home_txt = str(int(home_score)) if started and home_score is not None else "-"
+
+        if is_live:
+            status_html = (
+                f"<span class='live-badge' style='background-color:#D32F2F;color:#FFFFFF;padding:1px 8px;"
+                f"border-radius:6px;font-weight:700;font-size:0.68rem'>LIVE</span>"
+                f"<span style='color:#9AA3B5;font-size:0.72rem;margin-left:6px'>{live.get('inning') or ''}</span>"
+            )
+        elif started:
+            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Final</span>"
+        else:
+            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Scheduled</span>"
+
         cards.append(
             "<div style='flex:0 0 auto;width:170px;background-color:#1B243866;border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
+            f"<div style='margin-bottom:4px'>{status_html}</div>"
             + _team_row(_logo(row["away_abbr"]), row["away_team"], away_txt)
             + _team_row(_logo(row["home_abbr"]), row["home_team"], home_txt)
             + "</div>"
         )
 
     st.markdown(
-        "<div style='display:flex;overflow-x:auto;padding-bottom:8px'>" + "".join(cards) + "</div>",
+        "<div style='display:flex;overflow-x:auto;padding-bottom:8px;margin-top:-90px'>"
+        + "".join(cards) + "</div>",
         unsafe_allow_html=True,
     )
     st.divider()
