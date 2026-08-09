@@ -1548,12 +1548,13 @@ def get_player_pitch_arsenal(mlbID, season: int, db_mtime_val: float) -> pd.Data
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=20)
 def load_pitch_locations(mlbID: int, season: int) -> pd.DataFrame:
     """Every individual pitch a pitcher threw in `season` (plate_x/plate_z
-    location, pitch type, outcome), for plotting a strike-zone heatmap —
+    location, pitch type, outcome, and the count it was thrown on), for
+    plotting a strike-zone heatmap and a pitch-mix-by-count breakdown —
     live per-pitch Statcast data via pybaseball, not part of the daily
     ingest (the pitch_arsenal table only stores pre-aggregated per-pitch-
-    type summaries, not individual pitch coordinates, and pulling every
-    pitch for every pitcher every day would be a much heavier ingest for a
-    chart almost nobody will open). Cached a few hours since this is an
+    type summaries, not individual pitches, and pulling every pitch for
+    every pitcher every day would be a much heavier ingest for a chart
+    almost nobody will open). Cached a few hours since this is an
     expensive network call (~20-30s) independent of stats.db, so it isn't
     keyed to db_mtime — it refetches on its own schedule as the season
     progresses, not when the daily batting/pitching refresh runs."""
@@ -1565,7 +1566,7 @@ def load_pitch_locations(mlbID: int, season: int) -> pd.DataFrame:
         return pd.DataFrame()
     if df is None or df.empty or "plate_x" not in df.columns:
         return pd.DataFrame()
-    cols = ["plate_x", "plate_z", "pitch_type", "pitch_name", "description", "events"]
+    cols = ["plate_x", "plate_z", "pitch_type", "pitch_name", "description", "events", "balls", "strikes"]
     return df[[c for c in cols if c in df.columns]].dropna(subset=["plate_x", "plate_z"])
 
 
