@@ -123,6 +123,14 @@ def load_recent_pitching(season: int, db_mtime_val: float) -> pd.DataFrame:
             )
         except pd.errors.DatabaseError:
             return pd.DataFrame()
+    # Baseball-Reference leaves GSc blank for some rows, which makes the
+    # whole column round-trip through SQLite as TEXT (mixed blank/numeric
+    # strings) instead of a number — sort_values("GSc") on a string column
+    # sorts lexicographically, not numerically, so e.g. "9" outranks "88".
+    # That let a genuinely terrible outing (a handful of Ks, a high single
+    # digit GSc) show up as a "top" pitching performance over real gems.
+    if "GSc" in df.columns:
+        df["GSc"] = pd.to_numeric(df["GSc"], errors="coerce")
     return _downcast(df)
 
 
