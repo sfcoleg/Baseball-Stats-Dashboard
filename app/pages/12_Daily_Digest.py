@@ -37,10 +37,10 @@ otd_games = db.load_on_this_day(date.today().month, date.today().day)
 if not otd_games:
     st.caption("No historical games found for this date.")
 else:
-    notable = [g for g in otd_games if g["blowout"] or g["shutout"]]
+    notable = [g for g in otd_games if g["blowout"]]
     shown = sorted(notable if notable else otd_games, key=lambda g: g["years_ago"])[:6]
     for g in shown:
-        tag = "Blowout" if g["blowout"] else ("Shutout" if g["shutout"] else None)
+        tag = "Blowout" if g["blowout"] else None
         tag_html = (
             f"<span style='background-color:#3B82F666;color:#FAFAFA;padding:2px 8px;"
             f"border-radius:6px;font-weight:700;font-size:0.75rem;margin-left:8px'>{tag}</span>"

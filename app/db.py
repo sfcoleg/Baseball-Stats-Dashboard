@@ -433,7 +433,7 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
     Deliberately stays at schedule-level data (final score only) rather
     than fetching a full boxscore per game, which would mean up to ~15
     games x 15 years of boxscore calls just to find highlights; a blowout
-    (10+ run margin) or shutout is flagged from the score alone."""
+    (10+ run margin) is flagged from the score alone."""
     current_year = date.today().year
     results = []
     for years_ago in range(1, years_back + 1):
@@ -469,7 +469,6 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
                 "away_score": int(away_score),
                 "home_score": int(home_score),
                 "blowout": margin >= 10,
-                "shutout": min(away_score, home_score) == 0,
             })
     return results
 
