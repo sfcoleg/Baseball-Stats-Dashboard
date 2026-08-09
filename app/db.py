@@ -1344,22 +1344,32 @@ MVP_MIN_PA = 200
 CY_YOUNG_MIN_IP = 40
 
 
+PITCHER_MVP_DISCOUNT = 0.5  # pure-pitcher WAR z-score multiplier — see mvp_race docstring
+
+
 @st.cache_data(show_spinner=False, max_entries=16)
 def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
     """WAR-anchored MVP composite for one league/season, spanning both
-    batters and pitchers (a real MVP race does — Verlander/deGrom have
-    gotten serious MVP support). Batters: 50% WAR / 25% wRC+ (pure
-    offensive production — still the biggest driver of real MVP
-    narratives) / 12.5% BsR / 12.5% OAA (baserunning and defense get
-    smaller, equal shares since WAR already partly prices them in — they
-    reward a genuinely all-around player over a one-dimensional slugger
-    with similar WAR, not double-counting). Pitchers: 100% WAR — no rate
-    stats, since a pitcher's MVP case is essentially "how much value did
-    they add," not the finer-grained skill breakdown Cy Young cares about.
-    WAR is z-scored across the COMBINED batter+pitcher pool so the two
-    roles land on one comparable scale; wRC+/BsR/OAA are z-scored among
-    batters only. Not real award-voting data — a stats-only proxy, sorted
-    by "MVP Score" descending."""
+    batters and pitchers. Batters: 50% WAR / 25% wRC+ (pure offensive
+    production — still the biggest driver of real MVP narratives) / 12.5%
+    BsR / 12.5% OAA (baserunning and defense get smaller, equal shares
+    since WAR already partly prices them in — they reward a genuinely
+    all-around player over a one-dimensional slugger with similar WAR, not
+    double-counting).
+
+    A two-way player (qualifies as both a batter and a pitcher in the same
+    league/season — i.e. Ohtani) is one combined row, not two: their
+    pitching WAR is added to their batting WAR before scoring, and the
+    batting-side formula above still applies for wRC+/BsR/OAA. Every other
+    pitcher is scored on WAR alone, but discounted by
+    PITCHER_MVP_DISCOUNT — in real MVP voting a pitcher (even a great one)
+    is a rare down-ballot mention, not a top-5 regular, and an undiscounted
+    WAR z-score let pitchers crowd out batters unrealistically (4 of a
+    league's top 5 were pitchers before this discount existed). WAR is
+    z-scored across the combined pool (batters with two-way WAR already
+    folded in, plus pure pitchers) so every role lands on one scale before
+    the discount is applied. Not real award-voting data — a stats-only
+    proxy, sorted by "MVP Score" descending."""
     batting = load_batting(season, db_mtime_val)
     pitching = load_pitching(season, db_mtime_val)
     fielding = load_fielding(season, db_mtime_val)
@@ -1369,7 +1379,17 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
     if bat.empty and pit.empty:
         return pd.DataFrame()
 
-    combined_war = pd.concat([bat["WAR"], pit["WAR"]], ignore_index=True).fillna(0.0)
+    two_way_ids = set(bat["mlbID"]) & set(pit["mlbID"])
+    pit_war_by_id = pit.set_index("mlbID")["WAR"]
+    if not bat.empty:
+        bat["WAR"] = bat.apply(
+            lambda r: r["WAR"] + pit_war_by_id.get(r["mlbID"], 0.0) if r["mlbID"] in two_way_ids else r["WAR"],
+            axis=1,
+        )
+        bat["Role"] = bat["mlbID"].apply(lambda i: "Two-Way" if i in two_way_ids else "Batter")
+    pure_pit = pit[~pit["mlbID"].isin(two_way_ids)].copy()
+
+    combined_war = pd.concat([bat["WAR"], pure_pit["WAR"]], ignore_index=True).fillna(0.0)
     war_mean, war_std = combined_war.mean(), combined_war.std()
 
     def _war_z(series: pd.Series) -> pd.Series:
@@ -1393,15 +1413,14 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
             + 0.125 * _zscore(bat["baserunning_runs"])
             + 0.125 * _zscore(bat["OAA"])
         )
-        bat["Role"] = "Batter"
         rows.append(bat)
-    if not pit.empty:
-        pit["wRC_plus"] = float("nan")
-        pit["baserunning_runs"] = float("nan")
-        pit["OAA"] = float("nan")
-        pit["MVP Score"] = _war_z(pit["WAR"])
-        pit["Role"] = "Pitcher"
-        rows.append(pit)
+    if not pure_pit.empty:
+        pure_pit["wRC_plus"] = float("nan")
+        pure_pit["baserunning_runs"] = float("nan")
+        pure_pit["OAA"] = float("nan")
+        pure_pit["MVP Score"] = PITCHER_MVP_DISCOUNT * _war_z(pure_pit["WAR"])
+        pure_pit["Role"] = "Pitcher"
+        rows.append(pure_pit)
 
     combined = pd.concat(rows, ignore_index=True, sort=False)
     return combined.sort_values("MVP Score", ascending=False).reset_index(drop=True)
@@ -1484,9 +1503,8 @@ def rookie_of_the_year_race(season: int, league: str, db_mtime_val: float) -> pd
 
     rookies = []
     if not mvp.empty:
-        bat_pool = mvp[mvp["Role"] == "Batter"]
+        bat_pool = mvp[mvp["Role"].isin(["Batter", "Two-Way"])]
         bat_rookies = bat_pool[bat_pool["mlbID"].apply(_is_rookie_eligible)].copy()
-        bat_rookies["Role"] = "Batter"
         bat_rookies["ROY Score"] = bat_rookies["MVP Score"]
         rookies.append(bat_rookies)
     if not cy.empty:
