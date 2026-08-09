@@ -6,7 +6,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
-from plotly.subplots import make_subplots
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
@@ -444,46 +443,31 @@ if pitching is not None and is_pitcher_role:
                     if "balls" not in pitches.columns or "strikes" not in pitches.columns:
                         st.caption("No count data available for this season.")
                     else:
-                        count_fig = make_subplots(
-                            rows=4, cols=3,
-                            specs=[[{"type": "domain"}] * 3 for _ in range(4)],
-                            subplot_titles=[f"{b}-{s}" for b in range(4) for s in range(3)],
-                            vertical_spacing=0.08, horizontal_spacing=0.02,
-                        )
-                        pitch_colors = {
-                            name: px.colors.qualitative.Set2[i % len(px.colors.qualitative.Set2)]
-                            for i, name in enumerate(pitch_types)
-                        }
-                        any_count_data = False
-                        for b in range(4):
-                            for s in range(3):
-                                count_df = pitches[(pitches["balls"] == b) & (pitches["strikes"] == s)]
-                                mix = count_df["pitch_name"].value_counts()
-                                if mix.empty:
-                                    continue
-                                any_count_data = True
-                                count_fig.add_trace(
-                                    go.Pie(
-                                        labels=mix.index, values=mix.values,
-                                        marker=dict(colors=[pitch_colors.get(n, "#888") for n in mix.index]),
-                                        textinfo="none", hole=0.35, showlegend=(b == 0 and s == 0),
-                                    ),
-                                    row=b + 1, col=s + 1,
-                                )
-                        if not any_count_data:
+                        count_data = pitches.dropna(subset=["balls", "strikes", "pitch_name"]).copy()
+                        if count_data.empty:
                             st.caption("Not enough pitches with count data to break down by count.")
                         else:
-                            count_fig.update_layout(
-                                height=700, margin=dict(l=0, r=0, t=30, b=0),
-                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
-                                legend=dict(orientation="h", yanchor="bottom", y=-0.05),
+                            count_data["Count"] = (
+                                count_data["balls"].astype(int).astype(str) + "-"
+                                + count_data["strikes"].astype(int).astype(str)
                             )
-                            count_fig.update_annotations(font_color="#FAFAFA")
+                            # A tree, not 12 separate pies: root splits into each ball-strike
+                            # count, each of those splits into that count's pitch mix — click a
+                            # count wedge to zoom into just its pitch breakdown.
+                            count_fig = px.sunburst(
+                                count_data, path=["Count", "pitch_name"],
+                                color="pitch_name", color_discrete_sequence=px.colors.qualitative.Set2,
+                            )
+                            count_fig.update_layout(
+                                height=700, margin=dict(l=0, r=0, t=10, b=0),
+                                paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                            )
+                            count_fig.update_traces(insidetextorientation="radial")
                             st.plotly_chart(count_fig, use_container_width=True)
                             st.caption(
-                                "Pitch mix (by count of pitches thrown) for each ball-strike count this season — "
-                                "e.g. the fastball-heavy tendency on 0-0 or 3-0 vs. more offspeed on 0-2/1-2. "
-                                "Empty cells mean that count barely came up."
+                                "Inner ring is ball-strike count, outer ring is pitch mix within that count — "
+                                "e.g. the fastball-heavy tendency on 0-0/3-0 vs. more offspeed on 0-2/1-2. "
+                                "Click a count wedge to zoom in, click center to zoom back out."
                             )
 
 if not fielding.empty:
