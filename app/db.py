@@ -473,6 +473,73 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
     return results
 
 
+MILB_LEVELS = {
+    "Triple-A": 11,
+    "Double-A": 12,
+    "High-A": 13,
+    "Single-A": 14,
+    "Rookie": 16,
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=40)
+def load_milb_stats(sport_id: int, group: str, season: int) -> pd.DataFrame:
+    """Real per-player minor-league season stats for one level/group/season
+    — live-fetched from the MLB Stats API on demand rather than backfilled
+    into the daily ingest like the MLB pages; this is a lighter "lesser
+    version" of the main site for the minors, current-ish seasons only, no
+    multi-year history. `playerPool=ALL` is required — the endpoint's
+    default only returns ~30 "qualified" leaders, dropping almost
+    everyone who played."""
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/stats",
+            params={
+                "stats": "season", "group": group, "sportId": sport_id, "season": season,
+                "limit": 5000, "playerPool": "ALL",
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        splits = resp.json().get("stats", [{}])[0].get("splits", [])
+    except Exception:
+        return pd.DataFrame()
+
+    rows = []
+    for s in splits:
+        stat = s.get("stat", {})
+        row = {
+            "mlbID": s.get("player", {}).get("id"),
+            "Name": s.get("player", {}).get("fullName"),
+            "Tm": s.get("team", {}).get("name"),
+            "League": s.get("league", {}).get("name"),
+            "Age": stat.get("age"),
+        }
+        if group == "hitting":
+            row.update({
+                "G": stat.get("gamesPlayed"), "PA": stat.get("plateAppearances"), "AB": stat.get("atBats"),
+                "R": stat.get("runs"), "H": stat.get("hits"), "2B": stat.get("doubles"), "3B": stat.get("triples"),
+                "HR": stat.get("homeRuns"), "RBI": stat.get("rbi"), "BB": stat.get("baseOnBalls"),
+                "SO": stat.get("strikeOuts"), "SB": stat.get("stolenBases"),
+                "AVG": stat.get("avg"), "OBP": stat.get("obp"), "SLG": stat.get("slg"), "OPS": stat.get("ops"),
+            })
+        else:
+            row.update({
+                "G": stat.get("gamesPitched"), "GS": stat.get("gamesStarted"), "W": stat.get("wins"),
+                "L": stat.get("losses"), "SV": stat.get("saves"), "IP": stat.get("inningsPitched"),
+                "ERA": stat.get("era"), "WHIP": stat.get("whip"), "SO": stat.get("strikeOuts"),
+                "BB": stat.get("baseOnBalls"), "HR": stat.get("homeRuns"),
+            })
+        rows.append(row)
+
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    numeric_cols = [c for c in df.columns if c not in ("mlbID", "Name", "Tm", "League")]
+    df[numeric_cols] = df[numeric_cols].apply(pd.to_numeric, errors="coerce")
+    return df
+
+
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 

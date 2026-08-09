@@ -272,6 +272,7 @@ PAGES = [
     st.Page("pages/15_Mini_Games.py", title="Mini Games"),
     st.Page("pages/16_Awards_Race.py", title="Awards Race"),
     st.Page("pages/17_Research.py", title="Research"),
+    st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
 ]
 
