@@ -146,24 +146,35 @@ def pitching_day_stat_line(row) -> str:
     return f"{int(row['ER'])} ER, {int(row['H'])} H, {int(row['SO'])} K ({row['IP']:.1f} IP)"
 
 
-def headliner_card(label, name, team_abbr, team_color, stat_line):
-    """A stat card that shows the FULL player name (st.metric truncates long
-    values with an ellipsis, which cuts off names like 'Heriberto Hernández')."""
+def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
+    """A stat card with a headshot (photo left, name/badge/stat stacked
+    right) — mirrors milestone_card's layout. Shows the FULL player name
+    (st.metric truncates long values with an ellipsis, which cuts off names
+    like 'Heriberto Hernández'). `mlbID` is optional since the rare
+    hardcoded Home page overrides (see HOT_YESTERDAY_OVERRIDES) have no
+    real player behind them — falls back to a photo-less layout then."""
     st.caption(label)
-    st.markdown(
-        f"<div style='font-size:1.4rem;font-weight:700;line-height:1.3;"
-        f"overflow-wrap:break-word'>{name} "
+    name_html = (
+        f"<div style='font-size:1.4rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
-        f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
-        f"</div>",
-        unsafe_allow_html=True,
+        f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
     )
-    st.markdown(
+    stat_html = (
         f"<div style='margin-top:6px;'><span style='background-color:#2e7d3244;"
         f"color:#7CFC9A;padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
-        f"&uarr; {stat_line}</span></div>",
-        unsafe_allow_html=True,
+        f"&uarr; {stat_line}</span></div>"
     )
+    if mlbID is not None:
+        st.markdown(
+            f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+            f"<img src='{headshot_url(mlbID, width=180)}' style='width:56px;height:56px;"
+            f"border-radius:10px;object-fit:cover;flex-shrink:0' />"
+            f"<div style='flex:1;min-width:0'>{name_html}{stat_html}</div>"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.markdown(name_html + stat_html, unsafe_allow_html=True)
 
 
 def milestone_card(mlbID, name, team_abbr, team_color, text):

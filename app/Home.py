@@ -87,7 +87,7 @@ if season == today_pacific().year:
                         stat_line = style.batting_day_stat_line(performer)
                     else:
                         stat_line = f"{performer['OPS']:.3f} OPS, {int(performer['HR'])} HR, {int(performer['RBI'])} RBI"
-                    style.headliner_card(label, performer["Name"], abbr, color, stat_line)
+                    style.headliner_card(label, performer["Name"], abbr, color, stat_line, mlbID=performer["mlbID"])
                 else:
                     st.caption(label)
                     st.markdown("No data yet")
@@ -109,7 +109,7 @@ if season == today_pacific().year:
                         stat_line = style.pitching_day_stat_line(pitcher)
                     else:
                         stat_line = f"{pitcher['ERA']:.2f} ERA, {int(pitcher['SO'])} SO ({pitcher['IP']:.1f} IP)"
-                    style.headliner_card(label, pitcher["Name"], abbr, color, stat_line)
+                    style.headliner_card(label, pitcher["Name"], abbr, color, stat_line, mlbID=pitcher["mlbID"])
                 else:
                     st.caption(label)
                     st.markdown("No data yet")
