@@ -656,5 +656,38 @@ if batting is not None or pitching is not None:
         st.caption(f"Blue line = {selected_name}'s ERA against all qualified pitchers.")
         st.plotly_chart(fig, use_container_width=True)
 
+# Batting comps for a two-way player (both roles True) — matches the same
+# "batting is authoritative" convention used for the header team badge above.
+similarity_is_batter = batting is not None and is_batter_role
+if similarity_is_batter or (pitching is not None and is_pitcher_role):
+    style.colored_header("Similar Players", "headliners", color)
+    similar = db.similar_players(mlbID, season, similarity_is_batter, mtime, n=5)
+    if similar.empty:
+        st.caption("Not enough qualified players this season to compute similarity.")
+    else:
+        st.caption(
+            f"Statistically closest qualified {'batters' if similarity_is_batter else 'pitchers'} in {season}, "
+            "by rate-stat profile (batting average, exit velocity, ERA, FIP, etc.) — not real scouting comps."
+        )
+        sim_cols = st.columns(len(similar))
+        for sim_col, (_, row) in zip(sim_cols, similar.iterrows()):
+            with sim_col:
+                sim_abbr, _, sim_color = teams.team_meta_from_city(row["Tm"], row["Lev"])
+                st.markdown(
+                    "<div style='text-align:center'>"
+                    f"<img src='{style.headshot_url(row['mlbID'], width=140)}' style='width:72px;height:72px;"
+                    "border-radius:10px;object-fit:cover;object-position:center 25%' />"
+                    f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word'>{row['Name']}</div>"
+                    f"<span style='background-color:{sim_color}66;color:#FAFAFA;padding:2px 9px;"
+                    f"border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span>"
+                    "</div>",
+                    unsafe_allow_html=True,
+                )
+                if st.button("View profile", key=f"similar_{row['mlbID']}", use_container_width=True):
+                    st.session_state["selected_mlbID"] = int(row["mlbID"])
+                    st.session_state["selected_name"] = row["Name"]
+                    st.session_state["selected_season"] = season
+                    st.switch_page("pages/_Player.py")
+
 if batting is None and pitching is None and fielding.empty:
     st.info("No stats found for this player in the selected season.")

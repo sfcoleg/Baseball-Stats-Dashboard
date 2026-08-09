@@ -1619,6 +1619,48 @@ def _zscore(series: pd.Series) -> pd.Series:
     return (series - series.mean()) / std
 
 
+# Rate/percentage stats only (never raw counting stats like HR or SO) so a
+# part-timer and a full-time regular with the same underlying skill profile
+# still land close together — a counting stat would separate them purely on
+# playing time, which isn't what "statistically similar" should mean.
+SIMILARITY_BATTING_STATS = [
+    "BA", "OBP", "SLG", "ISO", "BB_PCT", "K_PCT", "wRC_plus",
+    "sprint_speed", "barrel_pct", "hard_hit_pct",
+]
+SIMILARITY_PITCHING_STATS = [
+    "ERA", "FIP", "WHIP", "K_9", "BB_9", "ERA_plus", "xERA", "hard_hit_pct_against",
+]
+SIMILARITY_MIN_PA = 50
+SIMILARITY_MIN_IP = 20
+
+
+def similar_players(mlbID: int, season: int, is_batter: bool, db_mtime_val: float, n: int = 5) -> pd.DataFrame:
+    """The `n` most statistically similar qualified players (same season,
+    same batter/pitcher role) to `mlbID`, by Euclidean distance across
+    z-scored rate stats (see SIMILARITY_BATTING_STATS/SIMILARITY_PITCHING_STATS)
+    — not real scouting comps, just "whose statistical profile this season
+    looks like this one." A stat missing for a given player (e.g. sprint
+    speed before Statcast tracked it) is treated as league-average for that
+    one column rather than excluding the player entirely.
+    Returns columns: mlbID, Name, Tm, Lev, distance (lower = more similar)."""
+    df = load_batting(season, db_mtime_val) if is_batter else load_pitching(season, db_mtime_val)
+    min_col, min_val = ("PA", SIMILARITY_MIN_PA) if is_batter else ("IP", SIMILARITY_MIN_IP)
+    stats = SIMILARITY_BATTING_STATS if is_batter else SIMILARITY_PITCHING_STATS
+    stats = [s for s in stats if s in df.columns]
+
+    pool = df[df[min_col] >= min_val].copy()
+    if mlbID not in pool["mlbID"].values or len(pool) < 2 or not stats:
+        return pd.DataFrame(columns=["mlbID", "Name", "Tm", "Lev", "distance"])
+
+    z = pool[stats].apply(_zscore).fillna(0.0)
+    target_pos = pool.index.get_loc(pool.index[pool["mlbID"] == mlbID][0])
+    target_vec = z.iloc[target_pos]
+    distance = ((z - target_vec) ** 2).sum(axis=1) ** 0.5
+
+    result = pool[["mlbID", "Name", "Tm", "Lev"]].assign(distance=distance.values)
+    return result[result["mlbID"] != mlbID].sort_values("distance").head(n).reset_index(drop=True)
+
+
 MVP_MIN_PA = 200
 CY_YOUNG_MIN_IP = 40
 
