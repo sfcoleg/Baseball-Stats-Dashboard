@@ -42,7 +42,7 @@ for _, row in injuries.iterrows():
         f"<div style='display:flex;align-items:center;gap:14px;background-color:#1B243866;"
         f"border-left:4px solid {color};padding:10px 14px;border-radius:6px;margin:6px 0'>"
         f"<img src='{style.headshot_url(row['mlbID'], width=100)}' style='width:56px;height:56px;"
-        f"border-radius:50%;object-fit:cover;object-position:top;flex-shrink:0'>"
+        f"border-radius:50%;object-fit:cover;object-position:center 15%;flex-shrink:0'>"
         f"<div style='flex-grow:1'>"
         f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
         f"font-weight:700;font-size:0.85rem'>{row['Tm']}</span> "
