@@ -1403,6 +1403,59 @@ def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame
     return pit.sort_values("Cy Young Score", ascending=False).reset_index(drop=True)
 
 
+ROOKIE_MAX_CAREER_AB = 130
+ROOKIE_MAX_CAREER_IP = 50
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def rookie_of_the_year_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
+    """Rookie of the Year candidates for one league/season, real MLB rule:
+    fewer than 130 career AB AND fewer than 50 career IP in the majors
+    before this season. Checked against every earlier season in this
+    database — a player who cleared those limits before 2008 (the app's
+    earliest season) would be misclassified as still rookie-eligible here,
+    the same "since 2008" caveat as the rest of the app.
+
+    Batters are scored with the MVP formula, pitchers with the Cy Young
+    formula (see mvp_race/cy_young_race) — both are z-scores within their
+    own league/season pool, so they land on a comparable scale and can be
+    ranked together in one combined "ROY Score" list."""
+    with sqlite3.connect(DB_PATH) as conn:
+        prior_ab = pd.read_sql(
+            "SELECT mlbID, SUM(AB) AS career_ab FROM batting WHERE season < ? GROUP BY mlbID",
+            conn, params=(season,),
+        )
+        prior_ip = pd.read_sql(
+            "SELECT mlbID, SUM(IP) AS career_ip FROM pitching WHERE season < ? GROUP BY mlbID",
+            conn, params=(season,),
+        )
+    ab_by_id = prior_ab.set_index("mlbID")["career_ab"]
+    ip_by_id = prior_ip.set_index("mlbID")["career_ip"]
+
+    def _is_rookie_eligible(mlbID) -> bool:
+        return ab_by_id.get(mlbID, 0) < ROOKIE_MAX_CAREER_AB and ip_by_id.get(mlbID, 0) < ROOKIE_MAX_CAREER_IP
+
+    mvp = mvp_race(season, league, db_mtime_val)
+    cy = cy_young_race(season, league, db_mtime_val)
+
+    rookies = []
+    if not mvp.empty:
+        bat_rookies = mvp[mvp["mlbID"].apply(_is_rookie_eligible)].copy()
+        bat_rookies["Role"] = "Batter"
+        bat_rookies["ROY Score"] = bat_rookies["MVP Score"]
+        rookies.append(bat_rookies)
+    if not cy.empty:
+        pit_rookies = cy[cy["mlbID"].apply(_is_rookie_eligible)].copy()
+        pit_rookies["Role"] = "Pitcher"
+        pit_rookies["ROY Score"] = pit_rookies["Cy Young Score"]
+        rookies.append(pit_rookies)
+
+    if not rookies:
+        return pd.DataFrame()
+    combined = pd.concat(rookies, ignore_index=True, sort=False)
+    return combined.sort_values("ROY Score", ascending=False).reset_index(drop=True)
+
+
 def get_player_batting(mlbID, season: int, db_mtime_val: float) -> pd.Series | None:
     batting = load_batting(season, db_mtime_val)
     match = batting[batting["mlbID"] == mlbID]
