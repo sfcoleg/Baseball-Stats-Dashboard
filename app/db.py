@@ -1,4 +1,5 @@
 """Shared helpers for reading the cached stats database."""
+import math
 import sqlite3
 import unicodedata
 from datetime import date, datetime, timedelta
@@ -1035,22 +1036,72 @@ def _pythag_pct(runs_scored: pd.Series, runs_allowed: pd.Series) -> pd.Series:
     return rs / (rs + ra)
 
 
+def _team_ops_era(db_mtime_val: float) -> tuple[pd.Series, pd.Series]:
+    """PA-weighted team OPS and IP-weighted team ERA for the current
+    season, indexed by team_abbr — a second, independent read on team
+    strength (peripheral rate stats) alongside the season's actual runs
+    scored/allowed, for compute_playoff_odds's blended team rating.
+    Pitching has no raw earned-runs column, only ERA — recovered via
+    ER = ERA * IP / 9 per pitcher before summing, so the team total isn't
+    just an unweighted average of individual ERAs."""
+    current_season = get_seasons("batting")[0]
+    batting = teams.add_team_abbr(load_batting(current_season, db_mtime_val))
+    pitching = teams.add_team_abbr(load_pitching(current_season, db_mtime_val))
+
+    bat_valid = batting.dropna(subset=["OPS", "PA"])
+    team_ops = bat_valid.groupby("Tm").apply(
+        lambda g: (g["OPS"] * g["PA"]).sum() / g["PA"].sum() if g["PA"].sum() > 0 else np.nan,
+        include_groups=False,
+    )
+
+    pit_valid = pitching.dropna(subset=["ERA", "IP"]).assign(_ER=lambda d: d["ERA"] * d["IP"] / 9)
+    team_era = pit_valid.groupby("Tm").apply(
+        lambda g: 9 * g["_ER"].sum() / g["IP"].sum() if g["IP"].sum() > 0 else np.nan,
+        include_groups=False,
+    )
+    return team_ops, team_era
+
+
+def _series_win_prob(p_game: float, n_games: int) -> float:
+    """Probability of winning a best-of-`n_games` series, given a constant
+    per-game win probability `p_game` — the exact binomial-tail
+    probability of reaching the needed win count, not a per-game
+    simulation (equivalent in distribution for a fixed p, since with an odd
+    n_games "first to (n_games+1)//2 wins" and "wins the majority of all
+    n_games games played" are the same event)."""
+    needed = n_games // 2 + 1
+    p_game = min(max(p_game, 1e-6), 1 - 1e-6)
+    return sum(
+        math.comb(n_games, k) * p_game ** k * (1 - p_game) ** (n_games - k)
+        for k in range(needed, n_games + 1)
+    )
+
+
 @st.cache_data(show_spinner=False, max_entries=2)
 def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
-    """Monte Carlo playoff odds for every team: simulate the rest of the
-    regular season PLAYOFF_SIM_COUNT times and tally how often each team
-    finishes among its league's 3 division winners + 3 wild cards.
+    """Monte Carlo playoff AND World Series odds for every team: simulate
+    the rest of the regular season PLAYOFF_SIM_COUNT times, tally how often
+    each team finishes among its league's 3 division winners + 3 wild
+    cards, then simulate a full postseason bracket (Wild Card best-of-3 ->
+    Division Series best-of-5 -> Championship Series best-of-7 -> World
+    Series best-of-7, real 2022+ reseeding rules) on top of each of those
+    simulated regular seasons for a championship probability.
 
-    Each remaining game's win probability comes from Log5 (see
-    log5_win_prob) applied to each team's Pythagorean winning percentage
-    (from season-to-date runs scored/allowed — a better predictor of true
-    team strength than raw W-L over a partial season) plus a fixed home-
-    field edge, not simply each team's current record. Returns one row per
-    team: mlbID-free, keyed by team_abbr, with a `playoff_pct` column
-    (0-100)."""
+    Each game's win probability comes from Log5 (see log5_win_prob)
+    applied to a blended team-strength rating — 65% each team's
+    Pythagorean winning percentage (season-to-date runs scored/allowed,
+    a better predictor of true team strength than raw W-L over a partial
+    season) and 35% a z-scored composite of team OPS and team ERA (see
+    _team_ops_era) — plus a fixed home-field edge for regular-season games
+    (skipped for postseason series, which roughly balance out venue
+    anyway). Blending in OPS/ERA means a team that's over/underperforming
+    its peripherals (winning close games it "shouldn't," etc.) gets pulled
+    back toward its underlying quality, not just its actual run
+    differential. Returns one row per team, keyed by team_abbr, with
+    `playoff_pct` and `ws_pct` columns (0-100 each)."""
     standings = load_standings(db_mtime_val)
     schedule = load_schedule(db_mtime_val)
-    columns = ["team_abbr", "playoff_pct", "division_pct", "wildcard_pct"]
+    columns = ["team_abbr", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]
     if standings.empty or schedule.empty:
         return pd.DataFrame(columns=columns)
 
@@ -1069,6 +1120,17 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     fallback_pct = (standings["wins"] / (standings["wins"] + standings["losses"]).replace(0, 1)).to_numpy()
     pyth_pct = np.where(standings["runs_scored"].fillna(0).to_numpy() > 0, pyth_pct, fallback_pct)
 
+    team_ops_by_abbr, team_era_by_abbr = _team_ops_era(db_mtime_val)
+    team_ops = standings["team_abbr"].map(team_ops_by_abbr).to_numpy(dtype=float)
+    team_era = standings["team_abbr"].map(team_era_by_abbr).to_numpy(dtype=float)
+    # A team with no qualifying OPS/ERA yet falls back to the league mean
+    # (composite z-score of 0 -> no effect on that team's blended rating).
+    team_ops = np.where(np.isnan(team_ops), np.nanmean(team_ops), team_ops)
+    team_era = np.where(np.isnan(team_era), np.nanmean(team_era), team_era)
+    composite_z = 0.5 * _zscore(pd.Series(team_ops)) - 0.5 * _zscore(pd.Series(team_era))
+    composite_pct = (1 / (1 + np.exp(-composite_z.to_numpy())))
+    team_strength = np.clip(0.65 * pyth_pct + 0.35 * composite_pct, 0.05, 0.95)
+
     remaining = schedule[
         (schedule["status"] != "Final")
         & schedule["away_abbr"].isin(team_idx) & schedule["home_abbr"].isin(team_idx)
@@ -1080,9 +1142,9 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     rng = np.random.default_rng()
     total_wins = np.tile(current_wins, (PLAYOFF_SIM_COUNT, 1))
     if n_games > 0:
-        home_pct, away_pct = pyth_pct[home_idx], pyth_pct[away_idx]
-        denom = home_pct + away_pct - 2 * home_pct * away_pct
-        p_home = np.where(denom > 0, (home_pct - home_pct * away_pct) / np.where(denom > 0, denom, 1), 0.5)
+        home_str, away_str = team_strength[home_idx], team_strength[away_idx]
+        denom = home_str + away_str - 2 * home_str * away_str
+        p_home = np.where(denom > 0, (home_str - home_str * away_str) / np.where(denom > 0, denom, 1), 0.5)
         p_home = np.clip(p_home + HOME_FIELD_ADVANTAGE, 0.01, 0.99)
 
         draws = rng.random((PLAYOFF_SIM_COUNT, n_games))
@@ -1100,6 +1162,11 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
 
     division_flags = np.zeros((PLAYOFF_SIM_COUNT, n_teams), dtype=bool)
     wildcard_flags = np.zeros((PLAYOFF_SIM_COUNT, n_teams), dtype=bool)
+    # Per-league (SIM, 3) column-index arrays, kept for the bracket
+    # simulation below — reusing these instead of recomputing them avoids
+    # a second pass over the same division/wild-card logic.
+    league_division_cols: dict[str, np.ndarray] = {}
+    league_wc_cols: dict[str, np.ndarray] = {}
 
     for league in standings["league"].dropna().unique():
         league_teams = [abbr for abbr in team_list if league_by_abbr.get(abbr) == league]
@@ -1124,18 +1191,89 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
         masked_wins = np.where(winner_mask, -np.inf, league_wins)
 
         wc_order = np.argsort(-masked_wins, axis=1)[:, :WILD_CARDS_PER_LEAGUE]
-        wc_cols = league_cols_arr[wc_order]
+        wc_cols = league_cols_arr[wc_order]  # already sorted best (seed 4) -> worst (seed 6)
         for w in range(WILD_CARDS_PER_LEAGUE):
             wildcard_flags[np.arange(PLAYOFF_SIM_COUNT), wc_cols[:, w]] = True
 
+        league_division_cols[league] = division_winner_cols
+        league_wc_cols[league] = wc_cols
+
     playoff_flags = division_flags | wildcard_flags
+
+    # Postseason bracket: real 2022+ MLB format. Seeds 1-3 are always the
+    # division winners (ranked by wins among themselves — a wild card can
+    # never outrank a division winner regardless of record), seeds 4-6 the
+    # wild cards (ranked by wins among themselves). Not vectorized across
+    # simulations — each row's bracket depends on which specific teams
+    # qualified that row, so the natural unit of work is "one simulated
+    # season's whole postseason," done in a plain loop (cheap: ~11 series
+    # per simulation, each an O(1) binomial-tail lookup).
+    leagues = list(league_division_cols)
+    ws_wins = np.zeros(n_teams)
+
+    def _series_winner(col_a: int, col_b: int, n_games: int) -> int:
+        p_a = log5_win_prob(team_strength[col_a], team_strength[col_b])
+        return col_a if rng.random() < _series_win_prob(p_a, n_games) else col_b
+
+    for i in range(PLAYOFF_SIM_COUNT):
+        league_champ = {}
+        for league in leagues:
+            div_cols_row = league_division_cols[league][i]
+            wc_cols_row = league_wc_cols[league][i]  # already seed 4 -> 5 -> 6 order
+            seeds = sorted(div_cols_row, key=lambda c: -total_wins[i, c]) + list(wc_cols_row)
+            seed_num = {col: rank + 1 for rank, col in enumerate(seeds)}
+
+            wc1 = _series_winner(seeds[2], seeds[5], 3)  # seed 3 vs seed 6
+            wc2 = _series_winner(seeds[3], seeds[4], 3)  # seed 4 vs seed 5
+
+            # Division Series reseeding: #1 seed plays the lowest surviving
+            # seed number (the stronger of the two Wild Card round winners),
+            # #2 seed plays the other.
+            lo, hi = sorted([wc1, wc2], key=lambda c: seed_num[c])
+            ds1 = _series_winner(seeds[0], lo, 5)
+            ds2 = _series_winner(seeds[1], hi, 5)
+
+            league_champ[league] = _series_winner(ds1, ds2, 7)
+
+        ws_champ = _series_winner(league_champ[leagues[0]], league_champ[leagues[1]], 7) if len(leagues) == 2 else league_champ[leagues[0]]
+        ws_wins[ws_champ] += 1
+
     result = pd.DataFrame({
         "team_abbr": team_list,
         "playoff_pct": 100 * playoff_flags.mean(axis=0),
         "division_pct": 100 * division_flags.mean(axis=0),
         "wildcard_pct": 100 * wildcard_flags.mean(axis=0),
+        "ws_pct": 100 * ws_wins / PLAYOFF_SIM_COUNT,
     })
     return result
+
+
+def current_playoff_picture(db_mtime_val: float) -> dict[str, pd.DataFrame]:
+    """"If the season ended today" postseason seeding, straight from actual
+    current standings (no simulation) — the 3 division winners as seeds 1-3
+    (ranked by wins among themselves), the next-3-best non-division-winners
+    in the league as seeds 4-6. Returns {league: DataFrame} with a `seed`
+    column (1-6), one entry per league that has standings data."""
+    standings = load_standings(db_mtime_val)
+    if standings.empty:
+        return {}
+    standings = standings.dropna(subset=["team_abbr", "wins", "losses", "league"]).drop_duplicates("team_abbr")
+
+    picture = {}
+    for league in sorted(standings["league"].unique()):
+        league_df = standings[standings["league"] == league]
+        div_winners = league_df[league_df["div_rank"] == "1"].sort_values("wins", ascending=False)
+        wildcards = (
+            league_df[league_df["div_rank"] != "1"]
+            .sort_values("wins", ascending=False)
+            .head(WILD_CARDS_PER_LEAGUE)
+        )
+        seeded = pd.concat([div_winners, wildcards], ignore_index=True)
+        if seeded.empty:
+            continue
+        seeded.insert(0, "seed", range(1, len(seeded) + 1))
+        picture[league] = seeded
+    return picture
 
 
 # Home teams win ~54% of MLB games historically — this constant folds that

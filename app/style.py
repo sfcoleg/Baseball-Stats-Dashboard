@@ -374,6 +374,77 @@ def standings_table(div_standings, team_color_fn) -> str:
     )
 
 
+def playoff_odds_table(df, team_color_fn) -> str:
+    """One league's full playoff/World Series odds table (see
+    db.compute_playoff_odds) — every team in the league, not just the
+    current top 12, so a fringe contender's long-shot odds are visible
+    too. `df` needs Team/W/L/Playoff%/Division%/Wildcard%/WS%."""
+    rows = ""
+    for _, row in df.iterrows():
+        color = team_color_fn(row["Team"])
+
+        def _pct_cell(col):
+            pct = row[col]
+            pct_str = f"{pct:.1f}%" if pd.notna(pct) else "—"
+            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "#4A5266"
+            return (
+                "<td style='padding:5px 10px;text-align:center'>"
+                f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
+                f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
+            )
+
+        rows += (
+            "<tr style='border-top:1px solid #4A5266'>"
+            f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
+            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a></td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['W']}-{row['L']}</td>"
+            f"{_pct_cell('Playoff%')}{_pct_cell('Division%')}{_pct_cell('Wildcard%')}{_pct_cell('WS%')}"
+            "</tr>"
+        )
+    headers = "".join(
+        f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
+        f"color:#9AA3B5;font-weight:600'>{h}</th>"
+        for h in ("Team", "W-L", "Playoff%", "Division%", "Wildcard%", "WS%")
+    )
+    return (
+        "<table style='width:100%;border-collapse:collapse'>"
+        f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
+def playoff_bracket_html(seeded: pd.DataFrame, team_color_fn) -> str:
+    """One league's "if the season ended today" bracket (see
+    db.current_playoff_picture) — seeds 1-2 on a bye straight to the
+    Division Series, seed 3 vs 6 and seed 4 vs 5 in the Wild Card round.
+    `seeded` needs seed/team_abbr/wins/losses, seed 1-6 in that order."""
+    def _seed_badge(seed_row, note=None):
+        abbr = seed_row["team_abbr"]
+        color = team_color_fn(abbr)
+        note_html = f"<span style='color:#9AA3B5;font-size:0.75rem;margin-left:8px'>{note}</span>" if note else ""
+        return (
+            "<div style='display:flex;align-items:center;background-color:#1B243866;border-left:4px solid "
+            f"{color};padding:8px 14px;border-radius:6px;margin:4px 0'>"
+            f"<span style='color:#9AA3B5;font-weight:700;width:20px'>{int(seed_row['seed'])}</span>"
+            f"<a href='?team={abbr}' target='_self' style='background-color:{color}66;color:#FAFAFA;"
+            f"padding:2px 9px;border-radius:6px;font-weight:700;text-decoration:none;margin-right:8px'>{abbr}</a>"
+            f"<span style='color:#DCE1EA'>{int(seed_row['wins'])}-{int(seed_row['losses'])}</span>"
+            f"{note_html}</div>"
+        )
+
+    by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
+    if len(by_seed) < 6:
+        return "<div style='color:#9AA3B5'>Not enough teams to seed a bracket yet.</div>"
+
+    html = "<div style='font-weight:700;color:#9AA3B5;margin:6px 0 2px'>Division Series bye</div>"
+    html += _seed_badge(by_seed[1], "bye") + _seed_badge(by_seed[2], "bye")
+    html += "<div style='font-weight:700;color:#9AA3B5;margin:14px 0 2px'>Wild Card Round (best of 3)</div>"
+    html += _seed_badge(by_seed[3]) + "<div style='text-align:center;color:#9AA3B5;font-size:0.8rem'>vs</div>" + _seed_badge(by_seed[6])
+    html += "<div style='height:8px'></div>"
+    html += _seed_badge(by_seed[4]) + "<div style='text-align:center;color:#9AA3B5;font-size:0.8rem'>vs</div>" + _seed_badge(by_seed[5])
+    return html
+
+
 _SCHEDULE_STATUS_LABELS = {"Preview": "Scheduled", "Live": "Live"}
 
 

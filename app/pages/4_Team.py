@@ -215,14 +215,16 @@ if season == current_season:
         playoff_odds = db.compute_playoff_odds(mtime)
         team_odds = playoff_odds[playoff_odds["team_abbr"] == selected_abbr]
         pct = float(team_odds.iloc[0]["playoff_pct"]) if not team_odds.empty else None
+        ws_pct = float(team_odds.iloc[0]["ws_pct"]) if not team_odds.empty else None
 
         style.colored_header("Standings & Playoff Odds", "batting")
-        m1, m2, m3, m4, m5 = st.columns(5)
+        m1, m2, m3, m4, m5, m6 = st.columns(6)
         m1.metric("Record", f"{row['wins']}-{row['losses']}")
         m2.metric(row["division"], f"#{row['div_rank']}")
         m3.metric("Run Diff", f"{row['run_diff']:+.0f}" if pd.notna(row["run_diff"]) else "—")
         m4.metric("Streak", row["streak"] if pd.notna(row["streak"]) else "—")
         m5.metric("Playoff Odds", f"{pct:.1f}%" if pct is not None else "—")
+        m6.metric("World Series Odds", f"{ws_pct:.1f}%" if ws_pct is not None else "—")
 
     full_schedule = db.team_schedule(selected_abbr, mtime)
     if not full_schedule.empty:
