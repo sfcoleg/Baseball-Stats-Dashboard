@@ -168,7 +168,7 @@ def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
         st.markdown(
             f"<div style='display:flex;align-items:flex-start;gap:12px'>"
             f"<img src='{headshot_url(mlbID, width=180)}' style='width:56px;height:56px;"
-            f"border-radius:10px;object-fit:cover;object-position:center 15%;flex-shrink:0' />"
+            f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0' />"
             f"<div style='flex:1;min-width:0'>{name_html}{stat_html}</div>"
             f"</div>",
             unsafe_allow_html=True,
@@ -183,7 +183,7 @@ def milestone_card(mlbID, name, team_abbr, team_color, text):
     st.markdown(
         f"<div style='display:flex;align-items:flex-start;gap:12px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
-        f"border-radius:10px;object-fit:cover;object-position:center 15%;flex-shrink:0' />"
+        f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0' />"
         f"<div style='flex:1;min-width:0'>"
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
@@ -207,7 +207,7 @@ def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
         f"<div style='display:flex;align-items:flex-start;gap:12px;background-color:#F5B94214;"
         f"border:1px solid #F5B94266;border-radius:12px;padding:10px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
-        f"border-radius:10px;object-fit:cover;object-position:center 15%;flex-shrink:0;border:2px solid #F5B942' />"
+        f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0;border:2px solid #F5B942' />"
         f"<div style='flex:1;min-width:0'>"
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
@@ -394,7 +394,7 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             note = player.get("note")
             photo_html = (
                 f"<img src='{headshot_url(player['mlbID'], width=120)}' "
-                f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;object-position:center 15%;"
+                f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;object-position:center 25%;"
                 f"border:2px solid {team_color};box-shadow:0 2px 6px rgba(0,0,0,0.5)' />"
             )
         else:
