@@ -95,7 +95,7 @@ def _todays_games_strip():
         else:
             status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Scheduled</span>"
 
-        cards.append(
+        card_html = (
             "<div style='flex:0 0 auto;width:170px;background-color:#1B243866;border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
             f"<div style='margin-bottom:4px'>{status_html}</div>"
@@ -103,10 +103,15 @@ def _todays_games_strip():
             + _team_row(_logo(row["home_abbr"]), row["home_team"], home_txt)
             + "</div>"
         )
+        # Live games first (leftmost, no scrolling needed to spot them),
+        # then everything else in its original schedule order — Python's
+        # sort is stable, so within each group the order is unchanged.
+        cards.append((0 if is_live else 1, card_html))
 
+    cards.sort(key=lambda c: c[0])
     st.markdown(
         "<div style='display:flex;overflow-x:auto;padding-bottom:8px;margin-top:-90px'>"
-        + "".join(cards) + "</div>",
+        + "".join(html for _, html in cards) + "</div>",
         unsafe_allow_html=True,
     )
     st.divider()

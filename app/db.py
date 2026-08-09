@@ -1545,6 +1545,40 @@ def get_player_pitch_arsenal(mlbID, season: int, db_mtime_val: float) -> pd.Data
     return df.sort_values("usage_pct", ascending=False).reset_index(drop=True)
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=40)
+def load_split_stats(mlbID: int, season: int, group: str) -> dict:
+    """Home/Away and vs-Left/vs-Right split stats for one player/season —
+    live from the MLB Stats API (sitCodes=h,a,vl,vr), not part of the daily
+    ingest (splits are a per-player on-demand lookup, not something every
+    page needs pre-aggregated). `group` is "hitting" or "pitching". Returns
+    {"Home": {...}, "Away": {...}, "vs LHP"/"vs LHB": {...}, "vs RHP"/"vs RHB": {...}},
+    each a dict of the raw MLB Stats API stat fields — empty dict for a
+    split with no at-bats/innings yet. Returns {} entirely on any fetch
+    failure or if the player has no stats this season."""
+    label_map = (
+        {"h": "Home", "a": "Away", "vl": "vs LHP", "vr": "vs RHP"} if group == "hitting"
+        else {"h": "Home", "a": "Away", "vl": "vs LHB", "vr": "vs RHB"}
+    )
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1/people/{int(mlbID)}/stats",
+            params={"stats": "statSplits", "group": group, "season": season, "sitCodes": "h,a,vl,vr"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        splits = resp.json().get("stats", [{}])[0].get("splits", [])
+    except Exception:
+        return {}
+
+    result = {}
+    for s in splits:
+        code = s.get("split", {}).get("code")
+        label = label_map.get(code)
+        if label:
+            result[label] = s.get("stat", {})
+    return result
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=20)
 def load_pitch_locations(mlbID: int, season: int) -> pd.DataFrame:
     """Every individual pitch a pitcher threw in `season` (plate_x/plate_z

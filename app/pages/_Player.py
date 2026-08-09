@@ -93,6 +93,32 @@ selected_roles = db.player_roles_label(mlbID, mtime)
 is_batter_role = "Batter" in selected_roles
 is_pitcher_role = "Pitcher" in selected_roles
 
+def _splits_table(splits: dict, columns: list):
+    """Renders Home/Away/vs-L/vs-R as one row-per-split table. `columns` is
+    [(display_label, MLB-Stats-API stat key, format string)]; a missing or
+    zero-sample split (no AB/IP yet) is skipped rather than shown as a row
+    of zeroes."""
+    if not splits:
+        st.caption("No split data available for this season.")
+        return
+    rows = []
+    for label, stat in splits.items():
+        if not stat or not (stat.get("atBats") or stat.get("inningsPitched")):
+            continue
+        row = {"Split": label}
+        for disp, key, fmt in columns:
+            val = stat.get(key)
+            try:
+                row[disp] = fmt.format(float(val)) if val not in (None, "-.--", ".---") else "—"
+            except (TypeError, ValueError):
+                row[disp] = val if val is not None else "—"
+        rows.append(row)
+    if not rows:
+        st.caption("No split data available for this season.")
+        return
+    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
 qualified_batting = all_batting[all_batting["PA"] >= 50]
@@ -272,7 +298,7 @@ if batting is not None and is_batter_role:
     for col, (label, value, pct) in zip(br_cols, br_metrics):
         col.metric(label, value, f"{pct}th pctile" if pct is not None else None, delta_color="off")
 
-    std_tab, adv_tab, sc_tab, bb_tab = st.tabs(["Standard", "Advanced", "Statcast", "Batted Ball"])
+    std_tab, adv_tab, sc_tab, bb_tab, splits_tab = st.tabs(["Standard", "Advanced", "Statcast", "Batted Ball", "Splits"])
     with std_tab:
         st.dataframe(
             batting[["G", "PA", "AB", "R", "H", "2B", "3B", "HR", "RBI", "BB", "SO", "SB", "CS"]]
@@ -329,6 +355,14 @@ if batting is not None and is_batter_role:
                 use_container_width=True,
                 hide_index=True,
             )
+    with splits_tab:
+        with st.spinner("Loading splits..."):
+            bat_splits = db.load_split_stats(mlbID, season, "hitting")
+        _splits_table(bat_splits, [
+            ("PA", "plateAppearances", "{:.0f}"), ("AVG", "avg", "{:.3f}"), ("OBP", "obp", "{:.3f}"),
+            ("SLG", "slg", "{:.3f}"), ("OPS", "ops", "{:.3f}"), ("HR", "homeRuns", "{:.0f}"),
+            ("RBI", "rbi", "{:.0f}"), ("BB", "baseOnBalls", "{:.0f}"), ("SO", "strikeOuts", "{:.0f}"),
+        ])
 
 if pitching is not None and is_pitcher_role:
     style.colored_header("Pitching", "pitching", color)
@@ -353,10 +387,10 @@ if pitching is not None and is_pitcher_role:
     # (get_player_pitching above just checks for that row's existence), but
     # a handful of position-player pitches isn't a real "arsenal".
     is_pitcher = "Pitcher" in selected_roles
-    tab_labels = ["Standard", "Advanced", "Statcast"] + (["Pitch Arsenal"] if is_pitcher else [])
+    tab_labels = ["Standard", "Advanced", "Statcast", "Splits"] + (["Pitch Arsenal"] if is_pitcher else [])
     tabs = st.tabs(tab_labels)
-    std_tab, adv_tab, sc_tab = tabs[:3]
-    arsenal_tab = tabs[3] if is_pitcher else None
+    std_tab, adv_tab, sc_tab, pitch_splits_tab = tabs[:4]
+    arsenal_tab = tabs[4] if is_pitcher else None
     with std_tab:
         st.dataframe(
             pitching[["G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]]
@@ -384,6 +418,13 @@ if pitching is not None and is_pitcher_role:
             use_container_width=True,
             hide_index=True,
         )
+    with pitch_splits_tab:
+        with st.spinner("Loading splits..."):
+            pitch_splits = db.load_split_stats(mlbID, season, "pitching")
+        _splits_table(pitch_splits, [
+            ("IP", "inningsPitched", "{}"), ("ERA", "era", "{:.2f}"), ("WHIP", "whip", "{:.2f}"),
+            ("SO", "strikeOuts", "{:.0f}"), ("BB", "baseOnBalls", "{:.0f}"), ("HR", "homeRuns", "{:.0f}"),
+        ])
     if arsenal_tab is not None:
         with arsenal_tab:
             arsenal = db.get_player_pitch_arsenal(mlbID, season, mtime)
