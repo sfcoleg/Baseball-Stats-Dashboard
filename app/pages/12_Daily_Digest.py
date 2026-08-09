@@ -33,13 +33,22 @@ il_moves = txs_yesterday[
 ] if not txs_yesterday.empty else txs_yesterday
 
 style.colored_header("On This Day", "headliners")
-otd_games = db.load_on_this_day(date.today().month, date.today().day)
+otd = db.load_on_this_day(date.today().month, date.today().day)
+otd_games, otd_highlights = otd["games"], otd["highlights"]
+
+if not otd_highlights:
+    st.caption("No notable player performances (cycles, 3+ HR, 5+ hits, no-hitters, perfect games) found for this date.")
+else:
+    shown_highlights = sorted(otd_highlights, key=lambda h: h["years_ago"])[:8]
+    for h in shown_highlights:
+        st.markdown(style.on_this_day_highlight_card(h), unsafe_allow_html=True)
+
 if not otd_games:
     st.caption("No historical games found for this date.")
 else:
     notable = [g for g in otd_games if g["blowout"]]
-    shown = sorted(notable if notable else otd_games, key=lambda g: g["years_ago"])[:6]
-    for g in shown:
+    shown_games = sorted(notable if notable else otd_games, key=lambda g: g["years_ago"])[:6]
+    for g in shown_games:
         tag = "Blowout" if g["blowout"] else None
         tag_html = (
             f"<span style='background-color:#3B82F666;color:#FAFAFA;padding:2px 8px;"

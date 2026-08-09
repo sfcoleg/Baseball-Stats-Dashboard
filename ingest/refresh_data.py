@@ -832,7 +832,7 @@ def fetch_schedule():
     simulation of the remaining season."""
     print("Fetching full-season schedule from MLB Stats API...")
     columns = [
-        "season", "game_pk", "date", "status",
+        "season", "game_pk", "date", "game_time", "status",
         "away_abbr", "away_score", "home_abbr", "home_score",
     ]
     try:
@@ -862,6 +862,7 @@ def fetch_schedule():
                 "season": CURRENT_SEASON,
                 "game_pk": g.get("gamePk"),
                 "date": g.get("officialDate"),
+                "game_time": g.get("gameDate"),
                 "status": g.get("status", {}).get("abstractGameState"),
                 "away_abbr": away_abbr,
                 "away_score": away.get("score"),

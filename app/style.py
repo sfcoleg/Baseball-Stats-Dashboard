@@ -222,6 +222,37 @@ def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
     )
 
 
+_ON_THIS_DAY_KIND_COLORS = {
+    "Cycle": "#3B82F6", "3+ HR": "#F5B942", "5+ Hits": "#7CFC9A",
+    "No-Hitter": "#F87171", "Perfect Game": "#C084FC",
+}
+
+
+def on_this_day_highlight_card(h: dict) -> str:
+    """One player milestone from db.load_on_this_day's `highlights` list
+    (cycle, 3+ HR game, 5+ hit game, no-hitter, perfect game) as an HTML
+    card matching the "On This Day" game cards' visual language. Batting
+    milestones get a headshot (real mlbID); a combined no-hitter/perfect
+    game has no single mlbID, so those render without one."""
+    color = _ON_THIS_DAY_KIND_COLORS.get(h["kind"], "#3B82F6")
+    photo_html = (
+        f"<img src='{headshot_url(h['mlbID'], width=90)}' style='width:44px;height:44px;"
+        f"border-radius:8px;object-fit:cover;object-position:center 25%;flex-shrink:0;margin-right:12px' />"
+        if h.get("mlbID") else ""
+    )
+    return (
+        f"<div style='display:flex;align-items:center;background-color:#1B243866;"
+        f"border-left:4px solid {color};padding:8px 14px;border-radius:6px;margin:4px 0'>"
+        f"{photo_html}"
+        f"<div style='flex:1;min-width:0'>"
+        f"<span style='color:#9AA3B5;font-size:0.85rem'>{h['years_ago']} year{'s' if h['years_ago'] != 1 else ''} ago ({h['year']})</span>"
+        f"<span style='background-color:{color}33;color:{color};padding:2px 8px;border-radius:6px;"
+        f"font-weight:700;font-size:0.75rem;margin-left:8px'>{h['kind']}</span>"
+        f"<div style='color:#DCE1EA'><b>{h['player']}</b> ({h['team']}) — {h['text']}</div>"
+        f"</div></div>"
+    )
+
+
 def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> str:
     """Traditional scoreboard-style box score: one row per team, one column
     per inning, R/H/E totals set off with a heavier left border — the same
@@ -343,12 +374,29 @@ def standings_table(div_standings, team_color_fn) -> str:
     )
 
 
+_SCHEDULE_STATUS_LABELS = {"Preview": "Scheduled", "Live": "Live"}
+
+
 def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
     """A team's full-season schedule (see db.team_schedule) as a plain HTML
     table — one row per game, played games showing a W/L-colored final
-    score, upcoming games showing the matchup with no score yet."""
+    score, upcoming games showing "Scheduled" (and a live game showing
+    "Live") with no score yet. Each game's local kickoff time is rendered
+    client-side (see the '.game-time-local[data-utc]' script pattern used
+    on the Today's Games page) from the UTC timestamp in `data-utc`, since
+    the server has no idea what timezone the viewer is in.
+
+    The most recent played/live game gets id='sched-anchor' — the Team
+    page scrolls the schedule container to it on load, so the schedule
+    opens already positioned at "now" instead of opening scrolled to
+    Opening Day; scrolling up reveals earlier games, down reveals later
+    ones, in normal date order."""
+    sched = sched.reset_index(drop=True)
+    anchor_positions = sched.index[sched["status"] != "Preview"]
+    anchor_idx = anchor_positions[-1] if len(anchor_positions) else (len(sched) - 1 if len(sched) else None)
+
     rows = ""
-    for _, row in sched.iterrows():
+    for i, row in sched.iterrows():
         opp_color = team_color_fn(row["opponent"])
         vs_at = "vs" if row["home"] else "@"
         matchup = (
@@ -366,10 +414,17 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
                 f"{row['runs_for']:.0f}-{row['runs_against']:.0f}"
             )
         else:
-            score_cell = f"<span style='color:#9AA3B5'>{row['status']}</span>"
+            label = _SCHEDULE_STATUS_LABELS.get(row["status"], row["status"])
+            score_cell = f"<span style='color:#9AA3B5'>{label}</span>"
+        time_cell = (
+            f"<span class='game-time-local' data-utc='{row['game_time']}'>&nbsp;</span>"
+            if pd.notna(row.get("game_time")) else "—"
+        )
+        row_id = " id='sched-anchor'" if i == anchor_idx else ""
         rows += (
-            "<tr style='border-top:1px solid #4A5266'>"
+            f"<tr{row_id} style='border-top:1px solid #4A5266'>"
             f"<td style='padding:5px 10px'>{row['date']}</td>"
+            f"<td style='padding:5px 10px;color:#9AA3B5;font-size:0.85rem'>{time_cell}</td>"
             f"<td style='padding:5px 10px'>{matchup}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{score_cell}</td>"
             "</tr>"
@@ -377,7 +432,7 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
     headers = "".join(
         f"<th style='padding:5px 10px;text-align:{'left' if h != 'Result' else 'center'};"
         f"color:#9AA3B5;font-weight:600'>{h}</th>"
-        for h in ("Date", "Opponent", "Result")
+        for h in ("Date", "Time", "Opponent", "Result")
     )
     return (
         "<table style='width:100%;border-collapse:collapse'>"

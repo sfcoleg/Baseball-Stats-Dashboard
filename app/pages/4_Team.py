@@ -3,6 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
@@ -228,10 +229,50 @@ if season == current_season:
         style.colored_header("Full Season Schedule", "pitching")
         st.caption(f"{(full_schedule['result'] == 'W').sum()}W – {(full_schedule['result'] == 'L').sum()}L so far, {full_schedule['result'].isna().sum()} remaining.")
         st.markdown(
-            "<div style='max-height:500px;overflow-y:auto'>"
+            "<div id='sched-container' style='max-height:500px;overflow-y:auto'>"
             + style.team_schedule_table(full_schedule, teams.color_for_abbr)
             + "</div>",
             unsafe_allow_html=True,
+        )
+        # Local game times (server has no idea what timezone the viewer is
+        # in — see the identical pattern on Today's Games) and an initial
+        # scroll to the most recent/live game, so the schedule opens
+        # positioned at "now" instead of scrolled to Opening Day. Re-run on
+        # every rerun (selecting a different team swaps the schedule's DOM
+        # under the same container id).
+        components.html(
+            """
+            <script>
+            (function() {
+                function updateGameTimes() {
+                    const els = window.parent.document.querySelectorAll('.game-time-local[data-utc]');
+                    els.forEach(function(el) {
+                        const d = new Date(el.dataset.utc);
+                        if (isNaN(d.getTime())) return;
+                        el.textContent = d.toLocaleTimeString([], {hour: 'numeric', minute: '2-digit'});
+                    });
+                }
+                function scrollToAnchor() {
+                    // Set the inner container's own scrollTop directly
+                    // (rather than anchor.scrollIntoView(), which walks up
+                    // and scrolls every ancestor including the outer page —
+                    // dragging the whole Team page down to wherever the
+                    // schedule happens to sit instead of just scrolling
+                    // inside the fixed-height schedule box).
+                    const container = window.parent.document.getElementById('sched-container');
+                    const anchor = window.parent.document.getElementById('sched-anchor');
+                    if (container && anchor) {
+                        const anchorRect = anchor.getBoundingClientRect();
+                        const containerRect = container.getBoundingClientRect();
+                        container.scrollTop += anchorRect.top - containerRect.top;
+                    }
+                }
+                updateGameTimes();
+                scrollToAnchor();
+            })();
+            </script>
+            """,
+            height=0,
         )
 
 # db.load_depth_chart() hits the MLB Stats API's live, present-day depth

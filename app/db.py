@@ -434,17 +434,105 @@ def load_boxscore_players(game_pk) -> dict | None:
     return {"away": _side("away"), "home": _side("home")}
 
 
+# A blowout only makes the "On This Day" cut at a 15+ run margin (e.g.
+# 15-0, 17-2) — 10 was too common to feel notable.
+ON_THIS_DAY_BLOWOUT_MARGIN = 15
+
+
+def _game_player_highlights(game_pk, years_ago, year, away_name, home_name):
+    """Batting/pitching milestones from one historical game's boxscore:
+    cycles, 3+ HR games, 5+ hit games, no-hitters, and perfect games. Looked
+    up team-by-team so a combined no-hitter/perfect game (multiple pitchers
+    together) is caught, not just a single starter's line. Best-effort —
+    returns [] on any fetch failure rather than raising, since this runs
+    once per historical game found for the date."""
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{int(game_pk)}/boxscore", timeout=10)
+        resp.raise_for_status()
+        data = resp.json()
+    except Exception:
+        return []
+
+    teams_data = data.get("teams", {})
+    names = {"away": away_name, "home": home_name}
+    highlights = []
+
+    for side, opp_side in (("away", "home"), ("home", "away")):
+        team = teams_data.get(side, {})
+        players = team.get("players", {})
+
+        for pid in team.get("batters", []):
+            p = players.get(f"ID{pid}")
+            stat = (p or {}).get("stats", {}).get("batting", {})
+            if not p or not stat:
+                continue
+            hits = stat.get("hits", 0)
+            doubles, triples, hrs = stat.get("doubles", 0), stat.get("triples", 0), stat.get("homeRuns", 0)
+            singles = hits - doubles - triples - hrs
+            name = p["person"]["fullName"]
+            base = {"years_ago": years_ago, "year": year, "player": name, "team": names[side], "mlbID": p["person"]["id"]}
+            if singles >= 1 and doubles >= 1 and triples >= 1 and hrs >= 1:
+                highlights.append({**base, "kind": "Cycle", "text": f"Hit for the cycle ({hits}-for-{stat.get('atBats', hits)})"})
+            if hrs >= 3:
+                highlights.append({**base, "kind": "3+ HR", "text": f"{hrs} home runs"})
+            if hits >= 5:
+                highlights.append({**base, "kind": "5+ Hits", "text": f"{hits}-for-{stat.get('atBats', hits)}"})
+
+        # Team-level pitching aggregate (not per-pitcher) so a combined
+        # no-hitter/perfect game — several pitchers together — still counts.
+        pitcher_ids = team.get("pitchers", [])
+        if not pitcher_ids:
+            continue
+        total_h = total_bb = total_hbp = total_outs = 0
+        pitcher_names, last_pitcher_id = [], None
+        for pid in pitcher_ids:
+            p = players.get(f"ID{pid}")
+            stat = (p or {}).get("stats", {}).get("pitching", {})
+            if not p or not stat:
+                continue
+            total_h += stat.get("hits", 0)
+            total_bb += stat.get("baseOnBalls", 0)
+            total_hbp += stat.get("hitBatsmen", 0)
+            total_outs += stat.get("outs", 0)
+            pitcher_names.append(p["person"]["fullName"])
+            last_pitcher_id = p["person"]["id"]
+        # A no-hitter/perfect game requires the pitching side to have
+        # completed at least a full 9-inning game (outs >= 27) — excludes
+        # shortened/rain-called games, which don't count in the record book.
+        if total_outs < 27 or total_h > 0:
+            continue
+        combined = len(pitcher_names) > 1
+        pitcher_label = f"{pitcher_names[-1]} (combined)" if combined else pitcher_names[-1]
+        base = {
+            "years_ago": years_ago, "year": year, "player": pitcher_label, "team": names[side],
+            # A combined effort has no single face for the card — only a
+            # lone starter's complete game gets a headshot.
+            "mlbID": None if combined else last_pitcher_id,
+        }
+        if total_bb == 0 and total_hbp == 0:
+            highlights.append({**base, "kind": "Perfect Game", "text": f"Perfect game vs. {names[opp_side]}"})
+        else:
+            highlights.append({**base, "kind": "No-Hitter", "text": f"No-hitter vs. {names[opp_side]}"})
+
+    return highlights
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=1)
-def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
+def load_on_this_day(month: int, day: int, years_back: int = 15) -> dict:
     """Real completed MLB games played on this calendar date in each of the
-    past `years_back` years — one schedule API call per year (hydrate=
-    linescore), cached a full day since "today" only changes once daily.
-    Deliberately stays at schedule-level data (final score only) rather
-    than fetching a full boxscore per game, which would mean up to ~15
-    games x 15 years of boxscore calls just to find highlights; a blowout
-    (10+ run margin) is flagged from the score alone."""
+    past `years_back` years, plus notable player milestones from those
+    games (cycles, 3+ HR games, 5+ hit games, no-hitters, perfect games) —
+    cached a full day since "today" only changes once daily. Game scores
+    come from one schedule API call per year (hydrate=linescore); player
+    milestones require an extra boxscore call per completed game found
+    (there's no way to know a cycle happened without looking at the box
+    score), so this is heavier than a schedule-only lookup but still just a
+    few hundred requests once a day, not per page view.
+    Returns {"games": [...], "highlights": [...]}; a blowout in "games" is
+    flagged at a ON_THIS_DAY_BLOWOUT_MARGIN+ run margin."""
     current_year = date.today().year
-    results = []
+    games_out = []
+    highlights_out = []
     for years_ago in range(1, years_back + 1):
         year = current_year - years_ago
         try:
@@ -470,16 +558,20 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> list[dict]:
             if away_score is None or home_score is None:
                 continue
             margin = abs(away_score - home_score)
-            results.append({
+            away_name, home_name = away["team"]["name"], home["team"]["name"]
+            games_out.append({
                 "years_ago": years_ago,
                 "year": year,
-                "away_team": away["team"]["name"],
-                "home_team": home["team"]["name"],
+                "away_team": away_name,
+                "home_team": home_name,
                 "away_score": int(away_score),
                 "home_score": int(home_score),
-                "blowout": margin >= 10,
+                "blowout": margin >= ON_THIS_DAY_BLOWOUT_MARGIN,
             })
-    return results
+            highlights_out.extend(
+                _game_player_highlights(g.get("gamePk"), years_ago, year, away_name, home_name)
+            )
+    return {"games": games_out, "highlights": highlights_out}
 
 
 MILB_LEVELS = {
@@ -897,11 +989,13 @@ def load_schedule(db_mtime_val: float) -> pd.DataFrame:
 
 def team_schedule(team_abbr: str, db_mtime_val: float) -> pd.DataFrame:
     """One team's full regular-season schedule — past results and upcoming
-    matchups both, in date order. `result` is 'W'/'L' for played games,
-    None for games not yet final."""
+    matchups both, in date/time order (game_time, not just date, so a
+    doubleheader's two games land in the right order). `result` is 'W'/'L'
+    for played games, None for games not yet final."""
     schedule = load_schedule(db_mtime_val)
+    columns = ["date", "game_time", "opponent", "home", "runs_for", "runs_against", "status", "result"]
     if schedule.empty:
-        return pd.DataFrame(columns=["date", "opponent", "home", "runs_for", "runs_against", "status", "result"])
+        return pd.DataFrame(columns=columns)
 
     mine = schedule[(schedule["home_abbr"] == team_abbr) | (schedule["away_abbr"] == team_abbr)].copy()
     is_home = mine["home_abbr"] == team_abbr
@@ -916,7 +1010,7 @@ def team_schedule(team_abbr: str, db_mtime_val: float) -> pd.DataFrame:
     # branch (shows its status text) instead of a bogus "L nan-nan".
     played = (mine["status"] == "Final") & mine["runs_for"].notna() & mine["runs_against"].notna()
     mine.loc[played, "result"] = (mine.loc[played, "runs_for"] > mine.loc[played, "runs_against"]).map({True: "W", False: "L"})
-    return mine[["date", "opponent", "home", "runs_for", "runs_against", "status", "result"]].sort_values("date").reset_index(drop=True)
+    return mine[columns].sort_values("game_time").reset_index(drop=True)
 
 
 # Pythagenport exponent — how strongly a team's run differential (rather
