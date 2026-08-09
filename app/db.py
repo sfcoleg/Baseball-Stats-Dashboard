@@ -1333,6 +1333,76 @@ def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> 
     return int(round(pct))
 
 
+def _zscore(series: pd.Series) -> pd.Series:
+    std = series.std()
+    if not std or pd.isna(std):
+        return pd.Series(0.0, index=series.index)
+    return (series - series.mean()) / std
+
+
+MVP_MIN_PA = 200
+CY_YOUNG_MIN_IP = 40
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
+    """WAR-anchored MVP composite for one league/season, batters only:
+    50% WAR (the standard cross-category value metric, so it anchors the
+    ranking), 25% wRC+ (pure offensive production — still the biggest
+    driver of real MVP narratives), 12.5% BsR and 12.5% OAA (baserunning
+    and defense get smaller, equal shares since WAR already partly prices
+    them in — they're here to reward a genuinely all-around player over a
+    one-dimensional slugger with a similar WAR, not to double-count).
+    Not real award-voting data — a stats-only proxy, sorted by "MVP Score"
+    descending."""
+    batting = load_batting(season, db_mtime_val)
+    fielding = load_fielding(season, db_mtime_val)
+    bat = batting[(batting["Lev"] == league) & (batting["PA"] >= MVP_MIN_PA)].copy()
+    if bat.empty:
+        return bat
+
+    if not fielding.empty and "player_id" in fielding.columns:
+        oaa_by_player = fielding.groupby("player_id")["OAA"].sum()
+        bat["OAA"] = bat["mlbID"].map(oaa_by_player).fillna(0.0)
+    else:
+        bat["OAA"] = 0.0
+    bat["baserunning_runs"] = bat["baserunning_runs"].fillna(0.0)
+    wrc_plus_filled = bat["wRC_plus"].fillna(bat["wRC_plus"].mean())
+
+    bat["MVP Score"] = (
+        0.50 * _zscore(bat["WAR"].fillna(0.0))
+        + 0.25 * _zscore(wrc_plus_filled)
+        + 0.125 * _zscore(bat["baserunning_runs"])
+        + 0.125 * _zscore(bat["OAA"])
+    )
+    return bat.sort_values("MVP Score", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
+    """WAR-anchored Cy Young composite for one league/season, pitchers
+    only: 50% WAR (rewards durability/innings along with rate performance),
+    30% FIP (the most defense-independent, skill-isolating rate stat), 20%
+    ERA+ (park/league-adjusted actual results, correlated with FIP but adds
+    real-outcome context). FIP is lower-is-better, so its z-score is
+    negated before weighting. Not real award-voting data — a stats-only
+    proxy, sorted by "Cy Young Score" descending."""
+    pitching = load_pitching(season, db_mtime_val)
+    pit = pitching[(pitching["Lev"] == league) & (pitching["IP"] >= CY_YOUNG_MIN_IP)].copy()
+    if pit.empty:
+        return pit
+
+    fip_filled = pit["FIP"].fillna(pit["FIP"].mean())
+    era_plus_filled = pit["ERA_plus"].fillna(pit["ERA_plus"].mean())
+
+    pit["Cy Young Score"] = (
+        0.50 * _zscore(pit["WAR"].fillna(0.0))
+        + 0.30 * _zscore(-fip_filled)
+        + 0.20 * _zscore(era_plus_filled)
+    )
+    return pit.sort_values("Cy Young Score", ascending=False).reset_index(drop=True)
+
+
 def get_player_batting(mlbID, season: int, db_mtime_val: float) -> pd.Series | None:
     batting = load_batting(season, db_mtime_val)
     match = batting[batting["mlbID"] == mlbID]
