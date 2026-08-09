@@ -271,18 +271,48 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
     )
 
 
+def _playoff_pct_color(pct: float) -> str:
+    """Red (0%) -> yellow (50%) -> green (100%) — same visual language as
+    the rest of the app's background_gradient(cmap="RdYlGn") stat columns,
+    hand-rolled here since this table is raw HTML, not a pandas Styler."""
+    pct = max(0.0, min(100.0, pct))
+    if pct <= 50:
+        t = pct / 50
+        r, g, b = (217, int(107 + t * (196 - 107)), int(96 + t * (94 - 96)))
+    else:
+        t = (pct - 50) / 50
+        r, g, b = (int(196 + t * (76 - 196)), int(196 + t * (175 - 196)), int(94 + t * (80 - 94)))
+    return f"rgb({r},{g},{b})"
+
+
 def standings_table(div_standings, team_color_fn) -> str:
     """One division's standings as a plain HTML table, with each team's
     abbreviation rendered as a colored badge that's also a link to
     `?team=ABBR` — clicking the team name itself (not a checkbox/selector
     column, which is all st.dataframe's row-selection offers) is what
     navigates. The Standings page reads that query param on load, stashes
-    the team in session_state, and st.switch_page()s to the Team page."""
+    the team in session_state, and st.switch_page()s to the Team page.
+
+    `div_standings` must have Team/W/L/PCT/GB/Streak plus RS/RA/Diff (runs
+    scored/allowed/differential) and Playoff% (db.compute_playoff_odds)."""
+    has_playoff_pct = "Playoff%" in div_standings.columns
     rows = ""
     for _, row in div_standings.iterrows():
         color = team_color_fn(row["Team"])
         streak = row["Streak"] if pd.notna(row["Streak"]) else "—"
         gb = row["GB"] if pd.notna(row["GB"]) else "—"
+        diff = row["Diff"]
+        diff_str = f"+{diff:.0f}" if pd.notna(diff) and diff > 0 else (f"{diff:.0f}" if pd.notna(diff) else "—")
+        playoff_cell = ""
+        if has_playoff_pct:
+            pct = row["Playoff%"]
+            pct_str = f"{pct:.1f}%" if pd.notna(pct) else "—"
+            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "#4A5266"
+            playoff_cell = (
+                "<td style='padding:5px 10px;text-align:center'>"
+                f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
+                f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
+            )
         rows += (
             "<tr style='border-top:1px solid #4A5266'>"
             f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
@@ -293,12 +323,61 @@ def standings_table(div_standings, team_color_fn) -> str:
             f"<td style='padding:5px 10px;text-align:center'>{row['PCT']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{gb}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{streak}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['RS']}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{row['RA']}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{diff_str}</td>"
+            f"{playoff_cell}"
+            "</tr>"
+        )
+    header_cols = ["Team", "W", "L", "PCT", "GB", "Streak", "RS", "RA", "Diff"]
+    if has_playoff_pct:
+        header_cols.append("Playoff%")
+    headers = "".join(
+        f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
+        f"color:#9AA3B5;font-weight:600'>{'Playoff Odds' if h == 'Playoff%' else h}</th>"
+        for h in header_cols
+    )
+    return (
+        "<table style='width:100%;border-collapse:collapse'>"
+        f"<thead><tr>{headers}</tr></thead><tbody>{rows}</tbody></table>"
+    )
+
+
+def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
+    """A team's full-season schedule (see db.team_schedule) as a plain HTML
+    table — one row per game, played games showing a W/L-colored final
+    score, upcoming games showing the matchup with no score yet."""
+    rows = ""
+    for _, row in sched.iterrows():
+        opp_color = team_color_fn(row["opponent"])
+        vs_at = "vs" if row["home"] else "@"
+        matchup = (
+            f"{vs_at} <span style='background-color:{opp_color}66;color:#FAFAFA;padding:2px 8px;"
+            f"border-radius:6px;font-weight:700'>{row['opponent']}</span>"
+        )
+        if row["result"] == "W":
+            score_cell = (
+                f"<span style='color:#4ADE80;font-weight:700'>W</span> "
+                f"{row['runs_for']:.0f}-{row['runs_against']:.0f}"
+            )
+        elif row["result"] == "L":
+            score_cell = (
+                f"<span style='color:#F87171;font-weight:700'>L</span> "
+                f"{row['runs_for']:.0f}-{row['runs_against']:.0f}"
+            )
+        else:
+            score_cell = f"<span style='color:#9AA3B5'>{row['status']}</span>"
+        rows += (
+            "<tr style='border-top:1px solid #4A5266'>"
+            f"<td style='padding:5px 10px'>{row['date']}</td>"
+            f"<td style='padding:5px 10px'>{matchup}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{score_cell}</td>"
             "</tr>"
         )
     headers = "".join(
-        f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
+        f"<th style='padding:5px 10px;text-align:{'left' if h != 'Result' else 'center'};"
         f"color:#9AA3B5;font-weight:600'>{h}</th>"
-        for h in ("Team", "W", "L", "PCT", "GB", "Streak")
+        for h in ("Date", "Opponent", "Result")
     )
     return (
         "<table style='width:100%;border-collapse:collapse'>"

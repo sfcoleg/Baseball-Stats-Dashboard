@@ -4,6 +4,7 @@ import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
@@ -880,6 +881,167 @@ def load_standings(db_mtime_val: float) -> pd.DataFrame:
             return pd.read_sql("SELECT * FROM standings", conn)
         except pd.errors.DatabaseError:
             return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_schedule(db_mtime_val: float) -> pd.DataFrame:
+    """Full current-season regular-season schedule — every team, every game,
+    past results and future matchups (see ingest's fetch_schedule()).
+    Replaced in full on every ingest run, not historical across seasons."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM schedule", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+def team_schedule(team_abbr: str, db_mtime_val: float) -> pd.DataFrame:
+    """One team's full regular-season schedule — past results and upcoming
+    matchups both, in date order. `result` is 'W'/'L' for played games,
+    None for games not yet final."""
+    schedule = load_schedule(db_mtime_val)
+    if schedule.empty:
+        return pd.DataFrame(columns=["date", "opponent", "home", "runs_for", "runs_against", "status", "result"])
+
+    mine = schedule[(schedule["home_abbr"] == team_abbr) | (schedule["away_abbr"] == team_abbr)].copy()
+    is_home = mine["home_abbr"] == team_abbr
+    mine["opponent"] = mine["away_abbr"].where(is_home, mine["home_abbr"])
+    mine["home"] = is_home
+    mine["runs_for"] = mine["home_score"].where(is_home, mine["away_score"])
+    mine["runs_against"] = mine["away_score"].where(is_home, mine["home_score"])
+    mine["result"] = None
+    # A status of "Final" with a null score does happen (a suspended game's
+    # placeholder entry, resumed/completed as a separate row) — require an
+    # actual score too, so that edge case falls through to the "upcoming"
+    # branch (shows its status text) instead of a bogus "L nan-nan".
+    played = (mine["status"] == "Final") & mine["runs_for"].notna() & mine["runs_against"].notna()
+    mine.loc[played, "result"] = (mine.loc[played, "runs_for"] > mine.loc[played, "runs_against"]).map({True: "W", False: "L"})
+    return mine[["date", "opponent", "home", "runs_for", "runs_against", "status", "result"]].sort_values("date").reset_index(drop=True)
+
+
+# Pythagenport exponent — how strongly a team's run differential (rather
+# than its raw W-L record, which is noisier over a partial season) predicts
+# its "true" winning percentage. 1.83 is the commonly-used refinement of
+# Bill James' original Pythagorean exponent of 2.
+PYTHAG_EXPONENT = 1.83
+
+# Number of remaining-season simulations run for playoff odds. High enough
+# for stable percentages (~1-2% simulation noise), cheap enough (a few
+# hundred ms, vectorized with numpy) to run on every cache miss.
+PLAYOFF_SIM_COUNT = 4000
+
+# Current (2022+) postseason format: 3 division winners + 3 wild cards per
+# league = 6 teams/league, 12 total.
+WILD_CARDS_PER_LEAGUE = 3
+
+
+def _pythag_pct(runs_scored: pd.Series, runs_allowed: pd.Series) -> pd.Series:
+    rs = runs_scored.clip(lower=1) ** PYTHAG_EXPONENT
+    ra = runs_allowed.clip(lower=1) ** PYTHAG_EXPONENT
+    return rs / (rs + ra)
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
+    """Monte Carlo playoff odds for every team: simulate the rest of the
+    regular season PLAYOFF_SIM_COUNT times and tally how often each team
+    finishes among its league's 3 division winners + 3 wild cards.
+
+    Each remaining game's win probability comes from Log5 (see
+    log5_win_prob) applied to each team's Pythagorean winning percentage
+    (from season-to-date runs scored/allowed — a better predictor of true
+    team strength than raw W-L over a partial season) plus a fixed home-
+    field edge, not simply each team's current record. Returns one row per
+    team: mlbID-free, keyed by team_abbr, with a `playoff_pct` column
+    (0-100)."""
+    standings = load_standings(db_mtime_val)
+    schedule = load_schedule(db_mtime_val)
+    columns = ["team_abbr", "playoff_pct", "division_pct", "wildcard_pct"]
+    if standings.empty or schedule.empty:
+        return pd.DataFrame(columns=columns)
+
+    standings = standings.dropna(subset=["team_abbr", "wins", "losses"]).drop_duplicates("team_abbr")
+    team_list = standings["team_abbr"].tolist()
+    n_teams = len(team_list)
+    team_idx = {abbr: i for i, abbr in enumerate(team_list)}
+
+    current_wins = standings["wins"].to_numpy(dtype=float)
+    pyth_pct = _pythag_pct(
+        standings["runs_scored"].fillna(0), standings["runs_allowed"].fillna(0),
+    ).to_numpy()
+    # A team with no runs logged yet (shouldn't happen mid-season, but keeps
+    # this from ever dividing into a 0/0 pythag pct) falls back to its
+    # actual winning percentage instead.
+    fallback_pct = (standings["wins"] / (standings["wins"] + standings["losses"]).replace(0, 1)).to_numpy()
+    pyth_pct = np.where(standings["runs_scored"].fillna(0).to_numpy() > 0, pyth_pct, fallback_pct)
+
+    remaining = schedule[
+        (schedule["status"] != "Final")
+        & schedule["away_abbr"].isin(team_idx) & schedule["home_abbr"].isin(team_idx)
+    ]
+    home_idx = remaining["home_abbr"].map(team_idx).to_numpy()
+    away_idx = remaining["away_abbr"].map(team_idx).to_numpy()
+    n_games = len(remaining)
+
+    rng = np.random.default_rng()
+    total_wins = np.tile(current_wins, (PLAYOFF_SIM_COUNT, 1))
+    if n_games > 0:
+        home_pct, away_pct = pyth_pct[home_idx], pyth_pct[away_idx]
+        denom = home_pct + away_pct - 2 * home_pct * away_pct
+        p_home = np.where(denom > 0, (home_pct - home_pct * away_pct) / np.where(denom > 0, denom, 1), 0.5)
+        p_home = np.clip(p_home + HOME_FIELD_ADVANTAGE, 0.01, 0.99)
+
+        draws = rng.random((PLAYOFF_SIM_COUNT, n_games))
+        home_wins = draws < p_home[None, :]
+
+        home_onehot = np.zeros((n_games, n_teams))
+        home_onehot[np.arange(n_games), home_idx] = 1
+        away_onehot = np.zeros((n_games, n_teams))
+        away_onehot[np.arange(n_games), away_idx] = 1
+
+        total_wins += home_wins @ home_onehot + (~home_wins) @ away_onehot
+
+    league_by_abbr = dict(zip(standings["team_abbr"], standings["league"]))
+    division_by_abbr = dict(zip(standings["team_abbr"], standings["division"]))
+
+    division_flags = np.zeros((PLAYOFF_SIM_COUNT, n_teams), dtype=bool)
+    wildcard_flags = np.zeros((PLAYOFF_SIM_COUNT, n_teams), dtype=bool)
+
+    for league in standings["league"].dropna().unique():
+        league_teams = [abbr for abbr in team_list if league_by_abbr.get(abbr) == league]
+        league_cols = [team_idx[a] for a in league_teams]
+
+        division_winner_cols = []
+        for division in sorted({division_by_abbr[a] for a in league_teams}):
+            div_cols = [team_idx[a] for a in league_teams if division_by_abbr[a] == division]
+            div_wins = total_wins[:, div_cols]
+            winner_within_div = np.argmax(div_wins, axis=1)
+            winner_cols = np.array(div_cols)[winner_within_div]
+            division_flags[np.arange(PLAYOFF_SIM_COUNT), winner_cols] = True
+            division_winner_cols.append(winner_cols)
+        division_winner_cols = np.stack(division_winner_cols, axis=1)  # (SIM, num_divisions)
+
+        league_wins = total_wins[:, league_cols].copy()
+        league_cols_arr = np.array(league_cols)
+        # Mask out this row's division winners (by global column index, not
+        # position — league_cols_arr isn't guaranteed sorted) before picking
+        # wild cards, via a broadcast compare rather than a per-row loop.
+        winner_mask = (league_cols_arr[None, :, None] == division_winner_cols[:, None, :]).any(axis=2)
+        masked_wins = np.where(winner_mask, -np.inf, league_wins)
+
+        wc_order = np.argsort(-masked_wins, axis=1)[:, :WILD_CARDS_PER_LEAGUE]
+        wc_cols = league_cols_arr[wc_order]
+        for w in range(WILD_CARDS_PER_LEAGUE):
+            wildcard_flags[np.arange(PLAYOFF_SIM_COUNT), wc_cols[:, w]] = True
+
+    playoff_flags = division_flags | wildcard_flags
+    result = pd.DataFrame({
+        "team_abbr": team_list,
+        "playoff_pct": 100 * playoff_flags.mean(axis=0),
+        "division_pct": 100 * division_flags.mean(axis=0),
+        "wildcard_pct": 100 * wildcard_flags.mean(axis=0),
+    })
+    return result
 
 
 # Home teams win ~54% of MLB games historically — this constant folds that

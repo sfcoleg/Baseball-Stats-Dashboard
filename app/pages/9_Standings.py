@@ -29,20 +29,30 @@ if standings.empty:
     st.info("No standings data yet — run the ingest script.")
     st.stop()
 
+playoff_odds = db.compute_playoff_odds(mtime)
+if not playoff_odds.empty:
+    standings = standings.merge(playoff_odds[["team_abbr", "playoff_pct"]], on="team_abbr", how="left")
+
 DIVISION_ORDER = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
 
 for league in ["AL", "NL"]:
     style.colored_header(f"{league} — American League" if league == "AL" else f"{league} — National League", "batting" if league == "AL" else "pitching")
     league_divs = [d for d in DIVISION_ORDER if d.startswith(league)]
-    cols = st.columns(3)
-    for col, division in zip(cols, league_divs):
-        with col:
-            st.markdown(f"**{division}**")
-            div_standings = standings[standings["division"] == division].sort_values("div_rank")
-            display = div_standings[["team_abbr", "wins", "losses", "pct", "games_back", "streak"]].rename(columns={
-                "team_abbr": "Team", "wins": "W", "losses": "L", "pct": "PCT", "games_back": "GB", "streak": "Streak",
-            })
-            st.markdown(
-                style.standings_table(display, teams.color_for_abbr),
-                unsafe_allow_html=True,
-            )
+    # Stacked full-width (not 3-across) — with RS/RA/Diff/Playoff Odds added,
+    # the table is too wide for a third-of-page column at most viewport
+    # sizes; each division's own horizontal scroll (rather than 3 squeezed
+    # side by side) keeps every column readable.
+    for division in league_divs:
+        st.markdown(f"**{division}**")
+        div_standings = standings[standings["division"] == division].sort_values("div_rank")
+        display_cols = {
+            "team_abbr": "Team", "wins": "W", "losses": "L", "pct": "PCT", "games_back": "GB",
+            "streak": "Streak", "runs_scored": "RS", "runs_allowed": "RA", "run_diff": "Diff",
+        }
+        if "playoff_pct" in div_standings.columns:
+            display_cols["playoff_pct"] = "Playoff%"
+        display = div_standings[list(display_cols)].rename(columns=display_cols)
+        st.markdown(
+            "<div style='overflow-x:auto'>" + style.standings_table(display, teams.color_for_abbr) + "</div>",
+            unsafe_allow_html=True,
+        )

@@ -783,6 +783,7 @@ def fetch_standings():
     columns = [
         "season", "league", "division", "team_name", "team_abbr",
         "wins", "losses", "pct", "games_back", "streak", "div_rank",
+        "runs_scored", "runs_allowed", "run_diff",
     ]
     try:
         resp = requests.get(
@@ -815,6 +816,57 @@ def fetch_standings():
                 "games_back": tr.get("divisionGamesBack"),
                 "streak": tr.get("streak", {}).get("streakCode"),
                 "div_rank": tr.get("divisionRank"),
+                "runs_scored": tr.get("runsScored"),
+                "runs_allowed": tr.get("runsAllowed"),
+                "run_diff": tr.get("runDifferential"),
+            })
+    return pd.DataFrame(rows)
+
+
+def fetch_schedule():
+    """Full current-season regular-season schedule (every team, every game)
+    from the MLB Stats API — past games carry a final score, future games
+    have score columns of None. Replaced in full every run (this is a live
+    schedule, not a historical archive across seasons). Powers the Team
+    page's full-schedule table and db.compute_playoff_odds()'s Monte Carlo
+    simulation of the remaining season."""
+    print("Fetching full-season schedule from MLB Stats API...")
+    columns = [
+        "season", "game_pk", "date", "status",
+        "away_abbr", "away_score", "home_abbr", "home_score",
+    ]
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={
+                "sportId": 1, "gameType": "R",
+                "startDate": f"{CURRENT_SEASON}-01-01", "endDate": f"{CURRENT_SEASON}-12-31",
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        dates = resp.json().get("dates", [])
+    except Exception as e:
+        print(f"  skipped ({e})")
+        return pd.DataFrame(columns=columns)
+
+    rows = []
+    for d in dates:
+        for g in d.get("games", []):
+            away, home = g["teams"]["away"], g["teams"]["home"]
+            away_abbr = app_teams.abbr_for_team_id(away["team"]["id"])
+            home_abbr = app_teams.abbr_for_team_id(home["team"]["id"])
+            if not away_abbr or not home_abbr:
+                continue  # non-MLB opponent (e.g. an exhibition slipped past the gameType filter)
+            rows.append({
+                "season": CURRENT_SEASON,
+                "game_pk": g.get("gamePk"),
+                "date": g.get("officialDate"),
+                "status": g.get("status", {}).get("abstractGameState"),
+                "away_abbr": away_abbr,
+                "away_score": away.get("score"),
+                "home_abbr": home_abbr,
+                "home_score": home.get("score"),
             })
     return pd.DataFrame(rows)
 
@@ -1090,6 +1142,7 @@ def fetch_and_store():
     recent_pitching = fetch_recent_pitching()
     todays_games = fetch_todays_games()
     standings = fetch_standings()
+    schedule = fetch_schedule()
     all_star_roster = fetch_all_star_roster(CURRENT_SEASON)
     career_totals = fetch_career_totals()
     history = build_player_history(batting, pitching, recent_batting, recent_pitching)
@@ -1140,6 +1193,7 @@ def fetch_and_store():
         # empty table is the correct signal for "nothing scheduled today"
         todays_games.to_sql("todays_games", conn, if_exists="replace", index=False)
         standings.to_sql("standings", conn, if_exists="replace", index=False)
+        schedule.to_sql("schedule", conn, if_exists="replace", index=False)
 
         # player_history is append-only (not replaced) so it builds up real
         # day-over-day history; clear today's rows first so re-running the
@@ -1162,6 +1216,7 @@ def fetch_and_store():
         f"{len(fielding)} fielders, {len(recent_batting)} recent-batting rows, "
         f"{len(recent_pitching)} recent-pitching rows, {len(history)} history rows, "
         f"{len(todays_games)} today's games, {len(standings)} standings rows, "
+        f"{len(schedule)} schedule rows, "
         f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows, "
         f"{new_achievements} new milestone achievements to {DB_PATH}"
     )

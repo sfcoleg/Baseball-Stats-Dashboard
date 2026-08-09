@@ -202,6 +202,38 @@ if team_batting.empty and team_pitching.empty and team_fielding.empty:
     st.info("No players found for this team in the selected season.")
     st.stop()
 
+# Standings/playoff odds/schedule are all live, present-day data (not
+# scoped to a season) — like the depth chart below, only shown when the
+# CURRENT season is selected, so a historical season doesn't show today's
+# playoff race next to, say, 2015 stats.
+if season == current_season:
+    standings = db.load_standings(mtime)
+    team_standing = standings[standings["team_abbr"] == selected_abbr]
+    if not team_standing.empty:
+        row = team_standing.iloc[0]
+        playoff_odds = db.compute_playoff_odds(mtime)
+        team_odds = playoff_odds[playoff_odds["team_abbr"] == selected_abbr]
+        pct = float(team_odds.iloc[0]["playoff_pct"]) if not team_odds.empty else None
+
+        style.colored_header("Standings & Playoff Odds", "batting")
+        m1, m2, m3, m4, m5 = st.columns(5)
+        m1.metric("Record", f"{row['wins']}-{row['losses']}")
+        m2.metric(row["division"], f"#{row['div_rank']}")
+        m3.metric("Run Diff", f"{row['run_diff']:+.0f}" if pd.notna(row["run_diff"]) else "—")
+        m4.metric("Streak", row["streak"] if pd.notna(row["streak"]) else "—")
+        m5.metric("Playoff Odds", f"{pct:.1f}%" if pct is not None else "—")
+
+    full_schedule = db.team_schedule(selected_abbr, mtime)
+    if not full_schedule.empty:
+        style.colored_header("Full Season Schedule", "pitching")
+        st.caption(f"{(full_schedule['result'] == 'W').sum()}W – {(full_schedule['result'] == 'L').sum()}L so far, {full_schedule['result'].isna().sum()} remaining.")
+        st.markdown(
+            "<div style='max-height:500px;overflow-y:auto'>"
+            + style.team_schedule_table(full_schedule, teams.color_for_abbr)
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+
 # db.load_depth_chart() hits the MLB Stats API's live, present-day depth
 # chart — it can't be scoped to a season, so it only makes sense to show
 # when the CURRENT season is selected. A historical season would otherwise
