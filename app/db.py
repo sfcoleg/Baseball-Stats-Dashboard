@@ -1346,36 +1346,68 @@ CY_YOUNG_MIN_IP = 40
 
 @st.cache_data(show_spinner=False, max_entries=16)
 def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
-    """WAR-anchored MVP composite for one league/season, batters only:
-    50% WAR (the standard cross-category value metric, so it anchors the
-    ranking), 25% wRC+ (pure offensive production — still the biggest
-    driver of real MVP narratives), 12.5% BsR and 12.5% OAA (baserunning
-    and defense get smaller, equal shares since WAR already partly prices
-    them in — they're here to reward a genuinely all-around player over a
-    one-dimensional slugger with a similar WAR, not to double-count).
-    Not real award-voting data — a stats-only proxy, sorted by "MVP Score"
-    descending."""
+    """WAR-anchored MVP composite for one league/season, spanning both
+    batters and pitchers (a real MVP race does — Verlander/deGrom have
+    gotten serious MVP support). Batters: 50% WAR / 25% wRC+ (pure
+    offensive production — still the biggest driver of real MVP
+    narratives) / 12.5% BsR / 12.5% OAA (baserunning and defense get
+    smaller, equal shares since WAR already partly prices them in — they
+    reward a genuinely all-around player over a one-dimensional slugger
+    with similar WAR, not double-counting). Pitchers: 100% WAR — no rate
+    stats, since a pitcher's MVP case is essentially "how much value did
+    they add," not the finer-grained skill breakdown Cy Young cares about.
+    WAR is z-scored across the COMBINED batter+pitcher pool so the two
+    roles land on one comparable scale; wRC+/BsR/OAA are z-scored among
+    batters only. Not real award-voting data — a stats-only proxy, sorted
+    by "MVP Score" descending."""
     batting = load_batting(season, db_mtime_val)
+    pitching = load_pitching(season, db_mtime_val)
     fielding = load_fielding(season, db_mtime_val)
+
     bat = batting[(batting["Lev"] == league) & (batting["PA"] >= MVP_MIN_PA)].copy()
-    if bat.empty:
-        return bat
+    pit = pitching[(pitching["Lev"] == league) & (pitching["IP"] >= CY_YOUNG_MIN_IP)].copy()
+    if bat.empty and pit.empty:
+        return pd.DataFrame()
 
-    if not fielding.empty and "player_id" in fielding.columns:
-        oaa_by_player = fielding.groupby("player_id")["OAA"].sum()
-        bat["OAA"] = bat["mlbID"].map(oaa_by_player).fillna(0.0)
-    else:
-        bat["OAA"] = 0.0
-    bat["baserunning_runs"] = bat["baserunning_runs"].fillna(0.0)
-    wrc_plus_filled = bat["wRC_plus"].fillna(bat["wRC_plus"].mean())
+    combined_war = pd.concat([bat["WAR"], pit["WAR"]], ignore_index=True).fillna(0.0)
+    war_mean, war_std = combined_war.mean(), combined_war.std()
 
-    bat["MVP Score"] = (
-        0.50 * _zscore(bat["WAR"].fillna(0.0))
-        + 0.25 * _zscore(wrc_plus_filled)
-        + 0.125 * _zscore(bat["baserunning_runs"])
-        + 0.125 * _zscore(bat["OAA"])
-    )
-    return bat.sort_values("MVP Score", ascending=False).reset_index(drop=True)
+    def _war_z(series: pd.Series) -> pd.Series:
+        filled = series.fillna(0.0)
+        if not war_std or pd.isna(war_std):
+            return pd.Series(0.0, index=series.index)
+        return (filled - war_mean) / war_std
+
+    rows = []
+    if not bat.empty:
+        if not fielding.empty and "player_id" in fielding.columns:
+            oaa_by_player = fielding.groupby("player_id")["OAA"].sum()
+            bat["OAA"] = bat["mlbID"].map(oaa_by_player).fillna(0.0)
+        else:
+            bat["OAA"] = 0.0
+        bat["baserunning_runs"] = bat["baserunning_runs"].fillna(0.0)
+        wrc_plus_filled = bat["wRC_plus"].fillna(bat["wRC_plus"].mean())
+        bat["MVP Score"] = (
+            0.50 * _war_z(bat["WAR"])
+            + 0.25 * _zscore(wrc_plus_filled)
+            + 0.125 * _zscore(bat["baserunning_runs"])
+            + 0.125 * _zscore(bat["OAA"])
+        )
+        bat["Role"] = "Batter"
+        rows.append(bat)
+    if not pit.empty:
+        pit["wRC_plus"] = float("nan")
+        pit["baserunning_runs"] = float("nan")
+        pit["OAA"] = float("nan")
+        pit["MVP Score"] = _war_z(pit["WAR"])
+        pit["Role"] = "Pitcher"
+        rows.append(pit)
+
+    combined = pd.concat(rows, ignore_index=True, sort=False)
+    return combined.sort_values("MVP Score", ascending=False).reset_index(drop=True)
+
+
+CY_YOUNG_RELIABILITY_IP = 100  # innings at which FIP/ERA+ get roughly half their full weight
 
 
 @st.cache_data(show_spinner=False, max_entries=16)
@@ -1385,8 +1417,19 @@ def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame
     30% FIP (the most defense-independent, skill-isolating rate stat), 20%
     ERA+ (park/league-adjusted actual results, correlated with FIP but adds
     real-outcome context). FIP is lower-is-better, so its z-score is
-    negated before weighting. Not real award-voting data — a stats-only
-    proxy, sorted by "Cy Young Score" descending."""
+    negated before weighting.
+
+    The FIP/ERA+ terms are scaled by a reliability factor (IP / (IP + 100))
+    before weighting — without it, a reliever with a small, dominant IP
+    sample (gaudy rate stats over 40-50 innings) can post a more extreme
+    z-score than any full-workload starter and land at #1 by a landslide,
+    which isn't realistic (real Cy Young cases for relievers exist but are
+    rare and never landslides). WAR itself isn't shrunk, since it already
+    reflects the pitcher's actual (limited) workload. This tempers a short-
+    relief season rather than excluding it — reliability approaches 1 as
+    IP grows, so it only meaningfully discounts pitchers with a small
+    innings total. Not real award-voting data — a stats-only proxy, sorted
+    by "Cy Young Score" descending."""
     pitching = load_pitching(season, db_mtime_val)
     pit = pitching[(pitching["Lev"] == league) & (pitching["IP"] >= CY_YOUNG_MIN_IP)].copy()
     if pit.empty:
@@ -1394,11 +1437,12 @@ def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame
 
     fip_filled = pit["FIP"].fillna(pit["FIP"].mean())
     era_plus_filled = pit["ERA_plus"].fillna(pit["ERA_plus"].mean())
+    reliability = pit["IP"] / (pit["IP"] + CY_YOUNG_RELIABILITY_IP)
 
     pit["Cy Young Score"] = (
         0.50 * _zscore(pit["WAR"].fillna(0.0))
-        + 0.30 * _zscore(-fip_filled)
-        + 0.20 * _zscore(era_plus_filled)
+        + 0.30 * _zscore(-fip_filled) * reliability
+        + 0.20 * _zscore(era_plus_filled) * reliability
     )
     return pit.sort_values("Cy Young Score", ascending=False).reset_index(drop=True)
 
@@ -1440,7 +1484,8 @@ def rookie_of_the_year_race(season: int, league: str, db_mtime_val: float) -> pd
 
     rookies = []
     if not mvp.empty:
-        bat_rookies = mvp[mvp["mlbID"].apply(_is_rookie_eligible)].copy()
+        bat_pool = mvp[mvp["Role"] == "Batter"]
+        bat_rookies = bat_pool[bat_pool["mlbID"].apply(_is_rookie_eligible)].copy()
         bat_rookies["Role"] = "Batter"
         bat_rookies["ROY Score"] = bat_rookies["MVP Score"]
         rookies.append(bat_rookies)

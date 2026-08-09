@@ -11,11 +11,15 @@ import teams
 st.set_page_config(page_title="Awards Race | Diamond Metrics", layout="wide")
 st.title("Awards Race")
 st.caption(
-    "A stats-only composite score, not real award-voting data — MVP weights WAR 50% / wRC+ 25% / "
-    "BsR 12.5% / OAA 12.5%; Cy Young weights WAR 50% / FIP 30% / ERA+ 20%; Rookie of the Year uses "
-    "the same two formulas (batters score like MVP, pitchers like Cy Young) restricted to players "
-    "who pass MLB's real rookie-eligibility rule — fewer than 130 career AB and fewer than 50 "
-    "career IP in the majors before this season. Minimums: "
+    "A stats-only composite score, not real award-voting data. MVP spans both batters and "
+    "pitchers: batters score WAR 50% / wRC+ 25% / BsR 12.5% / OAA 12.5%, pitchers score on WAR "
+    "alone, both on the same WAR scale. Cy Young (pitchers only) weights WAR 50% / FIP 30% / "
+    "ERA+ 20%, with FIP/ERA+ scaled down for pitchers with fewer innings so a short relief "
+    "sample can't out-rank a full-workload starter by rate stats alone. Rookie of the Year uses "
+    "the same two formulas restricted to players who pass MLB's AB/IP rookie-eligibility rule — "
+    "fewer than 130 career AB and fewer than 50 career IP in the majors before this season (the "
+    "45-days-on-active-roster part of the real rule isn't tracked here, so a small number of "
+    "players may show as eligible when they weren't). Minimums: "
     f"{db.MVP_MIN_PA}+ PA for MVP, {db.CY_YOUNG_MIN_IP}+ IP for Cy Young."
 )
 
@@ -31,16 +35,23 @@ season = st.selectbox("Season", seasons, index=0)
 def _mvp_table(league: str):
     race = db.mvp_race(season, league, mtime)
     if race.empty:
-        st.caption(f"Not enough qualifying batters for {league} MVP this season.")
+        st.caption(f"Not enough qualifying batters or pitchers for {league} MVP this season.")
         return
     display = teams.add_team_abbr(race.head(5))
-    cols = ["Name", "Tm", "WAR", "wRC_plus", "baserunning_runs", "OAA", "MVP Score"]
-    display = display[cols].rename(columns={"wRC_plus": "wRC+", "baserunning_runs": "BsR"})
+    # Batters and pitchers are scored differently (see mvp_race), so a
+    # shared wRC+/BsR/OAA column would be blank for every pitcher row —
+    # Streamlit's dataframe grid renders those blanks as the literal text
+    # "None" rather than the Styler's na_rep, so those columns are left out
+    # of this combined view entirely. Role + WAR + MVP Score is enough to
+    # see why each candidate ranks where they do; the batting-only detail
+    # is still on that player's own page.
+    cols = ["Name", "Tm", "Role", "WAR", "MVP Score"]
+    display = display[cols]
     st.dataframe(
         style.style_stats_table(
             display, team_col="Tm", team_color_fn=teams.color_for_abbr,
-            higher_better=["WAR", "wRC+", "BsR", "OAA", "MVP Score"],
-            precision={"WAR": "{:.1f}", "wRC+": "{:.0f}", "BsR": "{:+.1f}", "OAA": "{:+.0f}", "MVP Score": "{:.2f}"},
+            higher_better=["WAR", "MVP Score"],
+            precision={"WAR": "{:.1f}", "MVP Score": "{:.2f}"},
         ),
         use_container_width=True, hide_index=True,
     )
