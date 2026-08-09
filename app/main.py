@@ -24,7 +24,6 @@ import streamlit.components.v1 as components
 sys.path.append(str(Path(__file__).resolve().parent))
 import db
 import following
-import notifications
 import sidebar
 import style
 
@@ -33,12 +32,6 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them.
 following.bootstrap()
-
-# "Recent activity for players you follow" — reuses the same yesterday's-
-# performances/milestones data as the Following page, just condensed for
-# the header bell. Computed on every rerun (cheap: a handful of already-
-# cached dataframe filters), not a persistent read/unread tracker.
-notif_items = notifications.get_notifications(db.db_mtime()) if db.DB_PATH.exists() else []
 
 # Logo + title header — rendered once here (not per-page) so it shows up on
 # every page. Streamlit's own toolbar (hamburger menu / Deploy button) is an
@@ -105,72 +98,11 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# Notification bell — lives in the same fixed header strip as the logo.
-# The badge count and dropdown panel are pure HTML/CSS built from
-# notif_items (computed above); the click-to-toggle and once-per-session
-# auto-show behavior are wired up by the script block further down, since
-# Streamlit's unsafe_allow_html never executes inline <script> tags.
-_notif_badge = f"<span class='notif-badge'>{len(notif_items)}</span>" if notif_items else ""
-_notif_items_html = "".join(
-    f"<div class='notif-item'><b>{n['name']}</b> — {n['text']}</div>" for n in notif_items
-) or "<div class='notif-item notif-empty'>Nothing new for your followed players.</div>"
-st.markdown(
-    "<style>"
-    ".notif-bell { position: relative; cursor: pointer; font-size: 1.05rem; margin-left: 4px; user-select: none; }"
-    ".notif-badge { position: absolute; top: -6px; right: -9px; background: #D32F2F; color: #fff;"
-    "  border-radius: 999px; font-size: 0.6rem; font-weight: 700; min-width: 15px; height: 15px;"
-    "  display: flex; align-items: center; justify-content: center; padding: 0 3px; line-height: 1; }"
-    ".notif-panel { position: absolute; top: 30px; left: 0; width: 270px; max-height: 300px; overflow-y: auto;"
-    "  background: #1B2438; border: 1px solid #3B4A82; border-radius: 10px; padding: 8px;"
-    "  box-shadow: 0 8px 24px rgba(0,0,0,0.45); z-index: 2000000;"
-    "  opacity: 0; transform: translateY(-8px); pointer-events: none;"
-    "  transition: opacity 0.25s ease, transform 0.25s ease; }"
-    ".notif-panel.show { opacity: 1; transform: translateY(0); pointer-events: auto; }"
-    ".notif-item { padding: 7px 6px; border-bottom: 1px solid #2A3454; font-size: 0.8rem; color: #DCE1EA; }"
-    ".notif-item:last-child { border-bottom: none; }"
-    ".notif-empty { color: #9AA3B5; }"
-    "</style>",
-    unsafe_allow_html=True,
-)
 st.markdown(
     f"<div class='diamond-header'><span class='diamond-logo'>{style.diamond_logo(26)}</span>"
     f"<h1 class='diamond-title'>Diamond Metrics</h1>"
-    f"<span id='notif-bell' class='notif-bell' title='Recent activity for players you follow'>"
-    f"\U0001F514{_notif_badge}"
-    f"<div id='notif-panel' class='notif-panel'>{_notif_items_html}</div>"
-    f"</span></div>",
+    f"</div>",
     unsafe_allow_html=True,
-)
-components.html(
-    """
-    <script>
-    (function() {
-        function setup() {
-            const bell = window.parent.document.getElementById('notif-bell');
-            const panel = window.parent.document.getElementById('notif-panel');
-            if (!bell || !panel || bell.dataset.wired) return;
-            bell.dataset.wired = '1';
-            bell.addEventListener('click', function(e) {
-                e.stopPropagation();
-                panel.classList.toggle('show');
-            });
-            window.parent.document.addEventListener('click', function() {
-                panel.classList.remove('show');
-            });
-            try {
-                if (!window.parent.sessionStorage.getItem('diamond_notif_toast_shown')) {
-                    window.parent.sessionStorage.setItem('diamond_notif_toast_shown', '1');
-                    panel.classList.add('show');
-                    setTimeout(function() { panel.classList.remove('show'); }, 3000);
-                }
-            } catch (e) {}
-        }
-        setup();
-        new MutationObserver(setup).observe(window.parent.document.body, {childList: true, subtree: true});
-    })();
-    </script>
-    """,
-    height=0,
 )
 
 # Shrink the sidebar's built-in header bar (which only holds the collapse

@@ -1128,9 +1128,19 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     if matches.empty:
         return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles"])
 
-    grouped = matches.groupby(["mlbID", "Name", "Tm"]).size().reset_index(name="_n")
-    grouped["roles"] = grouped["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
-    return grouped.drop(columns="_n").sort_values("Name").reset_index(drop=True)
+    # A player with both a batting and pitching row this season can have a
+    # different Tm in each (a mid-season trade correction applied to one
+    # table but not the other, or a pitcher's incidental at-bat row) —
+    # grouping by (mlbID, Tm) used to show that player TWICE, once per
+    # team, one of them stale. Keep the batting row's Tm when both exist,
+    # matching the player page's own team-of-record convention, and always
+    # return exactly one row per mlbID.
+    role_priority = {"Batter": 0, "Pitcher": 1}
+    matches = matches.assign(_prio=matches["role"].map(role_priority))
+    deduped = matches.sort_values("_prio").drop_duplicates(subset="mlbID", keep="first")
+    deduped = deduped[["mlbID", "Name", "Tm"]].copy()
+    deduped["roles"] = deduped["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
+    return deduped.sort_values("Name").reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False)
@@ -1171,14 +1181,26 @@ def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     if matches.empty:
         return pd.DataFrame(columns=["mlbID", "Name", "Tm", "roles", "season"])
 
-    matches = matches.sort_values("season")
-    grouped = (
-        matches.groupby("mlbID")
-        .agg(Name=("Name", "last"), Tm=("Tm", "last"), season=("season", "max"))
-        .reset_index()
+    # Each mlbID has at most one Batter row and one Pitcher row here (see
+    # _player_name_index_all_seasons). Pick the row from whichever role has
+    # the more recent season (a retired player's profile should open to
+    # their actual last season); on a tie, prefer the batting row, matching
+    # the player page's own team-of-record convention. This used to be a
+    # plain .agg(Tm=("Tm","last"), season=("season","max")) after a bare
+    # sort_values("season") — pandas' default sort isn't stable, so tied
+    # rows landed in an unpredictable order, and Tm/season were aggregated
+    # independently, so they could even end up pulled from two DIFFERENT
+    # rows for the same player. Both bugs together are what made search
+    # show an inconsistent/wrong team.
+    role_priority = {"Batter": 0, "Pitcher": 1}
+    matches = matches.assign(_prio=matches["role"].map(role_priority))
+    picked = (
+        matches.sort_values(["season", "_prio"], ascending=[False, True])
+        .drop_duplicates(subset="mlbID", keep="first")
     )
-    grouped["roles"] = grouped["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
-    return grouped.sort_values("Name").reset_index(drop=True)
+    picked = picked[["mlbID", "Name", "Tm", "season"]].copy()
+    picked["roles"] = picked["mlbID"].map(lambda m: player_roles_label(m, db_mtime_val))
+    return picked.sort_values("Name").reset_index(drop=True)
 
 
 # pybaseball has no Hall of Fame data, and there's no live source wired up
