@@ -43,6 +43,62 @@ if not db.DB_PATH.exists():
     )
     st.stop()
 
+
+def _todays_games_strip():
+    """Every game scheduled today as a horizontally-scrolling row of small
+    cards (logo/name/score per team) — a quick glance at the whole slate
+    without leaving Home, full detail (odds, box scores) stays on the
+    Today's Games page. Reuses the same todays_games/live_scores data that
+    page already fetches."""
+    games = db.load_todays_games(db.db_mtime())
+    if games.empty:
+        return
+    live_scores = db.load_live_scores(games.iloc[0]["date"])
+    logo_season = today_pacific().year
+
+    def _logo(abbr):
+        team_id = teams.team_id_for_abbr(teams.normalize_mlb_abbr(abbr))
+        return style.team_logo_for_season(teams.normalize_mlb_abbr(abbr), team_id, logo_season) if team_id else None
+
+    def _team_row(logo, name, score):
+        logo_html = (
+            f"<img src='{logo}' style='height:22px;width:22px;object-fit:contain;margin-right:6px;flex-shrink:0'>"
+            if logo else ""
+        )
+        return (
+            "<div style='display:flex;align-items:center;justify-content:space-between;padding:2px 0'>"
+            f"<div style='display:flex;align-items:center;overflow:hidden'>{logo_html}"
+            f"<span style='font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{name}</span></div>"
+            f"<span style='font-weight:700;font-size:0.95rem;margin-left:8px;flex-shrink:0'>{score}</span>"
+            "</div>"
+        )
+
+    cards = []
+    for _, row in games.iterrows():
+        live = live_scores.get(row["game_pk"], {})
+        status = live.get("status") or row["status"]
+        started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
+        away_score = live.get("away_score")
+        home_score = live.get("home_score")
+        away_txt = str(int(away_score)) if started and away_score is not None else "-"
+        home_txt = str(int(home_score)) if started and home_score is not None else "-"
+        cards.append(
+            "<div style='flex:0 0 auto;width:170px;background-color:#1B243866;border-radius:10px;"
+            "padding:10px 12px;margin-right:10px'>"
+            + _team_row(_logo(row["away_abbr"]), row["away_team"], away_txt)
+            + _team_row(_logo(row["home_abbr"]), row["home_team"], home_txt)
+            + "</div>"
+        )
+
+    st.markdown(
+        "<div style='display:flex;overflow-x:auto;padding-bottom:8px'>" + "".join(cards) + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.divider()
+
+
+_todays_games_strip()
+
 seasons = db.get_seasons("batting")
 season = st.selectbox("Season", seasons, index=0)
 
