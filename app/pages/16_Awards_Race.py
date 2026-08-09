@@ -52,7 +52,6 @@ def _mvp_table(league: str):
     st.dataframe(
         style.style_stats_table(
             display, team_col="Tm", team_color_fn=teams.color_for_abbr,
-            higher_better=["WAR", "MVP Score"],
             precision={"WAR": "{:.1f}", "MVP Score": "{:.2f}"},
         ),
         use_container_width=True, hide_index=True,
@@ -70,7 +69,6 @@ def _cy_young_table(league: str):
     st.dataframe(
         style.style_stats_table(
             display, team_col="Tm", team_color_fn=teams.color_for_abbr,
-            higher_better=["WAR", "ERA+", "Cy Young Score"], lower_better=["FIP"],
             precision={"WAR": "{:.1f}", "FIP": "{:.2f}", "ERA+": "{:.0f}", "IP": "{:.1f}", "Cy Young Score": "{:.2f}"},
         ),
         use_container_width=True, hide_index=True,
@@ -87,7 +85,6 @@ def _roy_table(league: str):
     st.dataframe(
         style.style_stats_table(
             display[cols], team_col="Tm", team_color_fn=teams.color_for_abbr,
-            higher_better=["WAR", "ROY Score"],
             precision={"WAR": "{:.1f}", "ROY Score": "{:.2f}"},
         ),
         use_container_width=True, hide_index=True,
