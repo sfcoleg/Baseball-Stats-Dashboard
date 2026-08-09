@@ -1748,15 +1748,29 @@ def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame
 ROOKIE_MAX_CAREER_AB = 130
 ROOKIE_MAX_CAREER_IP = 50
 
+# The real MLB rookie-eligibility rule has a third clause this app can't
+# check from AB/IP alone: a player also loses rookie status after more than
+# 45 days on a Major League club's active roster (excluding IL time) before
+# rosters expand on September 1, even with a low AB/IP total. There's no
+# active-roster-days data available here to compute that automatically, so
+# players known to be excluded on that clause are listed manually.
+# mlbID -> short note on why.
+ROOKIE_MANUAL_EXCLUSIONS = {
+    695505: "Chase Burns — exceeded 45 days on the Reds' active roster before rosters expanded",
+}
+
 
 @st.cache_data(show_spinner=False, max_entries=16)
 def rookie_of_the_year_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
     """Rookie of the Year candidates for one league/season, real MLB rule:
     fewer than 130 career AB AND fewer than 50 career IP in the majors
-    before this season. Checked against every earlier season in this
-    database — a player who cleared those limits before 2008 (the app's
-    earliest season) would be misclassified as still rookie-eligible here,
-    the same "since 2008" caveat as the rest of the app.
+    before this season, AND not on ROOKIE_MANUAL_EXCLUSIONS (the rule's
+    third clause — 45+ days on an active MLB roster — which needs
+    roster-day data this app doesn't have, so exceptions are tracked by
+    hand there). Checked against every earlier season in this database —
+    a player who cleared those limits before 2008 (the app's earliest
+    season) would be misclassified as still rookie-eligible here, the
+    same "since 2008" caveat as the rest of the app.
 
     Batters are scored with the MVP formula, pitchers with the Cy Young
     formula (see mvp_race/cy_young_race) — both are z-scores within their
@@ -1775,6 +1789,8 @@ def rookie_of_the_year_race(season: int, league: str, db_mtime_val: float) -> pd
     ip_by_id = prior_ip.set_index("mlbID")["career_ip"]
 
     def _is_rookie_eligible(mlbID) -> bool:
+        if mlbID in ROOKIE_MANUAL_EXCLUSIONS:
+            return False
         return ab_by_id.get(mlbID, 0) < ROOKIE_MAX_CAREER_AB and ip_by_id.get(mlbID, 0) < ROOKIE_MAX_CAREER_IP
 
     mvp = mvp_race(season, league, db_mtime_val)
