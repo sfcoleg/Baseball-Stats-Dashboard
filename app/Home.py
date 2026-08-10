@@ -110,6 +110,35 @@ def _todays_games_strip():
     st.divider()
 
 
+def _no_hitter_watch_banner():
+    """A can't-miss banner at the very top of Home whenever a team's
+    pitching staff (starter or a combined effort) has a no-hitter or
+    perfect game going right now — see db.no_hitter_watch for the 6.0+ IP
+    threshold and why the perfect-game flag is approximate. Nothing renders
+    at all when no game qualifies, so this never takes up space on a
+    normal day."""
+    watches = db.no_hitter_watch(today_pacific().isoformat())
+    if not watches:
+        return
+    for w in watches:
+        kind = "Perfect Game Watch" if w["perfect"] else "No-Hitter Watch"
+        pitcher_text = " & ".join(w["pitcher_names"]) if w["combined"] else w["pitcher_names"][0]
+        combined_note = " (combined)" if w["combined"] else ""
+        line_stats = f"{w['ip_display']} IP, 0 H" + (f", {w['walks']} BB" if w["walks"] else "")
+        st.markdown(
+            "<div style='background-color:#D32F2F22;border:1px solid #D32F2F88;border-radius:10px;"
+            "padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+            "<span class='live-badge' style='background-color:#D32F2F;color:#FFFFFF;padding:3px 10px;"
+            f"border-radius:6px;font-weight:700;font-size:0.75rem;flex-shrink:0'>{kind.upper()}</span>"
+            f"<div><span style='font-weight:700'>{pitcher_text}</span>{combined_note} "
+            f"<span style='color:#9AA3B5'>({w['pitching_abbr']})</span> — {line_stats} vs {w['opponent']} "
+            f"<span style='color:#9AA3B5'>· {w['inning'] or ''}</span></div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
+
+
+_no_hitter_watch_banner()
 _todays_games_strip()
 
 seasons = db.get_seasons("batting")

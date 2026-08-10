@@ -447,6 +447,80 @@ def load_boxscore_players(game_pk) -> dict | None:
     return {"away": _side("away"), "home": _side("home")}
 
 
+def _parse_innings_pitched(ip_str) -> float:
+    """MLB's boxscore API reports IP as e.g. "6.1"/"6.2", where the part
+    after the dot is thirds of an inning (1 out, 2 outs), not a decimal —
+    "6.1" is 6⅓ innings, not 6.1. Converts to a true float for comparisons."""
+    try:
+        whole, _, frac = str(ip_str).partition(".")
+        return int(whole or 0) + int(frac or 0) / 3
+    except (ValueError, TypeError):
+        return 0.0
+
+
+def _format_innings_pitched(total_ip: float) -> str:
+    """Inverse of _parse_innings_pitched — a true float back into MLB's
+    "whole.thirds" box-score notation (6⅓ innings displays as "6.1", not
+    the misleading decimal "6.3")."""
+    whole = int(total_ip)
+    thirds = round((total_ip - whole) * 3)
+    if thirds == 3:
+        whole, thirds = whole + 1, 0
+    return f"{whole}.{thirds}"
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=4)
+def no_hitter_watch(date_str: str) -> list[dict]:
+    """Live in-progress games where one team's pitching staff (a starter
+    solo, or a combined effort) has a no-hitter or perfect game going.
+    Requires 6.0+ combined innings pitched before it shows up — early no-hit
+    bids are too common through the first few innings to be notable.
+    Approximate for the perfect-game flag: the boxscore API doesn't expose
+    hit-by-pitch or errors, so it only checks hits + walks allowed — good
+    enough for a home-page heads-up, not official scoring."""
+    games = load_todays_games(db_mtime())
+    if games.empty:
+        return []
+    live_scores = load_live_scores(date_str)
+
+    watches = []
+    for _, g in games.iterrows():
+        live = live_scores.get(g["game_pk"], {})
+        if live.get("status") != "In Progress":
+            continue
+        box = load_boxscore_players(g["game_pk"])
+        if not box:
+            continue
+        for side, pitching_team, pitching_abbr, opp_team in (
+            ("away", g["away_team"], g["away_abbr"], g["home_team"]),
+            ("home", g["home_team"], g["home_abbr"], g["away_team"]),
+        ):
+            pitchers = box.get(side, {}).get("pitchers", [])
+            if not pitchers:
+                continue
+            total_h = sum(p["H"] for p in pitchers)
+            if total_h > 0:
+                continue
+            total_ip = sum(_parse_innings_pitched(p["IP"]) for p in pitchers)
+            if total_ip < 6.0:
+                continue
+            total_bb = sum(p["BB"] for p in pitchers)
+            watches.append({
+                "game_pk": g["game_pk"],
+                "pitching_team": pitching_team,
+                "pitching_abbr": pitching_abbr,
+                "opponent": opp_team,
+                "pitcher_names": [p["Name"] for p in pitchers],
+                "combined": len(pitchers) > 1,
+                "ip": total_ip,
+                "ip_display": _format_innings_pitched(total_ip),
+                "walks": total_bb,
+                "perfect": total_bb == 0,
+                "inning": live.get("inning"),
+            })
+    return watches
+
+
 # A blowout only makes the "On This Day" cut at a 15+ run margin (e.g.
 # 15-0, 17-2) — 10 was too common to feel notable.
 ON_THIS_DAY_BLOWOUT_MARGIN = 15
