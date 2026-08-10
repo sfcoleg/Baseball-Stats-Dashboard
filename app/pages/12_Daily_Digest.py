@@ -37,17 +37,13 @@ style.colored_header("On This Day", "headliners")
 otd = db.load_on_this_day(today.month, today.day)
 otd_games, otd_highlights = otd["games"], otd["highlights"]
 
-if not otd_highlights:
-    st.caption("No notable player performances (cycles, 3+ HR, 5+ hits, no-hitters, perfect games) found for this date.")
-else:
+if otd_highlights:
     shown_highlights = sorted(otd_highlights, key=lambda h: h["years_ago"])[:8]
     for h in shown_highlights:
         st.markdown(style.on_this_day_highlight_card(h), unsafe_allow_html=True)
 
 notable = [g for g in otd_games if g["blowout"]]
-if not notable:
-    st.caption("No blowouts (15+ run margin) found on this date across the last 15 years.")
-else:
+if notable:
     shown_games = sorted(notable, key=lambda g: g["years_ago"])[:6]
     for g in shown_games:
         tag = "Blowout" if g["blowout"] else None

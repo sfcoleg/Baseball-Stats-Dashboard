@@ -654,6 +654,67 @@ def load_milb_stats(sport_id: int, group: str, season: int) -> pd.DataFrame:
     return df
 
 
+# Converts Statcast's raw hc_x/hc_y hit-coordinate fields (an internal SVG
+# pixel-ish coordinate space, home plate near (125, 198)) into approximate
+# feet from home plate, with (0, 0) = home plate and +y = toward center
+# field. This is the standard community-derived transform (matches
+# hit_distance_sc to within ~1-2% on real data) — Statcast doesn't publish
+# real lat/lon-style coordinates, only this SVG space.
+_HC_X0, _HC_Y0, _HC_SCALE = 125.42, 198.27, 2.495
+
+# Groups Statcast's granular `events` values into the handful of outcomes a
+# spray chart actually distinguishes by color — everything that isn't a hit
+# (outs, double plays, fielder's choice, sac flies, errors) is just "Out"
+# except a fielding error, which gets its own color since "reached on an
+# error" reads differently than "made an out" on a spray chart.
+_SPRAY_EVENT_LABELS = {
+    "single": "Single", "double": "Double", "triple": "Triple", "home_run": "Home Run",
+    "field_error": "Error",
+}
+SPRAY_EVENT_COLORS = {
+    "Single": "#7CFC9A", "Double": "#3B82F6", "Triple": "#C084FC", "Home Run": "#F5B942",
+    "Error": "#F87171", "Out": "#6B7280",
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
+def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
+    """Every ball a batter has put in play in a season, with a plot-ready
+    (x_ft, y_ft) position (see _HC_X0/_HC_Y0/_HC_SCALE) and a grouped
+    outcome label — powers the player page's spray chart. Live-fetched
+    from Baseball Savant via pybaseball (pitch-level Statcast data isn't
+    part of the daily ingest — it's heavy and most players' pages are
+    never visited, so backfilling it for everyone would be wasted work);
+    pybaseball is imported lazily here so pages that don't need it don't
+    pay its import cost. Returns columns: x_ft, y_ft, outcome,
+    launch_speed, launch_angle, hit_distance_sc — empty if the fetch
+    fails or the player has no batted-ball data that season."""
+    from pybaseball import statcast_batter
+
+    today = today_pacific()
+    start_dt = date(season, 1, 1)
+    end_dt = date(season, 12, 31) if season < today.year else today
+    if start_dt > end_dt:
+        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+
+    try:
+        raw = statcast_batter(start_dt.isoformat(), end_dt.isoformat(), int(mlbID))
+    except Exception:
+        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+
+    if raw.empty:
+        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+
+    bb = raw.dropna(subset=["hc_x", "hc_y", "events"]).copy()
+    if bb.empty:
+        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+
+    bb["x_ft"] = (bb["hc_x"] - _HC_X0) * _HC_SCALE
+    bb["y_ft"] = (_HC_Y0 - bb["hc_y"]) * _HC_SCALE
+    bb["outcome"] = bb["events"].map(_SPRAY_EVENT_LABELS).fillna("Out")
+    return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
+
+
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 

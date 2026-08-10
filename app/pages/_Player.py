@@ -1,3 +1,4 @@
+import math
 import sys
 from pathlib import Path
 
@@ -655,6 +656,82 @@ if batting is not None or pitching is not None:
         )
         st.caption(f"Blue line = {selected_name}'s ERA against all qualified pitchers.")
         st.plotly_chart(fig, use_container_width=True)
+
+if batting is not None and is_batter_role:
+    spray = db.player_batted_ball_events(mlbID, season)
+    if not spray.empty:
+        style.colored_header("Spray Chart", "chart")
+        fig = go.Figure()
+        # Stylized field outline: foul lines to the poles, an outfield wall
+        # arc (shallower down the lines than to straightaway center, like a
+        # real ballpark), the infield dirt diamond, and the mound — drawn
+        # from scratch in plot coordinates (not a real park's dimensions),
+        # just enough context to read hit locations against.
+        wall_theta = list(range(-45, 46))
+        wall_x = [(330 + 70 * (1 - abs(t) / 45)) * math.sin(math.radians(t)) for t in wall_theta]
+        wall_y = [(330 + 70 * (1 - abs(t) / 45)) * math.cos(math.radians(t)) for t in wall_theta]
+        fig.add_trace(go.Scatter(
+            x=wall_x, y=wall_y, mode="lines", line=dict(color="#4A5266", width=2),
+            showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=[0, wall_x[0]], y=[0, wall_y[0]], mode="lines",
+            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=[0, wall_x[-1]], y=[0, wall_y[-1]], mode="lines",
+            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+        ))
+        fig.add_trace(go.Scatter(
+            x=[0, 63.6, 0, -63.6, 0], y=[0, 63.6, 127.3, 63.6, 0], mode="lines",
+            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+        ))
+        for outcome, group in spray.groupby("outcome"):
+            # Plain Python lists, not pandas Series/DataFrame — passing the
+            # latter through st.plotly_chart here mis-serializes (a bad
+            # typed-array encoding that silently produces garbage-scale
+            # coordinates), while the field-outline traces above, built
+            # from plain lists, render fine.
+            fig.add_trace(go.Scatter(
+                x=group["x_ft"].tolist(), y=group["y_ft"].tolist(), mode="markers", name=outcome,
+                marker=dict(color=db.SPRAY_EVENT_COLORS.get(outcome, "#6B7280"), size=8, opacity=0.75),
+                customdata=group[["launch_speed", "launch_angle", "hit_distance_sc"]].values.tolist(),
+                hovertemplate=(
+                    f"{outcome}<br>Exit velo: %{{customdata[0]}} mph<br>"
+                    "Launch angle: %{customdata[1]}°<br>Distance: %{customdata[2]} ft<extra></extra>"
+                ),
+            ))
+        # scaleanchor forces equal x/y pixel scale (so the field isn't
+        # visually stretched into an oval) — but that only renders at a
+        # sensible size if the chart's own pixel box already matches the
+        # data's aspect ratio; use_container_width's arbitrary/responsive
+        # width doesn't, which is what squashed this into a tiny centered
+        # cluster before. Fixed width/height at the same ~840:460 ratio as
+        # the axis ranges below fixes it.
+        fig.update_layout(
+            width=800, height=440, margin=dict(l=0, r=0, t=10, b=0),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font_color="#FAFAFA",
+            # No scaleanchor: forcing a strict 1:1 pixel scale turned out to
+            # fight the fixed width/height below in a way that kept
+            # blowing the range out to several times its intended size
+            # (Plotly recomputing to satisfy the ratio against the actual
+            # plot-area pixels, e.g. after the legend eats into it, not
+            # just the figure's nominal box). The ranges here already
+            # approximate the same ~800:440 aspect ratio as the box below,
+            # which is enough to read as correctly-proportioned without
+            # scaleanchor fighting to enforce it exactly.
+            xaxis=dict(visible=False, range=[-420, 420], autorange=False),
+            yaxis=dict(visible=False, range=[-22, 440], autorange=False),
+            legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+        )
+        # st.plotly_chart's own width/height params (not just the figure's
+        # layout) determine the actual rendered box — its default
+        # width="stretch" overrides fig.layout.width to fill the
+        # container, which re-introduces the scaleanchor distortion this
+        # fixed size was meant to avoid. Passing them explicitly here is
+        # what actually pins it.
+        st.plotly_chart(fig, width=800, height=440)
 
 # Batting comps for a two-way player (both roles True) — matches the same
 # "batting is authoritative" convention used for the header team badge above.
