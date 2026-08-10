@@ -7,7 +7,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
-from plotly.subplots import make_subplots
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
@@ -486,46 +485,89 @@ if pitching is not None and is_pitcher_role:
                     if "balls" not in pitches.columns or "strikes" not in pitches.columns:
                         st.caption("No count data available for this season.")
                     else:
-                        count_fig = make_subplots(
-                            rows=4, cols=3,
-                            specs=[[{"type": "domain"}] * 3 for _ in range(4)],
-                            subplot_titles=[f"{b}-{s}" for b in range(4) for s in range(3)],
-                            vertical_spacing=0.08, horizontal_spacing=0.02,
-                        )
                         pitch_colors = {
                             name: px.colors.qualitative.Set2[i % len(px.colors.qualitative.Set2)]
                             for i, name in enumerate(pitch_types)
                         }
+                        # A count-progression tree, not a grid: 0-0 at the top,
+                        # branching down to every count reachable from it (a
+                        # ball moves right, a strike moves left), same shape as
+                        # how an at-bat actually unfolds. Node x is balls minus
+                        # strikes (so 1-0 and 0-1 sit symmetrically either side
+                        # of 0-0), node y is balls-plus-strikes (pitch count
+                        # depth) — both mapped from data space into [0,1] paper
+                        # fractions so pies (which only place via `domain`, not
+                        # x/y data coords) and their connecting lines (drawn in
+                        # `paper` ref, which shares that same [0,1] space) line
+                        # up exactly.
+                        valid_counts = [(b, s) for b in range(4) for s in range(3)]
+                        depth = {c: c[0] + c[1] for c in valid_counts}
+                        offset = {c: c[0] - c[1] for c in valid_counts}
+                        min_off, max_off = min(offset.values()), max(offset.values())
+                        max_depth = max(depth.values())
+
+                        def _node_center(c):
+                            x = 0.06 + (offset[c] - min_off) / (max_off - min_off) * 0.88
+                            y = 0.95 - (depth[c] / max_depth) * 0.88
+                            return x, y
+
+                        centers = {c: _node_center(c) for c in valid_counts}
+                        node_w, node_h = 0.15, 0.15
+
+                        shapes = []
+                        for (b, s) in valid_counts:
+                            cx, cy = centers[(b, s)]
+                            for child in ((b + 1, s), (b, s + 1)):
+                                if child in centers:
+                                    nx, ny = centers[child]
+                                    shapes.append(dict(
+                                        type="line", xref="paper", yref="paper",
+                                        x0=cx, y0=cy, x1=nx, y1=ny,
+                                        line=dict(color="rgba(250,250,250,0.25)", width=1.5),
+                                        layer="below",
+                                    ))
+
+                        annotations = []
+                        count_fig = go.Figure()
                         any_count_data = False
-                        for b in range(4):
-                            for s in range(3):
-                                count_df = pitches[(pitches["balls"] == b) & (pitches["strikes"] == s)]
-                                mix = count_df["pitch_name"].value_counts()
-                                if mix.empty:
-                                    continue
-                                any_count_data = True
-                                count_fig.add_trace(
-                                    go.Pie(
-                                        labels=mix.index, values=mix.values,
-                                        marker=dict(colors=[pitch_colors.get(n, "#888") for n in mix.index]),
-                                        textinfo="none", hole=0.35, showlegend=(b == 0 and s == 0),
-                                    ),
-                                    row=b + 1, col=s + 1,
-                                )
+                        legend_shown = False
+                        for c in valid_counts:
+                            b, s = c
+                            cx, cy = centers[c]
+                            annotations.append(dict(
+                                x=cx, y=cy + node_h / 2 + 0.025, xref="paper", yref="paper",
+                                text=f"{b}-{s}", showarrow=False, font=dict(color="#FAFAFA", size=12),
+                            ))
+                            count_df = pitches[(pitches["balls"] == b) & (pitches["strikes"] == s)]
+                            mix = count_df["pitch_name"].value_counts()
+                            if mix.empty:
+                                continue
+                            any_count_data = True
+                            count_fig.add_trace(go.Pie(
+                                labels=mix.index, values=mix.values,
+                                marker=dict(colors=[pitch_colors.get(n, "#888") for n in mix.index]),
+                                textinfo="none", hole=0.35, sort=False,
+                                domain=dict(
+                                    x=[max(0, cx - node_w / 2), min(1, cx + node_w / 2)],
+                                    y=[max(0, cy - node_h / 2), min(1, cy + node_h / 2)],
+                                ),
+                                showlegend=not legend_shown,
+                            ))
+                            legend_shown = True
                         if not any_count_data:
                             st.caption("Not enough pitches with count data to break down by count.")
                         else:
                             count_fig.update_layout(
-                                height=700, margin=dict(l=0, r=0, t=30, b=0),
+                                shapes=shapes, annotations=annotations,
+                                height=800, margin=dict(l=0, r=0, t=10, b=0),
                                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
-                                legend=dict(orientation="h", yanchor="bottom", y=-0.05),
+                                legend=dict(orientation="h", yanchor="bottom", y=-0.03),
                             )
-                            count_fig.update_annotations(font_color="#FAFAFA")
                             st.plotly_chart(count_fig, use_container_width=True)
                             st.caption(
-                                "Pitch mix (by count of pitches thrown) for each ball-strike count this season — "
-                                "e.g. the fastball-heavy tendency on 0-0 or 3-0 vs. more offspeed on 0-2/1-2. "
-                                "Empty cells mean that count barely came up."
+                                "0-0 at the top, branching down through every count reachable from it "
+                                "(right on a ball, left on a strike) to 3-2 at the bottom — each donut is "
+                                "that count's pitch mix. Missing nodes mean that count barely came up."
                             )
 
 if not fielding.empty:
