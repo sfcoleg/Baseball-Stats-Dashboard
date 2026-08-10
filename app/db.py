@@ -771,17 +771,28 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
     from pybaseball.plotting import STADIUM_COORDS
 
     park = STADIUM_COORDS[STADIUM_COORDS["team"] == key]
-    foul_lines = park[park["segment"] == "foul_lines"]
+    home_plate = park[park["segment"] == "home_plate"]
     outfield = park[park["segment"] == "outfield_inner"]
-    if foul_lines.empty or outfield.empty:
+    if home_plate.empty or outfield.empty:
         return {}
 
-    home_x, home_y = foul_lines.iloc[0][["x", "y"]]
+    # The home_plate segment's own centroid is a far more reliable "home"
+    # anchor than the first row of foul_lines — for most teams they agree,
+    # but at least one park's (Astros) foul_lines segment doesn't actually
+    # start at home plate, which silently threw off that team's whole
+    # calibration (and produced hundreds-of-feet-off points behind home).
+    home_x, home_y = home_plate[["x", "y"]].mean()
     raw_dist = ((outfield["x"] - home_x) ** 2 + (outfield["y"] - home_y) ** 2) ** 0.5
-    raw_deep = raw_dist.max()
+    # A handful of parks (e.g. Minute Maid) have a few wildly mis-digitized
+    # points hundreds of raw units past the real fence — a plain max() lets
+    # one bad point corrupt the whole park's scale, so anchor off the 95th
+    # percentile instead.
+    raw_deep = raw_dist.quantile(0.95)
     if not raw_deep or pd.isna(raw_deep):
         return {}
-    scale = STADIUM_CF_FEET.get(team_abbr, 400) / raw_deep
+    real_cf = STADIUM_CF_FEET.get(team_abbr, 400)
+    scale = real_cf / raw_deep
+    max_plausible_ft = real_cf * 1.3
 
     outline = {}
     for segment in ("outfield_inner", "infield_outer", "infield_inner", "foul_lines"):
@@ -790,7 +801,12 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
             continue
         xs = (seg_df["x"] - home_x) * scale
         ys = (seg_df["y"] - home_y) * scale
-        outline[segment] = list(zip(xs.tolist(), ys.tolist()))
+        pts = [
+            (x, y) for x, y in zip(xs.tolist(), ys.tolist())
+            if (x ** 2 + y ** 2) ** 0.5 <= max_plausible_ft
+        ]
+        if pts:
+            outline[segment] = pts
     return outline
 
 

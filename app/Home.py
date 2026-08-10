@@ -103,7 +103,7 @@ def _todays_games_strip():
 
     cards.sort(key=lambda c: c[0])
     st.markdown(
-        "<div style='display:flex;overflow-x:auto;padding-bottom:8px;margin-top:-90px'>"
+        "<div style='display:flex;overflow-x:auto;padding-bottom:8px'>"
         + "".join(html for _, html in cards) + "</div>",
         unsafe_allow_html=True,
     )

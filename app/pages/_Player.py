@@ -726,7 +726,7 @@ if batting is not None and is_batter_role:
         # cluster before. Fixed width/height at the same ~840:460 ratio as
         # the axis ranges below fixes it.
         fig.update_layout(
-            width=800, height=440, margin=dict(l=0, r=0, t=10, b=0),
+            width=800, height=490, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
             font_color="#FAFAFA",
             # No scaleanchor: forcing a strict 1:1 pixel scale turned out to
@@ -735,11 +735,15 @@ if batting is not None and is_batter_role:
             # (Plotly recomputing to satisfy the ratio against the actual
             # plot-area pixels, e.g. after the legend eats into it, not
             # just the figure's nominal box). The ranges here already
-            # approximate the same ~800:440 aspect ratio as the box below,
+            # approximate the same ~800:490 aspect ratio as the box below,
             # which is enough to read as correctly-proportioned without
-            # scaleanchor fighting to enforce it exactly.
+            # scaleanchor fighting to enforce it exactly. The y-axis floor
+            # sits at -70 (not 0) because real park outlines dip behind
+            # home plate by up to ~60ft (backstop/foul-territory shape) —
+            # a tighter floor clipped the bottom of the park for several
+            # teams.
             xaxis=dict(visible=False, range=[-420, 420], autorange=False),
-            yaxis=dict(visible=False, range=[-22, 440], autorange=False),
+            yaxis=dict(visible=False, range=[-70, 440], autorange=False),
             legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
         )
         # st.plotly_chart's own width/height params (not just the figure's
@@ -748,7 +752,7 @@ if batting is not None and is_batter_role:
         # container, which re-introduces the scaleanchor distortion this
         # fixed size was meant to avoid. Passing them explicitly here is
         # what actually pins it.
-        st.plotly_chart(fig, width=800, height=440)
+        st.plotly_chart(fig, width=800, height=490)
 
 # Batting comps for a two-way player (both roles True) — matches the same
 # "batting is authoritative" convention used for the header team badge above.
