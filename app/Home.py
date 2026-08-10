@@ -1,7 +1,5 @@
 import sys
-from datetime import date, datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 import plotly.express as px
 import streamlit as st
@@ -13,15 +11,10 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
-# The data refresh cron runs at 6:00am Pacific, so "today" for this app's
-# purposes means the Pacific calendar day — not the server process's own
-# local date. Streamlit Community Cloud runs its servers in UTC, which is
-# far enough ahead of Pacific that plain date.today() rolls over to the
-# next day while it's still evening in Pacific time, showing "tomorrow's"
-# content hours too early. today_pacific() is the one source of truth for
-# "what day is it" anywhere on this page.
-def today_pacific() -> date:
-    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
+# db.today_pacific() is the one source of truth for "what day is it"
+# anywhere on this page — see its docstring for why plain date.today()
+# is wrong on Streamlit Community Cloud (UTC servers).
+today_pacific = db.today_pacific
 
 
 # Temporary: All-Star week has no regular-season games, so the normal "Hot

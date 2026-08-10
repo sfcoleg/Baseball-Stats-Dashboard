@@ -1,5 +1,5 @@
 import sys
-from datetime import date, timedelta
+from datetime import timedelta
 from pathlib import Path
 
 import streamlit as st
@@ -12,7 +12,8 @@ import teams
 st.set_page_config(page_title="Daily Digest | Diamond Metrics", layout="wide")
 st.title("Daily Digest")
 
-yesterday = date.today() - timedelta(days=1)
+today = db.today_pacific()
+yesterday = today - timedelta(days=1)
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -33,7 +34,7 @@ il_moves = txs_yesterday[
 ] if not txs_yesterday.empty else txs_yesterday
 
 style.colored_header("On This Day", "headliners")
-otd = db.load_on_this_day(date.today().month, date.today().day)
+otd = db.load_on_this_day(today.month, today.day)
 otd_games, otd_highlights = otd["games"], otd["highlights"]
 
 if not otd_highlights:

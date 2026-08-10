@@ -1,5 +1,4 @@
 import sys
-from datetime import date
 from pathlib import Path
 
 import streamlit as st
@@ -16,7 +15,7 @@ st.caption(
     "Triple-A, Double-A, High-A, Single-A, Rookie."
 )
 
-CURRENT_SEASON = date.today().year
+CURRENT_SEASON = db.today_pacific().year
 SEASONS = list(range(CURRENT_SEASON, CURRENT_SEASON - 3, -1))
 LEVELS = list(db.MILB_LEVELS.keys())
 

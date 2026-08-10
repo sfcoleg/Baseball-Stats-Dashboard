@@ -4,6 +4,7 @@ import sqlite3
 import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -13,6 +14,17 @@ import streamlit as st
 import teams
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
+
+
+def today_pacific() -> date:
+    """The current Pacific calendar date — the one source of truth for
+    "what day is it" anywhere in the live app. Streamlit Community Cloud
+    runs its servers in UTC, which is far enough ahead of Pacific that a
+    plain date.today() rolls over to the next day while it's still evening
+    in Pacific time, showing "tomorrow's" content hours too early. The
+    daily ingest cron also runs at a fixed Pacific-morning UTC time, so
+    Pacific is this app's natural notion of a baseball day anyway."""
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
 
 
 def normalize_text(text: str) -> str:
@@ -531,7 +543,7 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> dict:
     few hundred requests once a day, not per page view.
     Returns {"games": [...], "highlights": [...]}; a blowout in "games" is
     flagged at a ON_THIS_DAY_BLOWOUT_MARGIN+ run margin."""
-    current_year = date.today().year
+    current_year = today_pacific().year
     games_out = []
     highlights_out = []
     for years_ago in range(1, years_back + 1):

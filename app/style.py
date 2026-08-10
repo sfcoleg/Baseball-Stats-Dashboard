@@ -419,18 +419,31 @@ def playoff_odds_table(df, team_color_fn) -> str:
 # inside pairs is what produces the WC -> Division Series -> Championship
 # Series funnel, with each level's connector lines exact by construction
 # (no manual pixel math, no JS layout pass — just flexbox arithmetic).
+# The mirrored variants (.mirror) put every line/stub/shift on the LEFT
+# instead of the right, so the NL tree can grow leftward — AL and NL then
+# sit on either side of a centered World Series box, flowing toward each
+# other exactly like the real TV bracket graphic, converging leagues
+# lining up automatically since both trees share the same symmetric
+# 4-leaf structure (their own Championship Series slot always lands at
+# their own vertical center, so align-items:center on the row aligns
+# both of them — and the World Series box — to the same line).
 PLAYOFF_BRACKET_CSS = """
 <style>
 .bracket-tree { display:flex; align-items:center; }
+.bracket-row { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:0; }
 .br-pair { display:flex; flex-direction:column; position:relative; }
 .br-pair::after {
   content:''; position:absolute; right:0; top:25%; bottom:25%; width:1px; background:#4A5266;
 }
+.br-pair.mirror::after { right:auto; left:0; }
 .br-slot { flex:1; display:flex; align-items:center; position:relative; padding-right:18px; min-height:36px; }
 .br-slot::after {
   content:''; position:absolute; right:0; top:50%; width:18px; height:1px; background:#4A5266;
 }
+.br-slot.mirror { padding-right:0; padding-left:18px; justify-content:flex-end; }
+.br-slot.mirror::after { right:auto; left:0; }
 .br-bye-shift { margin-left:88px; }
+.br-bye-shift.mirror { margin-left:0; margin-right:88px; }
 .br-team {
   display:flex; align-items:center; gap:6px; background-color:#1B243866; border-radius:6px;
   padding:4px 10px; white-space:nowrap; font-size:0.8rem;
@@ -444,14 +457,21 @@ PLAYOFF_BRACKET_CSS = """
 .br-tag { color:#F5B942; font-size:0.7rem; font-weight:700; }
 .br-matchbox { display:flex; flex-direction:column; gap:3px; }
 .br-ws-box {
-  display:flex; align-items:center; gap:10px; background-color:#1B243866; border:1px solid #4A5266;
-  border-radius:8px; padding:10px 18px; font-size:0.85rem; color:#9AA3B5;
+  display:flex; flex-direction:column; align-items:center; gap:6px; background-color:#1B243866;
+  border:1px solid #4A5266; border-radius:8px; padding:14px 22px; font-size:0.85rem; color:#9AA3B5;
+  position:relative; margin:0 24px;
 }
+.br-ws-box::before, .br-ws-box::after {
+  content:''; position:absolute; top:50%; width:24px; height:1px; background:#4A5266;
+}
+.br-ws-box::before { left:-24px; }
+.br-ws-box::after { right:-24px; }
+.br-ws-title { color:#F5B942; font-weight:700; letter-spacing:0.5px; }
 </style>
 """
 
 
-def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn) -> str:
+def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = False) -> str:
     """One league's "if the season ended today" bracket, drawn as an
     actual bracket TREE (Wild Card -> Division Series -> Championship
     Series, converging with connector lines) rather than a stacked list —
@@ -459,10 +479,15 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn) -> str:
     Seeds 1-2 get a bye (shown starting one column in, at the same depth
     their Division Series opponent — the Wild Card round's winner — will
     join them); seed 3 vs 6 and seed 4 vs 5 play the Wild Card round.
+    `mirror=True` flips every connector to the left side, so the tree
+    grows right-to-left — for pairing an AL tree (normal) with an NL tree
+    (mirrored) around a centered World Series box, like the real bracket.
     `seeded` needs seed/team_abbr/wins/losses, seed 1-6."""
     by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
     if len(by_seed) < 6:
         return "<div style='color:#9AA3B5'>Not enough teams to seed a bracket yet.</div>"
+
+    mirror_cls = " mirror" if mirror else ""
 
     def team_html(row, tag=None):
         abbr = row["team_abbr"]
@@ -479,15 +504,35 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn) -> str:
         return f"<div class='br-matchbox'>{team_html(row_a)}{team_html(row_b)}</div>"
 
     def pair(left_html, right_html):
-        return f"<div class='br-pair'><div class='br-slot'>{left_html}</div><div class='br-slot'>{right_html}</div></div>"
+        return (
+            f"<div class='br-pair{mirror_cls}'>"
+            f"<div class='br-slot{mirror_cls}'>{left_html}</div>"
+            f"<div class='br-slot{mirror_cls}'>{right_html}</div></div>"
+        )
 
-    bye1 = f"<div class='br-bye-shift'>{team_html(by_seed[1], 'BYE')}</div>"
-    bye2 = f"<div class='br-bye-shift'>{team_html(by_seed[2], 'BYE')}</div>"
+    bye1 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[1], 'BYE')}</div>"
+    bye2 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[2], 'BYE')}</div>"
     wc_top = match_html(by_seed[3], by_seed[6])
     wc_bottom = match_html(by_seed[4], by_seed[5])
 
     tree = pair(pair(bye1, wc_top), pair(wc_bottom, bye2))
     return f"<div class='bracket-tree'>{tree}</div>"
+
+
+def full_playoff_bracket_html(al_seeded: pd.DataFrame, nl_seeded: pd.DataFrame, team_color_fn) -> str:
+    """The complete postseason picture, both leagues at once: AL tree on
+    the left (Wild Card -> Division Series -> Championship Series flowing
+    left to right), NL tree on the right (same rounds, mirrored to flow
+    right to left), meeting at a centered World Series box — the same
+    shape as the real MLB bracket graphic, showing every round from Wild
+    Card through the World Series in one continuous connected path."""
+    al_html = playoff_bracket_tree(al_seeded, team_color_fn, mirror=False)
+    nl_html = playoff_bracket_tree(nl_seeded, team_color_fn, mirror=True)
+    ws_html = (
+        "<div class='br-ws-box'><span class='br-ws-title'>World Series</span>"
+        "<span>AL Champion (TBD)</span><span>vs.</span><span>NL Champion (TBD)</span></div>"
+    )
+    return f"<div class='bracket-row'>{al_html}{ws_html}{nl_html}</div>"
 
 
 _SCHEDULE_STATUS_LABELS = {"Preview": "Scheduled", "Live": "Live"}

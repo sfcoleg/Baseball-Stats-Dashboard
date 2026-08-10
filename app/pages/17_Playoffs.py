@@ -37,23 +37,15 @@ if standings.empty or playoff_odds.empty:
 style.colored_header("If the Season Ended Today", "headliners")
 st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
 picture = db.current_playoff_picture(mtime)
-for league, label in (("AL", "AL — American League"), ("NL", "NL — National League")):
-    st.markdown(f"**{label}**")
-    if league in picture:
-        st.markdown(
-            "<div style='overflow-x:auto'>" + style.playoff_bracket_tree(picture[league], teams.color_for_abbr) + "</div>",
-            unsafe_allow_html=True,
-        )
-    else:
-        st.caption("No seeding data yet.")
-
 if "AL" in picture and "NL" in picture:
     st.markdown(
-        "<div style='display:flex;justify-content:center;margin-top:8px'>"
-        "<div class='br-ws-box'><b style='color:#DCE1EA'>World Series</b> "
-        "— AL Champion (TBD) vs. NL Champion (TBD)</div></div>",
+        "<div style='overflow-x:auto'>"
+        + style.full_playoff_bracket_html(picture["AL"], picture["NL"], teams.color_for_abbr)
+        + "</div>",
         unsafe_allow_html=True,
     )
+else:
+    st.caption("No seeding data yet.")
 
 st.divider()
 
