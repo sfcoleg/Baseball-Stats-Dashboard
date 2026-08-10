@@ -110,35 +110,79 @@ def _todays_games_strip():
     st.divider()
 
 
-def _no_hitter_watch_banner():
-    """A can't-miss banner at the very top of Home whenever a team's
-    pitching staff (starter or a combined effort) has a no-hitter or
-    perfect game going right now — see db.no_hitter_watch for the 6.0+ IP
-    threshold and why the perfect-game flag is approximate. Nothing renders
-    at all when no game qualifies, so this never takes up space on a
-    normal day."""
-    watches = db.no_hitter_watch(today_pacific().isoformat())
-    if not watches:
+_MILESTONE_LABELS = {
+    "no_hitter_watch": "NO-HITTER WATCH",
+    "perfect_watch": "PERFECT GAME WATCH",
+    "no_hitter_achieved": "NO-HITTER!",
+    "perfect_achieved": "PERFECT GAME!",
+    "cycle_watch": "CYCLE WATCH",
+    "cycle_achieved": "CYCLE!",
+    "four_hr_watch": "4-HR WATCH",
+    "four_hr_achieved": "4-HR GAME!",
+}
+_MILESTONE_ACHIEVED_KINDS = {"no_hitter_achieved", "perfect_achieved", "cycle_achieved", "four_hr_achieved"}
+
+
+def _milestone_banner(kind, body_html):
+    """One banner row. "Watch" kinds (a bid still in progress) render red
+    with the pulsing LIVE-badge treatment and vanish the instant the bid
+    breaks on the next poll; "achieved" kinds render gold/solid and — since
+    db.no_hitter_watch/db.batting_milestone_watch re-derive them from the
+    still-queryable final boxscore on every poll rather than storing a
+    flag anywhere — keep showing for the rest of the day without any extra
+    state to manage."""
+    achieved = kind in _MILESTONE_ACHIEVED_KINDS
+    color = "#F5B942" if achieved else "#D32F2F"
+    badge_class = "" if achieved else "live-badge"
+    st.markdown(
+        f"<div style='background-color:{color}22;border:1px solid {color}88;border-radius:10px;"
+        "padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
+        f"<span class='{badge_class}' style='background-color:{color};color:#12141C;padding:3px 10px;"
+        f"border-radius:6px;font-weight:700;font-size:0.75rem;flex-shrink:0'>{_MILESTONE_LABELS[kind]}</span>"
+        f"<div>{body_html}</div></div>",
+        unsafe_allow_html=True,
+    )
+
+
+def _milestone_banners():
+    """Same-day milestone banners at the very top of Home: no-hitter/
+    perfect-game bids and completions (db.no_hitter_watch), plus cycle and
+    4-homer bids and completions (db.batting_milestone_watch). Nothing
+    renders at all when there's no bid in progress and nothing achieved
+    yet today, so this never takes up space on a normal day."""
+    date_str = today_pacific().isoformat()
+    pitching_watches = db.no_hitter_watch(date_str)
+    batting_watches = db.batting_milestone_watch(date_str)
+    if not pitching_watches and not batting_watches:
         return
-    for w in watches:
-        kind = "Perfect Game Watch" if w["perfect"] else "No-Hitter Watch"
+
+    for w in pitching_watches:
         pitcher_text = " & ".join(w["pitcher_names"]) if w["combined"] else w["pitcher_names"][0]
         combined_note = " (combined)" if w["combined"] else ""
         line_stats = f"{w['ip_display']} IP, 0 H" + (f", {w['walks']} BB" if w["walks"] else "")
-        st.markdown(
-            "<div style='background-color:#D32F2F22;border:1px solid #D32F2F88;border-radius:10px;"
-            "padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-            "<span class='live-badge' style='background-color:#D32F2F;color:#FFFFFF;padding:3px 10px;"
-            f"border-radius:6px;font-weight:700;font-size:0.75rem;flex-shrink:0'>{kind.upper()}</span>"
-            f"<div><span style='font-weight:700'>{pitcher_text}</span>{combined_note} "
+        _milestone_banner(w["kind"], (
+            f"<span style='font-weight:700'>{pitcher_text}</span>{combined_note} "
             f"<span style='color:#9AA3B5'>({w['pitching_abbr']})</span> — {line_stats} vs {w['opponent']} "
-            f"<span style='color:#9AA3B5'>· {w['inning'] or ''}</span></div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+            f"<span style='color:#9AA3B5'>· {w['inning'] or 'Final'}</span>"
+        ))
+
+    for w in batting_watches:
+        if w["kind"] == "cycle_watch":
+            detail = f"needs a {w['missing']} for the cycle"
+        elif w["kind"] == "cycle_achieved":
+            detail = "hit for the cycle"
+        elif w["kind"] == "four_hr_watch":
+            detail = "has 3 HR, watching for #4"
+        else:
+            detail = f"hit {w['hr']} home runs"
+        _milestone_banner(w["kind"], (
+            f"<span style='font-weight:700'>{w['name']}</span> "
+            f"<span style='color:#9AA3B5'>({w['abbr']})</span> — {detail} vs {w['opponent']} "
+            f"<span style='color:#9AA3B5'>· {w['inning'] or 'Final'}</span>"
+        ))
 
 
-_no_hitter_watch_banner()
+_milestone_banners()
 _todays_games_strip()
 
 seasons = db.get_seasons("batting")

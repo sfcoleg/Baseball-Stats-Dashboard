@@ -411,12 +411,21 @@ def load_boxscore_players(game_pk) -> dict | None:
             stat = (p or {}).get("stats", {}).get("batting", {})
             if not p or not stat:
                 continue
+            hits = stat.get("hits", 0)
+            doubles = stat.get("doubles", 0)
+            triples = stat.get("triples", 0)
+            homers = stat.get("homeRuns", 0)
             batters.append({
+                "mlbID": p["person"]["id"],
                 "Name": p["person"]["fullName"],
                 "Pos": p.get("position", {}).get("abbreviation", ""),
                 "AB": stat.get("atBats", 0),
                 "R": stat.get("runs", 0),
-                "H": stat.get("hits", 0),
+                "H": hits,
+                "1B": hits - doubles - triples - homers,
+                "2B": doubles,
+                "3B": triples,
+                "HR": homers,
                 "RBI": stat.get("rbi", 0),
                 "BB": stat.get("baseOnBalls", 0),
                 "SO": stat.get("strikeOuts", 0),
@@ -471,13 +480,18 @@ def _format_innings_pitched(total_ip: float) -> str:
 
 @st.cache_data(show_spinner=False, ttl=20, max_entries=4)
 def no_hitter_watch(date_str: str) -> list[dict]:
-    """Live in-progress games where one team's pitching staff (a starter
-    solo, or a combined effort) has a no-hitter or perfect game going.
-    Requires 6.0+ combined innings pitched before it shows up — early no-hit
-    bids are too common through the first few innings to be notable.
-    Approximate for the perfect-game flag: the boxscore API doesn't expose
-    hit-by-pitch or errors, so it only checks hits + walks allowed — good
-    enough for a home-page heads-up, not official scoring."""
+    """No-hitter/perfect-game bids for `date_str`'s games, both "in
+    progress" (a team's pitching staff — starter solo, or a combined
+    effort — is 6.0+ IP into one, the threshold below which an early no-hit
+    bid is too common to be notable) and "achieved" (the staff finished a
+    real 9+ inning game with zero hits allowed). Achieved entries are
+    derived fresh from the same boxscore call every time this runs, not
+    stored anywhere — since a finished game's boxscore doesn't change for
+    the rest of the day, that's what makes the achieved banner "stick"
+    without any extra state. Approximate for the perfect-game flag: the
+    boxscore API doesn't expose hit-by-pitch or errors, so it only checks
+    hits + walks allowed — good enough for a home-page heads-up, not
+    official scoring."""
     games = load_todays_games(db_mtime())
     if games.empty:
         return []
@@ -486,7 +500,8 @@ def no_hitter_watch(date_str: str) -> list[dict]:
     watches = []
     for _, g in games.iterrows():
         live = live_scores.get(g["game_pk"], {})
-        if live.get("status") != "In Progress":
+        status = live.get("status") or g.get("status")
+        if status not in ("In Progress", "Final", "Game Over"):
             continue
         box = load_boxscore_players(g["game_pk"])
         if not box:
@@ -502,10 +517,18 @@ def no_hitter_watch(date_str: str) -> list[dict]:
             if total_h > 0:
                 continue
             total_ip = sum(_parse_innings_pitched(p["IP"]) for p in pitchers)
-            if total_ip < 6.0:
-                continue
             total_bb = sum(p["BB"] for p in pitchers)
+            is_perfect = total_bb == 0
+            if status == "In Progress":
+                if total_ip < 6.0:
+                    continue
+                kind = "perfect_watch" if is_perfect else "no_hitter_watch"
+            else:
+                if total_ip < 9.0:
+                    continue
+                kind = "perfect_achieved" if is_perfect else "no_hitter_achieved"
             watches.append({
+                "kind": kind,
                 "game_pk": g["game_pk"],
                 "pitching_team": pitching_team,
                 "pitching_abbr": pitching_abbr,
@@ -515,9 +538,59 @@ def no_hitter_watch(date_str: str) -> list[dict]:
                 "ip": total_ip,
                 "ip_display": _format_innings_pitched(total_ip),
                 "walks": total_bb,
-                "perfect": total_bb == 0,
                 "inning": live.get("inning"),
             })
+    return watches
+
+
+_CYCLE_HIT_TYPES = (("1B", "single"), ("2B", "double"), ("3B", "triple"), ("HR", "home run"))
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=4)
+def batting_milestone_watch(date_str: str) -> list[dict]:
+    """Cycle and 4-homer bids for `date_str`'s games: "watch" entries while
+    the game is in progress (one hit-type away from the cycle; sitting on 3
+    HR), "achieved" entries once it actually happens — achieved persists
+    for the rest of the day the same way no_hitter_watch's does (derived
+    fresh from the still-queryable final boxscore, not stored). A stalled
+    3-HR bid deliberately does NOT get an achieved entry once the game goes
+    final — only an actual 4th homer keeps the banner around."""
+    games = load_todays_games(db_mtime())
+    if games.empty:
+        return []
+    live_scores = load_live_scores(date_str)
+
+    watches = []
+    for _, g in games.iterrows():
+        live = live_scores.get(g["game_pk"], {})
+        status = live.get("status") or g.get("status")
+        if status not in ("In Progress", "Final", "Game Over"):
+            continue
+        box = load_boxscore_players(g["game_pk"])
+        if not box:
+            continue
+        for side, team, abbr, opp_team in (
+            ("away", g["away_team"], g["away_abbr"], g["home_team"]),
+            ("home", g["home_team"], g["home_abbr"], g["away_team"]),
+        ):
+            for b in box.get(side, {}).get("batters", []):
+                counts = {label: b.get(key, 0) for key, label in _CYCLE_HIT_TYPES}
+                types_hit = sum(1 for c in counts.values() if c >= 1)
+                base = {
+                    "game_pk": g["game_pk"], "mlbID": b["mlbID"], "name": b["Name"],
+                    "team": team, "abbr": abbr, "opponent": opp_team, "inning": live.get("inning"),
+                }
+                if types_hit == 4:
+                    watches.append({**base, "kind": "cycle_achieved"})
+                elif types_hit == 3 and status == "In Progress":
+                    missing = next(label for label, c in counts.items() if c == 0)
+                    watches.append({**base, "kind": "cycle_watch", "missing": missing})
+
+                hr = counts["home run"]
+                if hr >= 4:
+                    watches.append({**base, "kind": "four_hr_achieved", "hr": hr})
+                elif hr == 3 and status == "In Progress":
+                    watches.append({**base, "kind": "four_hr_watch", "hr": hr})
     return watches
 
 

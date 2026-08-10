@@ -181,7 +181,10 @@ for _, row in games.iterrows():
                         batters = pd.DataFrame(player_box[side]["batters"])
                         if not batters.empty:
                             st.caption(f"{abbr} Batting")
-                            st.dataframe(batters, hide_index=True, use_container_width=True)
+                            st.dataframe(
+                                batters[["Name", "Pos", "AB", "R", "H", "RBI", "BB", "SO"]],
+                                hide_index=True, use_container_width=True,
+                            )
                         pitchers = pd.DataFrame(player_box[side]["pitchers"])
                         if not pitchers.empty:
                             st.caption(f"{abbr} Pitching")
