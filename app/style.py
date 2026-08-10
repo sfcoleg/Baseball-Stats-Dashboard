@@ -413,36 +413,81 @@ def playoff_odds_table(df, team_color_fn) -> str:
     )
 
 
-def playoff_bracket_html(seeded: pd.DataFrame, team_color_fn) -> str:
-    """One league's "if the season ended today" bracket (see
-    db.current_playoff_picture) — seeds 1-2 on a bye straight to the
-    Division Series, seed 3 vs 6 and seed 4 vs 5 in the Wild Card round.
-    `seeded` needs seed/team_abbr/wins/losses, seed 1-6 in that order."""
-    def _seed_badge(seed_row, note=None):
-        abbr = seed_row["team_abbr"]
-        color = team_color_fn(abbr)
-        note_html = f"<span style='color:#9AA3B5;font-size:0.75rem;margin-left:8px'>{note}</span>" if note else ""
-        return (
-            "<div style='display:flex;align-items:center;background-color:#1B243866;border-left:4px solid "
-            f"{color};padding:8px 14px;border-radius:6px;margin:4px 0'>"
-            f"<span style='color:#9AA3B5;font-weight:700;width:20px'>{int(seed_row['seed'])}</span>"
-            f"<a href='?team={abbr}' target='_self' style='background-color:{color}66;color:#FAFAFA;"
-            f"padding:2px 9px;border-radius:6px;font-weight:700;text-decoration:none;margin-right:8px'>{abbr}</a>"
-            f"<span style='color:#DCE1EA'>{int(seed_row['wins'])}-{int(seed_row['losses'])}</span>"
-            f"{note_html}</div>"
-        )
+# One-time CSS for playoff_bracket_tree()'s tree shape: a `.br-pair` is a
+# flex column of exactly 2 equal-height `.br-slot`s (so their content
+# naturally centers at 25%/75% of the pair's own height); nesting pairs
+# inside pairs is what produces the WC -> Division Series -> Championship
+# Series funnel, with each level's connector lines exact by construction
+# (no manual pixel math, no JS layout pass — just flexbox arithmetic).
+PLAYOFF_BRACKET_CSS = """
+<style>
+.bracket-tree { display:flex; align-items:center; }
+.br-pair { display:flex; flex-direction:column; position:relative; }
+.br-pair::after {
+  content:''; position:absolute; right:0; top:25%; bottom:25%; width:1px; background:#4A5266;
+}
+.br-slot { flex:1; display:flex; align-items:center; position:relative; padding-right:18px; min-height:36px; }
+.br-slot::after {
+  content:''; position:absolute; right:0; top:50%; width:18px; height:1px; background:#4A5266;
+}
+.br-bye-shift { margin-left:88px; }
+.br-team {
+  display:flex; align-items:center; gap:6px; background-color:#1B243866; border-radius:6px;
+  padding:4px 10px; white-space:nowrap; font-size:0.8rem;
+}
+.br-seed { color:#9AA3B5; font-weight:700; font-size:0.75rem; }
+.br-badge {
+  background-color:var(--br-color); color:#FAFAFA; padding:1px 7px; border-radius:5px;
+  font-weight:700; text-decoration:none; font-size:0.8rem;
+}
+.br-rec { color:#9AA3B5; font-size:0.75rem; }
+.br-tag { color:#F5B942; font-size:0.7rem; font-weight:700; }
+.br-matchbox { display:flex; flex-direction:column; gap:3px; }
+.br-ws-box {
+  display:flex; align-items:center; gap:10px; background-color:#1B243866; border:1px solid #4A5266;
+  border-radius:8px; padding:10px 18px; font-size:0.85rem; color:#9AA3B5;
+}
+</style>
+"""
 
+
+def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn) -> str:
+    """One league's "if the season ended today" bracket, drawn as an
+    actual bracket TREE (Wild Card -> Division Series -> Championship
+    Series, converging with connector lines) rather than a stacked list —
+    see PLAYOFF_BRACKET_CSS for how the nesting produces the shape.
+    Seeds 1-2 get a bye (shown starting one column in, at the same depth
+    their Division Series opponent — the Wild Card round's winner — will
+    join them); seed 3 vs 6 and seed 4 vs 5 play the Wild Card round.
+    `seeded` needs seed/team_abbr/wins/losses, seed 1-6."""
     by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
     if len(by_seed) < 6:
         return "<div style='color:#9AA3B5'>Not enough teams to seed a bracket yet.</div>"
 
-    html = "<div style='font-weight:700;color:#9AA3B5;margin:6px 0 2px'>Division Series bye</div>"
-    html += _seed_badge(by_seed[1], "bye") + _seed_badge(by_seed[2], "bye")
-    html += "<div style='font-weight:700;color:#9AA3B5;margin:14px 0 2px'>Wild Card Round (best of 3)</div>"
-    html += _seed_badge(by_seed[3]) + "<div style='text-align:center;color:#9AA3B5;font-size:0.8rem'>vs</div>" + _seed_badge(by_seed[6])
-    html += "<div style='height:8px'></div>"
-    html += _seed_badge(by_seed[4]) + "<div style='text-align:center;color:#9AA3B5;font-size:0.8rem'>vs</div>" + _seed_badge(by_seed[5])
-    return html
+    def team_html(row, tag=None):
+        abbr = row["team_abbr"]
+        color = team_color_fn(abbr)
+        tag_html = f"<span class='br-tag'>{tag}</span>" if tag else ""
+        return (
+            "<div class='br-team'>"
+            f"<span class='br-seed'>{int(row['seed'])}</span>"
+            f"<a href='?team={abbr}' target='_self' class='br-badge' style='--br-color:{color}66'>{abbr}</a>"
+            f"<span class='br-rec'>{int(row['wins'])}-{int(row['losses'])}</span>{tag_html}</div>"
+        )
+
+    def match_html(row_a, row_b):
+        return f"<div class='br-matchbox'>{team_html(row_a)}{team_html(row_b)}</div>"
+
+    def pair(left_html, right_html):
+        return f"<div class='br-pair'><div class='br-slot'>{left_html}</div><div class='br-slot'>{right_html}</div></div>"
+
+    bye1 = f"<div class='br-bye-shift'>{team_html(by_seed[1], 'BYE')}</div>"
+    bye2 = f"<div class='br-bye-shift'>{team_html(by_seed[2], 'BYE')}</div>"
+    wc_top = match_html(by_seed[3], by_seed[6])
+    wc_bottom = match_html(by_seed[4], by_seed[5])
+
+    tree = pair(pair(bye1, wc_top), pair(wc_bottom, bye2))
+    return f"<div class='bracket-tree'>{tree}</div>"
 
 
 _SCHEDULE_STATUS_LABELS = {"Preview": "Scheduled", "Live": "Live"}
