@@ -5,6 +5,7 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+import articles
 import db
 import style
 import teams
@@ -14,6 +15,18 @@ st.title("Daily Digest")
 
 today = db.today_pacific()
 yesterday = today - timedelta(days=1)
+
+all_articles = articles.load_articles()
+if all_articles:
+    style.colored_header("Articles", "headliners")
+    for article in all_articles:
+        with st.container(border=True):
+            st.markdown(f"### {article['title']}")
+            byline = " · ".join(p for p in (article["author"], article["date"]) if p)
+            if byline:
+                st.caption(byline)
+            st.markdown(article["body"])
+    st.divider()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

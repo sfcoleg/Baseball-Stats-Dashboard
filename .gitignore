@@ -5,3 +5,4 @@ __pycache__/
 .DS_Store
 data/refresh.log
 .claude/
+.streamlit/secrets.toml
