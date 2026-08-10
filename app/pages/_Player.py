@@ -232,6 +232,16 @@ if streak_badges:
     )
     st.markdown(badges_html, unsafe_allow_html=True)
 
+# A short researched write-up, not present for most players — see
+# db.load_player_bio for why this isn't templated off the stat columns.
+bio = db.load_player_bio(mlbID, season, mtime)
+if bio:
+    st.markdown(
+        "<div style='background-color:#1B243866;border-left:4px solid #4C7EF3;padding:12px 16px;"
+        f"border-radius:6px;margin:10px 0;color:#DCE1EA;line-height:1.5'>{bio}</div>",
+        unsafe_allow_html=True,
+    )
+
 # Lets the headline stat rows below show "+0.023 vs 2025" instead of a
 # percentile — same st.metric delta slot, just a different source, so
 # toggling doesn't change layout. Off by default since percentile-vs-

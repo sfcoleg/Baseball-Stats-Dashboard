@@ -2458,6 +2458,26 @@ def load_player_history(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame
     return df
 
 
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_player_bio(mlbID, season: int, db_mtime_val: float) -> str | None:
+    """A short researched write-up for one player/season, if one exists.
+    Unlike everything else in this file, player_bios isn't populated by the
+    daily ingest script — these are written by Claude Code doing real web
+    research (recent news, injury/trade context, storylines) rather than
+    templated off the stat columns, then upserted by hand. Only a subset of
+    players have one at any given time; most player pages simply won't show
+    a bio section."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            row = conn.execute(
+                "SELECT bio FROM player_bios WHERE mlbID = ? AND season = ?",
+                (int(mlbID), season),
+            ).fetchone()
+        except sqlite3.OperationalError:
+            return None
+    return row[0] if row else None
+
+
 def current_hit_streak(history: pd.DataFrame) -> int | None:
     """Consecutive most-recent game days with a hit, walking backward from
     the latest logged date. Days with no game (day_PA is null/0) are skipped
