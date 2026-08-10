@@ -160,7 +160,7 @@ def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
     )
     stat_html = (
-        f"<div style='margin-top:6px;'><span style='background-color:#2e7d3244;"
+        f"<div style='margin-top:6px;margin-bottom:12px'><span style='background-color:#2e7d3244;"
         f"color:#7CFC9A;padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
         f"&uarr; {stat_line}</span></div>"
     )
