@@ -660,32 +660,46 @@ if batting is not None or pitching is not None:
 if batting is not None and is_batter_role:
     spray = db.player_batted_ball_events(mlbID, season)
     if not spray.empty:
+        stadium_outline = db.team_stadium_outline(abbr)
         style.colored_header("Spray Chart", "chart")
+        st.caption(f"{teams.franchise_display_name(abbr, season)}'s actual home park outline." if stadium_outline else "Generic field outline (no digitized park shape available for this team).")
         fig = go.Figure()
-        # Stylized field outline: foul lines to the poles, an outfield wall
-        # arc (shallower down the lines than to straightaway center, like a
-        # real ballpark), the infield dirt diamond, and the mound — drawn
-        # from scratch in plot coordinates (not a real park's dimensions),
-        # just enough context to read hit locations against.
-        wall_theta = list(range(-45, 46))
-        wall_x = [(330 + 70 * (1 - abs(t) / 45)) * math.sin(math.radians(t)) for t in wall_theta]
-        wall_y = [(330 + 70 * (1 - abs(t) / 45)) * math.cos(math.radians(t)) for t in wall_theta]
-        fig.add_trace(go.Scatter(
-            x=wall_x, y=wall_y, mode="lines", line=dict(color="#4A5266", width=2),
-            showlegend=False, hoverinfo="skip",
-        ))
-        fig.add_trace(go.Scatter(
-            x=[0, wall_x[0]], y=[0, wall_y[0]], mode="lines",
-            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
-        ))
-        fig.add_trace(go.Scatter(
-            x=[0, wall_x[-1]], y=[0, wall_y[-1]], mode="lines",
-            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
-        ))
-        fig.add_trace(go.Scatter(
-            x=[0, 63.6, 0, -63.6, 0], y=[0, 63.6, 127.3, 63.6, 0], mode="lines",
-            line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
-        ))
+        if stadium_outline:
+            # This team's real park — see db.team_stadium_outline for how
+            # pybaseball's bundled per-park wall digitization gets
+            # calibrated into this same feet-from-home-plate space.
+            for segment in ("outfield_outer", "infield_outer", "foul_lines"):
+                pts = stadium_outline.get(segment)
+                if not pts:
+                    continue
+                fig.add_trace(go.Scatter(
+                    x=[p[0] for p in pts], y=[p[1] for p in pts], mode="lines",
+                    line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+                ))
+        else:
+            # Stylized fallback: foul lines to the poles, an outfield wall
+            # arc (shallower down the lines than to straightaway center,
+            # like a real ballpark), and the infield dirt diamond — drawn
+            # from scratch, not any specific park's real dimensions.
+            wall_theta = list(range(-45, 46))
+            wall_x = [(330 + 70 * (1 - abs(t) / 45)) * math.sin(math.radians(t)) for t in wall_theta]
+            wall_y = [(330 + 70 * (1 - abs(t) / 45)) * math.cos(math.radians(t)) for t in wall_theta]
+            fig.add_trace(go.Scatter(
+                x=wall_x, y=wall_y, mode="lines", line=dict(color="#4A5266", width=2),
+                showlegend=False, hoverinfo="skip",
+            ))
+            fig.add_trace(go.Scatter(
+                x=[0, wall_x[0]], y=[0, wall_y[0]], mode="lines",
+                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+            ))
+            fig.add_trace(go.Scatter(
+                x=[0, wall_x[-1]], y=[0, wall_y[-1]], mode="lines",
+                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+            ))
+            fig.add_trace(go.Scatter(
+                x=[0, 63.6, 0, -63.6, 0], y=[0, 63.6, 127.3, 63.6, 0], mode="lines",
+                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+            ))
         for outcome, group in spray.groupby("outcome"):
             # Plain Python lists, not pandas Series/DataFrame — passing the
             # latter through st.plotly_chart here mis-serializes (a bad

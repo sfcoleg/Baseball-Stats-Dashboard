@@ -715,6 +715,80 @@ def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
 
 
+# Our team_abbr -> pybaseball's STADIUM_COORDS team key (lowercase franchise
+# nickname; a few are historical — "indians" predates the Guardians rename,
+# pybaseball hasn't relabeled it). No entry for a team means no digitized
+# outline is bundled for it (falls back to the generic stylized field).
+STADIUM_KEY_BY_ABBR = {
+    "ARI": "diamondbacks", "ATL": "braves", "ATH": "athletics", "BAL": "orioles",
+    "BOS": "red_sox", "CWS": "white_sox", "CHC": "cubs", "CIN": "reds",
+    "CLE": "indians", "COL": "rockies", "DET": "tigers", "HOU": "astros",
+    "KC": "royals", "LAA": "angels", "LAD": "dodgers", "MIA": "marlins",
+    "MIL": "brewers", "MIN": "twins", "NYY": "yankees", "NYM": "mets",
+    "PHI": "phillies", "PIT": "pirates", "SD": "padres", "SF": "giants",
+    "SEA": "mariners", "STL": "cardinals", "TB": "rays", "TEX": "rangers",
+    "TOR": "blue_jays", "WSH": "nationals",
+}
+
+# Real straightaway center-field distance (feet) for each park, used to
+# calibrate STADIUM_COORDS' own (unrelated-to-Statcast) coordinate scale —
+# see team_stadium_outline. Public, commonly-cited figures; a park with a
+# quirky angled CF wall (not a single "straightaway" point) is approximate.
+STADIUM_CF_FEET = {
+    "ARI": 407, "ATL": 400, "ATH": 403, "BAL": 400, "BOS": 390, "CWS": 400,
+    "CHC": 400, "CIN": 404, "CLE": 405, "COL": 415, "DET": 412, "HOU": 409,
+    "KC": 410, "LAA": 396, "LAD": 395, "MIA": 400, "MIL": 400, "MIN": 404,
+    "NYY": 408, "NYM": 408, "PHI": 401, "PIT": 399, "SD": 396, "SF": 399,
+    "SEA": 401, "STL": 400, "TB": 404, "TEX": 407, "TOR": 400, "WSH": 402,
+}
+
+
+@st.cache_data(show_spinner=False)
+def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]:
+    """One team's real ballpark wall outline, in the spray chart's own
+    feet-from-home-plate coordinate space — pybaseball bundles a digitized
+    per-park outline (STADIUM_COORDS) for exactly this kind of overlay, but
+    in its own coordinate system, unrelated in scale to Statcast's hc_x/
+    hc_y (confirmed by comparing raw distances against real dimensions —
+    naively reusing the hc_x/hc_y transform on this data silently produces
+    a nonsense-scale shape). Calibrated per team from that park's own data:
+    home plate is the foul lines' shared vertex, "deepest" is whichever
+    outfield_outer point sits farthest from it, and the scale factor is
+    real_cf_ft / that raw distance (see STADIUM_CF_FEET) — then every
+    segment is re-centered on home plate and scaled the same way. Returns
+    {segment_name: [(x_ft, y_ft), ...]}, e.g. "outfield_outer",
+    "infield_outer", "foul_lines" — empty if the team has no bundled
+    outline."""
+    key = STADIUM_KEY_BY_ABBR.get(team_abbr)
+    if not key:
+        return {}
+
+    from pybaseball.plotting import STADIUM_COORDS
+
+    park = STADIUM_COORDS[STADIUM_COORDS["team"] == key]
+    foul_lines = park[park["segment"] == "foul_lines"]
+    outfield = park[park["segment"] == "outfield_outer"]
+    if foul_lines.empty or outfield.empty:
+        return {}
+
+    home_x, home_y = foul_lines.iloc[0][["x", "y"]]
+    raw_dist = ((outfield["x"] - home_x) ** 2 + (outfield["y"] - home_y) ** 2) ** 0.5
+    raw_deep = raw_dist.max()
+    if not raw_deep or pd.isna(raw_deep):
+        return {}
+    scale = STADIUM_CF_FEET.get(team_abbr, 400) / raw_deep
+
+    outline = {}
+    for segment in ("outfield_outer", "infield_outer", "foul_lines"):
+        seg_df = park[park["segment"] == segment]
+        if seg_df.empty:
+            continue
+        xs = (seg_df["x"] - home_x) * scale
+        ys = (seg_df["y"] - home_y) * scale
+        outline[segment] = list(zip(xs.tolist(), ys.tolist()))
+    return outline
+
+
 _DEPTH_CHART_POSITIONS = {"SP", "C", "1B", "2B", "3B", "SS", "LF", "CF", "RF", "DH", "CP"}
 
 
