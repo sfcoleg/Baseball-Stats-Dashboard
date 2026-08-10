@@ -1022,6 +1022,26 @@ def load_pitcher_handedness(mlbIDs: tuple) -> dict:
 _INJURY_STATUS_CODES = {"D7": "7-Day IL", "D10": "10-Day IL", "D15": "15-Day IL", "D60": "60-Day IL"}
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=2000)
+def is_player_active(mlbID) -> bool | None:
+    """Whether MLB currently considers this player active (on a 40-man
+    roster somewhere, even hurt) vs. actually retired — from the Stats
+    API's own `active` flag on the person record, which is the only
+    reliable signal for this. A player with zero rows in the current
+    season's batting/pitching tables looks identical either way (Félix
+    Bautista out all year hurt vs. a retiree) from this app's own data
+    alone, which is what previously mislabeled injured players as
+    "retired." Returns None on a lookup failure so callers can fall back
+    to that no-stats-this-season heuristic instead of guessing wrong."""
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/people/{int(mlbID)}", timeout=10)
+        resp.raise_for_status()
+        people = resp.json().get("people", [])
+        return bool(people[0].get("active")) if people else None
+    except Exception:
+        return None
+
+
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=3)
 def load_injury_report() -> pd.DataFrame:
     """Every player currently on a major-league injured list, across all 30
@@ -1560,6 +1580,40 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
         "wildcard_pct": 100 * wildcard_flags.mean(axis=0),
         "ws_pct": 100 * ws_wins / PLAYOFF_SIM_COUNT,
     })
+    return _clamp_playoff_odds(result, db_mtime_val)
+
+
+# A PLAYOFF_SIM_COUNT-run Monte Carlo can land a team at a flat 0% or 100%
+# purely from sample noise (every one of 4000 sims broke the same way)
+# well before that team is actually mathematically clinched or eliminated
+# — misleading, since 0%/100% reads as certainty. Nudged just off the
+# extremes so "still mathematically alive/not yet locked up" always shows
+# as such, while a team that IS actually clinched/eliminated (per
+# clinch_elimination_status's exact math, not simulation sampling) still
+# shows the true 100%/0%.
+_ODDS_EPSILON = 0.1
+
+
+def _clamp_playoff_odds(result: pd.DataFrame, db_mtime_val: float) -> pd.DataFrame:
+    events = clinch_elimination_status(db_mtime_val)
+    clinched_playoff = {e["team_abbr"] for e in events if e["kind"] in ("division_clinch", "wildcard_clinch")}
+    clinched_division = {e["team_abbr"] for e in events if e["kind"] == "division_clinch"}
+    clinched_wildcard = {e["team_abbr"] for e in events if e["kind"] == "wildcard_clinch"}
+    eliminated = {e["team_abbr"] for e in events if e["kind"] == "eliminated"}
+
+    def _clamp_col(col, guaranteed_set):
+        vals = result[col].to_numpy(dtype=float)
+        is_guaranteed = result["team_abbr"].isin(guaranteed_set).to_numpy()
+        is_eliminated = result["team_abbr"].isin(eliminated).to_numpy()
+        vals = np.clip(vals, _ODDS_EPSILON, 100 - _ODDS_EPSILON)
+        vals = np.where(is_guaranteed, 100.0, vals)
+        vals = np.where(is_eliminated, 0.0, vals)
+        result[col] = vals
+
+    _clamp_col("playoff_pct", clinched_playoff)
+    _clamp_col("division_pct", clinched_division)
+    _clamp_col("wildcard_pct", clinched_wildcard)
+    _clamp_col("ws_pct", set())  # no team is ever guaranteed a championship before winning it
     return result
 
 
@@ -1589,6 +1643,79 @@ def current_playoff_picture(db_mtime_val: float) -> dict[str, pd.DataFrame]:
         seeded.insert(0, "seed", range(1, len(seeded) + 1))
         picture[league] = seeded
     return picture
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=2)
+def clinch_elimination_status(db_mtime_val: float) -> list[dict]:
+    """Which teams have clinched a division, clinched at least a wild-card
+    spot, or been mathematically eliminated from the postseason entirely —
+    computed fresh from current standings + remaining schedule every time,
+    so a clinch/elimination "sticks" for the rest of the season without any
+    stored state (once true these can only stay true: wins don't decrease,
+    games remaining only decreases).
+
+    Uses the standard simplified magic-number approach (each contender
+    compared against the *current* wins total of the team it needs to
+    catch, not a full simulation of every remaining game's possible
+    outcomes) — the same simplification most fan-facing standings pages
+    use. It can be off by a game or two right at a tiebreaker boundary,
+    but is correct in the vast majority of cases and self-corrects every
+    time standings refresh."""
+    standings = load_standings(db_mtime_val)
+    schedule = load_schedule(db_mtime_val)
+    if standings.empty or schedule.empty:
+        return []
+    standings = (
+        standings.dropna(subset=["team_abbr", "wins", "losses", "league", "division", "div_rank"])
+        .drop_duplicates("team_abbr").copy()
+    )
+    standings["wins"] = standings["wins"].astype(int)
+
+    unplayed = schedule[schedule["status"] != "Final"]
+    remaining = unplayed.groupby("home_abbr").size().add(unplayed.groupby("away_abbr").size(), fill_value=0)
+    standings["games_remaining"] = standings["team_abbr"].map(remaining).fillna(0).astype(int)
+    standings["max_wins"] = standings["wins"] + standings["games_remaining"]
+
+    results = []
+    for league in sorted(standings["league"].unique()):
+        league_df = standings[standings["league"] == league]
+        non_leaders = league_df[league_df["div_rank"] != "1"].sort_values("wins", ascending=False)
+
+        for division in sorted(league_df["division"].unique()):
+            div_df = league_df[league_df["division"] == division]
+            leader = div_df.sort_values("wins", ascending=False).iloc[0]
+            rivals = div_df[div_df["team_abbr"] != leader["team_abbr"]]
+            if not rivals.empty and (leader["wins"] > rivals["max_wins"]).all():
+                results.append({
+                    "team_abbr": leader["team_abbr"], "team_name": leader["team_name"],
+                    "kind": "division_clinch", "division": division,
+                })
+
+        if len(non_leaders) < WILD_CARDS_PER_LEAGUE:
+            continue
+        cutoff_wins = non_leaders.iloc[WILD_CARDS_PER_LEAGUE - 1]["wins"]
+        if len(non_leaders) > WILD_CARDS_PER_LEAGUE:
+            first_out_max_wins = non_leaders.iloc[WILD_CARDS_PER_LEAGUE]["max_wins"]
+            for _, row in non_leaders.iloc[:WILD_CARDS_PER_LEAGUE].iterrows():
+                if row["wins"] > first_out_max_wins:
+                    results.append({
+                        "team_abbr": row["team_abbr"], "team_name": row["team_name"],
+                        "kind": "wildcard_clinch", "division": row["division"],
+                    })
+
+        for _, row in non_leaders.iterrows():
+            # Strict "<": a team whose max possible wins only ties the
+            # target isn't eliminated yet — a tie can still force a
+            # tiebreaker game, so it's mathematically (if barely) alive.
+            if row["max_wins"] >= cutoff_wins:
+                continue
+            own_leader = league_df[(league_df["division"] == row["division"]) & (league_df["div_rank"] == "1")]
+            if not own_leader.empty and row["max_wins"] < own_leader.iloc[0]["wins"]:
+                results.append({
+                    "team_abbr": row["team_abbr"], "team_name": row["team_name"],
+                    "kind": "eliminated", "division": row["division"],
+                })
+    return results
 
 
 # Home teams win ~54% of MLB games historically — this constant folds that
@@ -2456,26 +2583,6 @@ def load_player_history(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame
         except pd.errors.DatabaseError:
             return pd.DataFrame()
     return df
-
-
-@st.cache_data(show_spinner=False, max_entries=8)
-def load_player_bio(mlbID, season: int, db_mtime_val: float) -> str | None:
-    """A short researched write-up for one player/season, if one exists.
-    Unlike everything else in this file, player_bios isn't populated by the
-    daily ingest script — these are written by Claude Code doing real web
-    research (recent news, injury/trade context, storylines) rather than
-    templated off the stat columns, then upserted by hand. Only a subset of
-    players have one at any given time; most player pages simply won't show
-    a bio section."""
-    with sqlite3.connect(DB_PATH) as conn:
-        try:
-            row = conn.execute(
-                "SELECT bio FROM player_bios WHERE mlbID = ? AND season = ?",
-                (int(mlbID), season),
-            ).fetchone()
-        except sqlite3.OperationalError:
-            return None
-    return row[0] if row else None
 
 
 def current_hit_streak(history: pd.DataFrame) -> int | None:

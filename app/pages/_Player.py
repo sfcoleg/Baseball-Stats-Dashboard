@@ -67,10 +67,19 @@ season = st.selectbox(
 # of whichever season is being viewed above — a player who's active now
 # but has no row in some earlier off-year isn't retired, and a retired
 # player is still retired even while you're looking at their 2019 season.
-is_retired = (
-    db.get_player_batting(mlbID, current_season, mtime) is None
-    and db.get_player_pitching(mlbID, current_season, mtime) is None
-)
+# MLB's own "active" flag is the real signal (see db.is_player_active) —
+# a player can easily have zero stats rows this season just from missing
+# it hurt (e.g. Félix Bautista), which looked identical to retirement
+# under the old no-stats-this-season-only check. Only fall back to that
+# heuristic if the live lookup fails.
+_active_flag = db.is_player_active(mlbID)
+if _active_flag is None:
+    is_retired = (
+        db.get_player_batting(mlbID, current_season, mtime) is None
+        and db.get_player_pitching(mlbID, current_season, mtime) is None
+    )
+else:
+    is_retired = not _active_flag
 
 batting = db.get_player_batting(mlbID, season, mtime)
 pitching = db.get_player_pitching(mlbID, season, mtime)
@@ -231,16 +240,6 @@ if streak_badges:
         for b in streak_badges
     )
     st.markdown(badges_html, unsafe_allow_html=True)
-
-# A short researched write-up, not present for most players — see
-# db.load_player_bio for why this isn't templated off the stat columns.
-bio = db.load_player_bio(mlbID, season, mtime)
-if bio:
-    st.markdown(
-        "<div style='background-color:#1B243866;border-left:4px solid #4C7EF3;padding:12px 16px;"
-        f"border-radius:6px;margin:10px 0;color:#DCE1EA;line-height:1.5'>{bio}</div>",
-        unsafe_allow_html=True,
-    )
 
 # Lets the headline stat rows below show "+0.023 vs 2025" instead of a
 # percentile — same st.metric delta slot, just a different source, so

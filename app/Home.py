@@ -182,8 +182,47 @@ def _milestone_banners():
         ))
 
 
+_CLINCH_LABELS = {
+    "division_clinch": ("Clinched Division", "#F5B942"),
+    "wildcard_clinch": ("Clinched Playoff Spot", "#F5B942"),
+    "eliminated": ("Eliminated", "#6B7280"),
+}
+
+
+def _clinch_elimination_banners():
+    """A compact strip of clinch/elimination news — see
+    db.clinch_elimination_status for how "clinched"/"eliminated" are
+    computed and why they don't need to be re-triggered each day (once
+    true, permanently true for the season). Grouped into one flex-wrapped
+    row rather than one big card per team, since this can list a lot of
+    teams at once late in the season. Nothing renders in the mostly-empty
+    months before races actually start resolving."""
+    events = db.clinch_elimination_status(db.db_mtime())
+    if not events:
+        return
+    order = {"division_clinch": 0, "wildcard_clinch": 1, "eliminated": 2}
+    events = sorted(events, key=lambda e: (order[e["kind"]], e["team_abbr"]))
+    logo_season = today_pacific().year
+    chips = []
+    for e in events:
+        label, color = _CLINCH_LABELS[e["kind"]]
+        norm_abbr = teams.normalize_mlb_abbr(e["team_abbr"])
+        team_id = teams.team_id_for_abbr(norm_abbr)
+        logo = style.team_logo_for_season(norm_abbr, team_id, logo_season) if team_id else None
+        logo_html = f"<img src='{logo}' style='height:16px;width:16px;object-fit:contain;margin-right:6px'>" if logo else ""
+        chips.append(
+            f"<span style='display:inline-flex;align-items:center;background-color:{color}22;"
+            f"border:1px solid {color}88;border-radius:8px;padding:4px 10px;margin:0 6px 6px 0;font-size:0.85rem'>"
+            f"{logo_html}<strong>{e['team_abbr']}</strong>&nbsp;<span style='color:#9AA3B5'>{label}</span></span>"
+        )
+    style.colored_header("Playoff Picture", "headliners")
+    st.markdown(f"<div style='display:flex;flex-wrap:wrap'>{''.join(chips)}</div>", unsafe_allow_html=True)
+    st.divider()
+
+
 _milestone_banners()
 _todays_games_strip()
+_clinch_elimination_banners()
 
 seasons = db.get_seasons("batting")
 season = st.selectbox("Season", seasons, index=0)
