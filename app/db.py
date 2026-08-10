@@ -745,22 +745,25 @@ STADIUM_CF_FEET = {
 
 @st.cache_data(show_spinner=False)
 def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]:
-    """One team's real ballpark wall outline, in the spray chart's own
+    """One team's real ballpark outline, in the spray chart's own
     feet-from-home-plate coordinate space — pybaseball bundles a digitized
     per-park outline (STADIUM_COORDS) for exactly this kind of overlay, but
     in its own coordinate system, unrelated in scale to Statcast's hc_x/
     hc_y (confirmed by comparing raw distances against real dimensions —
     naively reusing the hc_x/hc_y transform on this data silently produces
-    a nonsense-scale shape). Calibrated per team from that park's own data:
-    home plate is the foul lines' shared vertex, "deepest" is whichever
-    outfield_outer point sits farthest from it, and the scale factor is
-    real_cf_ft / that raw distance (see STADIUM_CF_FEET) — then every
-    segment is re-centered on home plate and scaled the same way. Returns
-    {segment_name: [(x_ft, y_ft), ...]} for "outfield_outer" (the wall)
-    and "foul_lines" only — STADIUM_COORDS has other segments
-    (infield_outer/inner, the grass/dirt arcs) but they're not needed
-    context for a spray chart and just clutter it. Empty if the team has
-    no bundled outline."""
+    a nonsense-scale shape). STADIUM_COORDS actually bundles TWO outfield
+    boundaries — "outfield_outer" turns out to be the back-of-stands/
+    structural limit (i.e. roughly where the fans sit), while
+    "outfield_inner" is the actual fence; plotting outfield_outer put a
+    stadium-structure line in the chart that has nothing to do with where
+    a ball can be caught, so only outfield_inner is used here. Calibrated
+    per team from that park's own data: home plate is the foul lines'
+    shared vertex, "deepest" is whichever outfield_inner point sits
+    farthest from it, and the scale factor is real_cf_ft / that raw
+    distance (see STADIUM_CF_FEET) — then every segment is re-centered on
+    home plate and scaled the same way. Returns {segment_name:
+    [(x_ft, y_ft), ...]} for the fence plus the infield grass/dirt arcs
+    and foul lines; empty if the team has no bundled outline."""
     key = STADIUM_KEY_BY_ABBR.get(team_abbr)
     if not key:
         return {}
@@ -769,7 +772,7 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
 
     park = STADIUM_COORDS[STADIUM_COORDS["team"] == key]
     foul_lines = park[park["segment"] == "foul_lines"]
-    outfield = park[park["segment"] == "outfield_outer"]
+    outfield = park[park["segment"] == "outfield_inner"]
     if foul_lines.empty or outfield.empty:
         return {}
 
@@ -781,7 +784,7 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
     scale = STADIUM_CF_FEET.get(team_abbr, 400) / raw_deep
 
     outline = {}
-    for segment in ("outfield_outer", "foul_lines"):
+    for segment in ("outfield_inner", "infield_outer", "infield_inner", "foul_lines"):
         seg_df = park[park["segment"] == segment]
         if seg_df.empty:
             continue

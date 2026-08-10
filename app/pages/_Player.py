@@ -668,11 +668,10 @@ if batting is not None and is_batter_role:
         if stadium_outline:
             # This team's real park — see db.team_stadium_outline for how
             # pybaseball's bundled per-park wall digitization gets
-            # calibrated into this same feet-from-home-plate space. Just
-            # the wall and foul lines — the other segments it bundles
-            # (grass/dirt arcs) aren't needed context here and just clutter
-            # the chart.
-            for segment in ("outfield_outer", "foul_lines"):
+            # calibrated into this same feet-from-home-plate space (using
+            # outfield_inner, the actual fence — outfield_outer is the
+            # back-of-stands boundary, deliberately left out).
+            for segment in ("outfield_inner", "infield_outer", "infield_inner", "foul_lines"):
                 pts = stadium_outline.get(segment)
                 if not pts:
                     continue
