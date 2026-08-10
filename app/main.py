@@ -32,6 +32,9 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them.
 following.bootstrap()
+# The bracket predictor's picks (see bracket_picks.py) are URL-based, not
+# localStorage-based, so unlike following.py that module's bootstrap() only
+# needs to run on the Playoffs page itself, not globally here.
 
 # Logo + title header — rendered once here (not per-page) so it shows up on
 # every page. Streamlit's own toolbar (hamburger menu / Deploy button) is an

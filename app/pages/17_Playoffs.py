@@ -4,6 +4,7 @@ from pathlib import Path
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
+import bracket_picks
 import db
 import style
 import teams
@@ -14,6 +15,8 @@ clicked_team = st.query_params.get("team")
 if clicked_team:
     st.session_state["team_page_selected_team"] = clicked_team
     st.switch_page("pages/4_Team.py")
+
+bracket_picks.bootstrap()
 
 st.title("Playoffs")
 st.caption(
@@ -44,6 +47,117 @@ if "AL" in picture and "NL" in picture:
         + "</div>",
         unsafe_allow_html=True,
     )
+else:
+    st.caption("No seeding data yet.")
+
+st.divider()
+
+style.colored_header("Predict the Bracket", "headliners")
+st.caption(
+    "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
+    "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
+    "unlock as you fill in the ones before them."
+)
+
+
+def _seed_lookup(seeded):
+    return {int(row.seed): row for row in seeded.itertuples()}
+
+
+def _pick_row(node_id, team_a, team_b):
+    """Two side-by-side buttons for one series; the currently-picked team
+    (if any) renders as a highlighted "primary" button. Picks live in the
+    page's own ?bracket= URL param (see bracket_picks.py), not an account —
+    the current pick set is written back to that param on every click, so
+    the URL itself stays a live link to this exact bracket."""
+    picks = st.session_state["bracket_picks"]
+    current = picks.get(node_id)
+    cols = st.columns(2)
+    for col, team in zip(cols, (team_a, team_b)):
+        with col:
+            label = f"{team['seed']}. {team['abbr']} ({team['wins']}-{team['losses']})"
+            if st.button(
+                label, key=f"pick_{node_id}_{team['abbr']}",
+                type="primary" if current == team["abbr"] else "secondary",
+                use_container_width=True,
+            ):
+                picks[node_id] = team["abbr"]
+                bracket_picks.save()
+                st.rerun()
+    return current
+
+
+def _team_dict(row):
+    return {"seed": int(row.seed), "abbr": row.team_abbr, "wins": int(row.wins), "losses": int(row.losses)}
+
+
+def _predict_league(league, seeded):
+    lookup = _seed_lookup(seeded)
+    if len(lookup) < 6:
+        st.caption(f"Not enough {league} seeding data yet.")
+        return None
+
+    st.markdown(f"**{league} Wild Card**")
+    wc1 = _pick_row(f"{league}_wc_36", _team_dict(lookup[3]), _team_dict(lookup[6]))
+    wc2 = _pick_row(f"{league}_wc_45", _team_dict(lookup[4]), _team_dict(lookup[5]))
+
+    if not (wc1 and wc2):
+        st.caption("Pick both Wild Card series to unlock the Division Series.")
+        return None
+
+    # Reseeding: #1 seed plays the lower-numbered (stronger) surviving
+    # seed, #2 seed plays the other — same rule as the real bracket sim in
+    # db.compute_playoff_odds.
+    abbr_to_row = {lookup[s].team_abbr: lookup[s] for s in (3, 4, 5, 6)}
+    survivors = sorted([wc1, wc2], key=lambda a: int(abbr_to_row[a].seed))
+    st.markdown(f"**{league} Division Series**")
+    ds1 = _pick_row(f"{league}_ds1", _team_dict(lookup[1]), _team_dict(abbr_to_row[survivors[0]]))
+    ds2 = _pick_row(f"{league}_ds2", _team_dict(lookup[2]), _team_dict(abbr_to_row[survivors[1]]))
+
+    if not (ds1 and ds2):
+        st.caption("Pick both Division Series to unlock the Championship Series.")
+        return None
+
+    abbr_to_row.update({lookup[1].team_abbr: lookup[1], lookup[2].team_abbr: lookup[2]})
+    st.markdown(f"**{league} Championship Series**")
+    champ = _pick_row(f"{league}_cs", _team_dict(abbr_to_row[ds1]), _team_dict(abbr_to_row[ds2]))
+    return champ, (abbr_to_row[champ] if champ else None)
+
+
+if "AL" in picture and "NL" in picture:
+    reset_col, _ = st.columns([1, 5])
+    with reset_col:
+        if st.button("Reset my picks"):
+            st.session_state["bracket_picks"] = {}
+            bracket_picks.save()
+            st.rerun()
+
+    al_col, nl_col = st.columns(2)
+    with al_col:
+        al_result = _predict_league("AL", picture["AL"])
+    with nl_col:
+        nl_result = _predict_league("NL", picture["NL"])
+
+    al_champ = al_result[0] if al_result else None
+    nl_champ = nl_result[0] if nl_result else None
+    if al_champ and nl_champ:
+        al_row, nl_row = al_result[1], nl_result[1]
+        st.markdown("**World Series**")
+        ws_champ = _pick_row(
+            "WS",
+            {"seed": al_row.seed, "abbr": al_champ, "wins": int(al_row.wins), "losses": int(al_row.losses)},
+            {"seed": nl_row.seed, "abbr": nl_champ, "wins": int(nl_row.wins), "losses": int(nl_row.losses)},
+        )
+        if ws_champ:
+            color = teams.color_for_abbr(ws_champ)
+            st.markdown(
+                f"<div style='margin-top:12px;padding:14px 18px;border-radius:10px;"
+                f"background-color:{color}33;border:1px solid {color};font-size:1.1rem'>"
+                f"Your predicted champion: <strong>{ws_champ}</strong> \U0001F3C6</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.caption("Finish both league championships to predict the World Series.")
 else:
     st.caption("No seeding data yet.")
 
