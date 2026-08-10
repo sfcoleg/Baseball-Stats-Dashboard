@@ -16,7 +16,10 @@ if clicked_team:
     st.switch_page("pages/4_Team.py")
 
 st.title("Standings")
-st.caption("Current MLB division standings, from the MLB Stats API. Click a team's name to jump to its Team page.")
+st.caption(
+    "Current MLB division standings, from the MLB Stats API. Click a team's name to jump to its Team page. "
+    "z = clinched division, x = clinched a playoff spot, e = eliminated from postseason contention."
+)
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -32,6 +35,11 @@ if standings.empty:
 playoff_odds = db.compute_playoff_odds(mtime)
 if not playoff_odds.empty:
     standings = standings.merge(playoff_odds[["team_abbr", "playoff_pct"]], on="team_abbr", how="left")
+
+_CLINCH_SYMBOLS = {"division_clinch": "z", "wildcard_clinch": "x", "eliminated": "e"}
+clinch_symbols = {
+    e["team_abbr"]: _CLINCH_SYMBOLS[e["kind"]] for e in db.clinch_elimination_status(mtime)
+}
 
 DIVISION_ORDER = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
 
@@ -53,6 +61,8 @@ for league in ["AL", "NL"]:
             display_cols["playoff_pct"] = "Playoff%"
         display = div_standings[list(display_cols)].rename(columns=display_cols)
         st.markdown(
-            "<div style='overflow-x:auto'>" + style.standings_table(display, teams.color_for_abbr) + "</div>",
+            "<div style='overflow-x:auto'>"
+            + style.standings_table(display, teams.color_for_abbr, clinch_symbols)
+            + "</div>",
             unsafe_allow_html=True,
         )

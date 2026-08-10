@@ -16,13 +16,28 @@ if clicked_team:
     st.session_state["team_page_selected_team"] = clicked_team
     st.switch_page("pages/4_Team.py")
 
-bracket_picks.bootstrap()
+# Off for now: with most of the regular season still to play, the actual
+# bracket seeding (and therefore the "if the season ended today" bracket and
+# the bracket predictor built on top of it) is too unsettled to be
+# meaningful — it'll shuffle constantly and mostly just be noise until
+# real playoff races start resolving. Flip this back on closer to
+# September; the Playoff & World Series odds table below (a Monte Carlo
+# projection, not today's actual seeding) stays useful year-round and isn't
+# gated by this.
+SHOW_BRACKET_FEATURES = False
+
+if SHOW_BRACKET_FEATURES:
+    bracket_picks.bootstrap()
 
 st.title("Playoffs")
 st.caption(
     "Playoff and World Series odds are a Monte Carlo simulation of the rest of the season (see the Team "
-    "page for the methodology). The bracket below is the actual current seeding if the season ended today — "
-    "not a simulated outcome. Click a team to jump to its Team page."
+    "page for the methodology)."
+    + (
+        " The bracket below is the actual current seeding if the season ended today — not a simulated "
+        "outcome. Click a team to jump to its Team page."
+        if SHOW_BRACKET_FEATURES else ""
+    )
 )
 
 if not db.DB_PATH.exists():
@@ -37,27 +52,60 @@ if standings.empty or playoff_odds.empty:
     st.info("No standings/odds data yet — run the ingest script.")
     st.stop()
 
-style.colored_header("If the Season Ended Today", "headliners")
-st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
-picture = db.current_playoff_picture(mtime)
-if "AL" in picture and "NL" in picture:
-    st.markdown(
-        "<div style='overflow-x:auto'>"
-        + style.full_playoff_bracket_html(picture["AL"], picture["NL"], teams.color_for_abbr)
-        + "</div>",
-        unsafe_allow_html=True,
+
+def _render_bracket_features(standings, playoff_odds, mtime):
+    """The "if the season ended today" bracket + the interactive bracket
+    predictor — split into a function (rather than inline top-level code)
+    purely so the whole thing can be skipped with one `if
+    SHOW_BRACKET_FEATURES:` guard instead of re-indenting every line by
+    hand. See SHOW_BRACKET_FEATURES above for why it's off right now."""
+    style.colored_header("If the Season Ended Today", "headliners")
+    st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
+    picture = db.current_playoff_picture(mtime)
+    if "AL" in picture and "NL" in picture:
+        st.markdown(
+            "<div style='overflow-x:auto'>"
+            + style.full_playoff_bracket_html(picture["AL"], picture["NL"], teams.color_for_abbr)
+            + "</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        st.caption("No seeding data yet.")
+
+    st.divider()
+
+    style.colored_header("Predict the Bracket", "headliners")
+    st.caption(
+        "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
+        "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
+        "unlock as you fill in the ones before them."
     )
-else:
-    st.caption("No seeding data yet.")
+    _render_bracket_predictor(picture)
+    st.divider()
 
-st.divider()
-
-style.colored_header("Predict the Bracket", "headliners")
-st.caption(
-    "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
-    "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
-    "unlock as you fill in the ones before them."
-)
+    style.colored_header("Matchup Preview", "batting")
+    st.caption("Stat-driven strengths/weaknesses for any two playoff teams — offense, rotation, bullpen, and defense.")
+    all_teams = sorted(picture["AL"]["team_abbr"].tolist() + picture["NL"]["team_abbr"].tolist()) \
+        if "AL" in picture and "NL" in picture else []
+    if len(all_teams) >= 2:
+        mcol1, mcol2 = st.columns(2)
+        with mcol1:
+            team_a = st.selectbox("Team A", all_teams, index=0, key="matchup_team_a")
+        with mcol2:
+            default_b = 1 if all_teams[0] == team_a and len(all_teams) > 1 else 0
+            team_b = st.selectbox("Team B", all_teams, index=default_b, key="matchup_team_b")
+        if team_a == team_b:
+            st.caption("Pick two different teams.")
+        else:
+            season = db.get_seasons("batting")[0]
+            profile_a = db.team_strength_profile(team_a, season, mtime)
+            profile_b = db.team_strength_profile(team_b, season, mtime)
+            if profile_a and profile_b:
+                st.markdown(style.matchup_preview_html(profile_a, profile_b, teams.color_for_abbr), unsafe_allow_html=True)
+            else:
+                st.caption("Not enough stats for one of these teams yet.")
+    else:
+        st.caption("No seeding data yet.")
 
 
 def _seed_lookup(seeded):
@@ -124,44 +172,47 @@ def _predict_league(league, seeded):
     return champ, (abbr_to_row[champ] if champ else None)
 
 
-if "AL" in picture and "NL" in picture:
-    reset_col, _ = st.columns([1, 5])
-    with reset_col:
-        if st.button("Reset my picks"):
-            st.session_state["bracket_picks"] = {}
-            bracket_picks.save()
-            st.rerun()
+def _render_bracket_predictor(picture):
+    if "AL" in picture and "NL" in picture:
+        reset_col, _ = st.columns([1, 5])
+        with reset_col:
+            if st.button("Reset my picks"):
+                st.session_state["bracket_picks"] = {}
+                bracket_picks.save()
+                st.rerun()
 
-    al_col, nl_col = st.columns(2)
-    with al_col:
-        al_result = _predict_league("AL", picture["AL"])
-    with nl_col:
-        nl_result = _predict_league("NL", picture["NL"])
+        al_col, nl_col = st.columns(2)
+        with al_col:
+            al_result = _predict_league("AL", picture["AL"])
+        with nl_col:
+            nl_result = _predict_league("NL", picture["NL"])
 
-    al_champ = al_result[0] if al_result else None
-    nl_champ = nl_result[0] if nl_result else None
-    if al_champ and nl_champ:
-        al_row, nl_row = al_result[1], nl_result[1]
-        st.markdown("**World Series**")
-        ws_champ = _pick_row(
-            "WS",
-            {"seed": al_row.seed, "abbr": al_champ, "wins": int(al_row.wins), "losses": int(al_row.losses)},
-            {"seed": nl_row.seed, "abbr": nl_champ, "wins": int(nl_row.wins), "losses": int(nl_row.losses)},
-        )
-        if ws_champ:
-            color = teams.color_for_abbr(ws_champ)
-            st.markdown(
-                f"<div style='margin-top:12px;padding:14px 18px;border-radius:10px;"
-                f"background-color:{color}33;border:1px solid {color};font-size:1.1rem'>"
-                f"Your predicted champion: <strong>{ws_champ}</strong> \U0001F3C6</div>",
-                unsafe_allow_html=True,
+        al_champ = al_result[0] if al_result else None
+        nl_champ = nl_result[0] if nl_result else None
+        if al_champ and nl_champ:
+            al_row, nl_row = al_result[1], nl_result[1]
+            st.markdown("**World Series**")
+            ws_champ = _pick_row(
+                "WS",
+                {"seed": al_row.seed, "abbr": al_champ, "wins": int(al_row.wins), "losses": int(al_row.losses)},
+                {"seed": nl_row.seed, "abbr": nl_champ, "wins": int(nl_row.wins), "losses": int(nl_row.losses)},
             )
+            if ws_champ:
+                color = teams.color_for_abbr(ws_champ)
+                st.markdown(
+                    f"<div style='margin-top:12px;padding:14px 18px;border-radius:10px;"
+                    f"background-color:{color}33;border:1px solid {color};font-size:1.1rem'>"
+                    f"Your predicted champion: <strong>{ws_champ}</strong> \U0001F3C6</div>",
+                    unsafe_allow_html=True,
+                )
+        else:
+            st.caption("Finish both league championships to predict the World Series.")
     else:
-        st.caption("Finish both league championships to predict the World Series.")
-else:
-    st.caption("No seeding data yet.")
+        st.caption("No seeding data yet.")
 
-st.divider()
+
+if SHOW_BRACKET_FEATURES:
+    _render_bracket_features(standings, playoff_odds, mtime)
 
 style.colored_header("Playoff & World Series Odds", "batting")
 merged = standings.merge(

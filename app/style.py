@@ -316,7 +316,10 @@ def _playoff_pct_color(pct: float) -> str:
     return f"rgb({r},{g},{b})"
 
 
-def standings_table(div_standings, team_color_fn) -> str:
+_CLINCH_SYMBOLS = {"division_clinch": "z", "wildcard_clinch": "x", "eliminated": "e"}
+
+
+def standings_table(div_standings, team_color_fn, clinch_symbols=None) -> str:
     """One division's standings as a plain HTML table, with each team's
     abbreviation rendered as a colored badge that's also a link to
     `?team=ABBR` — clicking the team name itself (not a checkbox/selector
@@ -325,8 +328,13 @@ def standings_table(div_standings, team_color_fn) -> str:
     the team in session_state, and st.switch_page()s to the Team page.
 
     `div_standings` must have Team/W/L/PCT/GB/Streak plus RS/RA/Diff (runs
-    scored/allowed/differential) and Playoff% (db.compute_playoff_odds)."""
+    scored/allowed/differential) and Playoff% (db.compute_playoff_odds).
+    `clinch_symbols`, if given, is {team_abbr: "z"/"x"/"e"} from
+    db.clinch_elimination_status — the standard newspaper-standings
+    notation (z = clinched division, x = clinched a playoff spot,
+    e = eliminated), rendered as a small superscript after the team badge."""
     has_playoff_pct = "Playoff%" in div_standings.columns
+    clinch_symbols = clinch_symbols or {}
     rows = ""
     for _, row in div_standings.iterrows():
         color = team_color_fn(row["Team"])
@@ -344,11 +352,13 @@ def standings_table(div_standings, team_color_fn) -> str:
                 f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
                 f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
             )
+        symbol = clinch_symbols.get(row["Team"])
+        symbol_html = f"<sup style='color:#9AA3B5;font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
         rows += (
             "<tr style='border-top:1px solid #4A5266'>"
             f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
             f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
-            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a></td>"
+            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['PCT']}</td>"
@@ -787,3 +797,61 @@ def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, 
         margin=dict(l=50, r=50, t=30, b=30),
     )
     return fig
+
+
+# (label, profile key, higher_is_better, format string) — used by
+# matchup_preview_html to compare two teams stat-by-stat. Order matters:
+# it's also the display order.
+_MATCHUP_METRICS = [
+    ("Offense (OPS)", "ops", True, "{:.3f}"),
+    ("Rotation (Starter ERA)", "starter_era", False, "{:.2f}"),
+    ("Bullpen (ERA)", "bullpen_era", False, "{:.2f}"),
+    ("Power (HR)", "hr", True, "{:,.0f}"),
+    ("Speed (SB)", "sb", True, "{:,.0f}"),
+    ("Defense (OAA)", "oaa", True, "{:+.0f}"),
+]
+
+
+def matchup_preview_html(profile_a: dict, profile_b: dict, team_color_fn) -> str:
+    """A stat-driven strengths/weaknesses comparison for two playoff teams
+    (see db.team_strength_profile) — purely derived from the numbers
+    already on the site, not researched/written commentary (that's the
+    player-bios approach, which didn't land well as a site feature; this
+    is meant to be the automatable, no-manual-upkeep alternative). Every
+    metric in _MATCHUP_METRICS gets a winner; the "Watch for" callouts are
+    just the metrics with the largest relative gap between the two teams,
+    not any kind of prediction."""
+    color_a, color_b = team_color_fn(profile_a["team_abbr"]), team_color_fn(profile_b["team_abbr"])
+    rows, gaps = [], []
+    for label, key, higher_better, fmt in _MATCHUP_METRICS:
+        va, vb = profile_a.get(key), profile_b.get(key)
+        if va is None or vb is None or pd.isna(va) or pd.isna(vb):
+            continue
+        a_wins = (va > vb) if higher_better else (va < vb)
+        denom = (abs(va) + abs(vb)) / 2 or 1
+        gaps.append((abs(va - vb) / denom, label))
+        winner_color = color_a if a_wins else color_b
+        rows.append(
+            "<tr style='border-top:1px solid #4A5266'>"
+            f"<td style='padding:6px 10px;text-align:right;font-weight:{700 if a_wins else 400};"
+            f"color:{'#FAFAFA' if a_wins else '#9AA3B5'}'>{fmt.format(va)}</td>"
+            f"<td style='padding:6px 14px;text-align:center;color:#9AA3B5;white-space:nowrap'>{label}</td>"
+            f"<td style='padding:6px 10px;text-align:left;font-weight:{700 if not a_wins else 400};"
+            f"color:{'#FAFAFA' if not a_wins else '#9AA3B5'}'>{fmt.format(vb)}</td>"
+            "</tr>"
+        )
+    table = (
+        "<table style='width:100%;border-collapse:collapse'>"
+        "<thead><tr>"
+        f"<th style='padding:6px 10px;text-align:right;color:{color_a}'>{profile_a['team_abbr']}</th>"
+        "<th></th>"
+        f"<th style='padding:6px 10px;text-align:left;color:{color_b}'>{profile_b['team_abbr']}</th>"
+        "</tr></thead>"
+        f"<tbody>{''.join(rows)}</tbody></table>"
+    )
+    top_gaps = [label for _, label in sorted(gaps, reverse=True)[:2]]
+    focus = (
+        f"<p style='color:#9AA3B5;margin-top:10px'>Biggest mismatches: {', '.join(top_gaps)}.</p>"
+        if top_gaps else ""
+    )
+    return table + focus

@@ -1397,6 +1397,55 @@ def _team_ops_era(db_mtime_val: float) -> tuple[pd.Series, pd.Series]:
     return team_ops, team_era
 
 
+def team_strength_profile(team_abbr: str, season: int, db_mtime_val: float) -> dict | None:
+    """One team's offense/starters/bullpen/defense snapshot — the building
+    block for the playoff matchup preview. Pitchers are split into
+    starters/bullpen by role (GS > 0 counts as a starter — a
+    simplification that misclassifies a rare long-man/piggyback reliever
+    with a spot start, but is right for the vast majority of a roster) so
+    a "great rotation, shaky bullpen" team reads as exactly that instead
+    of being averaged into one bland team ERA. Returns None if the team
+    has no batting rows for the season (shouldn't happen for a real
+    playoff team, but keeps this from throwing on bad input)."""
+    batting = teams.add_team_abbr(load_batting(season, db_mtime_val))
+    pitching = teams.add_team_abbr(load_pitching(season, db_mtime_val))
+    fielding = load_fielding(season, db_mtime_val)
+
+    bat = batting[batting["Tm"] == team_abbr].dropna(subset=["OPS", "PA"])
+    if bat.empty:
+        return None
+    pit = pitching[pitching["Tm"] == team_abbr].dropna(subset=["ERA", "IP"])
+
+    def _pa_weighted(df, col):
+        return (df[col] * df["PA"]).sum() / df["PA"].sum() if df["PA"].sum() > 0 else float("nan")
+
+    def _ip_weighted_era(df):
+        er = (df["ERA"] * df["IP"] / 9).sum()
+        ip = df["IP"].sum()
+        return 9 * er / ip if ip > 0 else float("nan")
+
+    starters = pit[pit["GS"] > 0]
+    bullpen = pit[pit["GS"] == 0]
+
+    oaa_total = None
+    if not fielding.empty:
+        fld = teams.add_team_abbr_from_nickname(fielding)
+        fld_team = fld[fld["Tm"] == team_abbr].dropna(subset=["OAA"])
+        if not fld_team.empty:
+            oaa_total = fld_team["OAA"].sum()
+
+    return {
+        "team_abbr": team_abbr,
+        "ops": _pa_weighted(bat, "OPS"),
+        "hr": int(bat["HR"].sum()),
+        "sb": int(bat["SB"].sum()) if "SB" in bat.columns else None,
+        "team_era": _ip_weighted_era(pit) if not pit.empty else float("nan"),
+        "starter_era": _ip_weighted_era(starters) if not starters.empty else float("nan"),
+        "bullpen_era": _ip_weighted_era(bullpen) if not bullpen.empty else float("nan"),
+        "oaa": oaa_total,
+    }
+
+
 def _series_win_prob(p_game: float, n_games: int) -> float:
     """Probability of winning a best-of-`n_games` series, given a constant
     per-game win probability `p_game` — the exact binomial-tail
