@@ -756,9 +756,11 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
     outfield_outer point sits farthest from it, and the scale factor is
     real_cf_ft / that raw distance (see STADIUM_CF_FEET) — then every
     segment is re-centered on home plate and scaled the same way. Returns
-    {segment_name: [(x_ft, y_ft), ...]}, e.g. "outfield_outer",
-    "infield_outer", "foul_lines" — empty if the team has no bundled
-    outline."""
+    {segment_name: [(x_ft, y_ft), ...]} for "outfield_outer" (the wall)
+    and "foul_lines" only — STADIUM_COORDS has other segments
+    (infield_outer/inner, the grass/dirt arcs) but they're not needed
+    context for a spray chart and just clutter it. Empty if the team has
+    no bundled outline."""
     key = STADIUM_KEY_BY_ABBR.get(team_abbr)
     if not key:
         return {}
@@ -779,7 +781,7 @@ def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]
     scale = STADIUM_CF_FEET.get(team_abbr, 400) / raw_deep
 
     outline = {}
-    for segment in ("outfield_outer", "infield_outer", "foul_lines"):
+    for segment in ("outfield_outer", "foul_lines"):
         seg_df = park[park["segment"] == segment]
         if seg_df.empty:
             continue

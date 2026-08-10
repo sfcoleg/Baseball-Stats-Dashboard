@@ -664,17 +664,21 @@ if batting is not None and is_batter_role:
         style.colored_header("Spray Chart", "chart")
         st.caption(f"{teams.franchise_display_name(abbr, season)}'s actual home park outline." if stadium_outline else "Generic field outline (no digitized park shape available for this team).")
         fig = go.Figure()
+        FIELD_LINE = dict(color="#111318", width=2.5)
         if stadium_outline:
             # This team's real park — see db.team_stadium_outline for how
             # pybaseball's bundled per-park wall digitization gets
-            # calibrated into this same feet-from-home-plate space.
-            for segment in ("outfield_outer", "infield_outer", "foul_lines"):
+            # calibrated into this same feet-from-home-plate space. Just
+            # the wall and foul lines — the other segments it bundles
+            # (grass/dirt arcs) aren't needed context here and just clutter
+            # the chart.
+            for segment in ("outfield_outer", "foul_lines"):
                 pts = stadium_outline.get(segment)
                 if not pts:
                     continue
                 fig.add_trace(go.Scatter(
                     x=[p[0] for p in pts], y=[p[1] for p in pts], mode="lines",
-                    line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+                    line=FIELD_LINE, showlegend=False, hoverinfo="skip",
                 ))
         else:
             # Stylized fallback: foul lines to the poles, an outfield wall
@@ -685,20 +689,20 @@ if batting is not None and is_batter_role:
             wall_x = [(330 + 70 * (1 - abs(t) / 45)) * math.sin(math.radians(t)) for t in wall_theta]
             wall_y = [(330 + 70 * (1 - abs(t) / 45)) * math.cos(math.radians(t)) for t in wall_theta]
             fig.add_trace(go.Scatter(
-                x=wall_x, y=wall_y, mode="lines", line=dict(color="#4A5266", width=2),
+                x=wall_x, y=wall_y, mode="lines", line=FIELD_LINE,
                 showlegend=False, hoverinfo="skip",
             ))
             fig.add_trace(go.Scatter(
                 x=[0, wall_x[0]], y=[0, wall_y[0]], mode="lines",
-                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+                line=FIELD_LINE, showlegend=False, hoverinfo="skip",
             ))
             fig.add_trace(go.Scatter(
                 x=[0, wall_x[-1]], y=[0, wall_y[-1]], mode="lines",
-                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+                line=FIELD_LINE, showlegend=False, hoverinfo="skip",
             ))
             fig.add_trace(go.Scatter(
                 x=[0, 63.6, 0, -63.6, 0], y=[0, 63.6, 127.3, 63.6, 0], mode="lines",
-                line=dict(color="#4A5266", width=2), showlegend=False, hoverinfo="skip",
+                line=FIELD_LINE, showlegend=False, hoverinfo="skip",
             ))
         for outcome, group in spray.groupby("outcome"):
             # Plain Python lists, not pandas Series/DataFrame — passing the
