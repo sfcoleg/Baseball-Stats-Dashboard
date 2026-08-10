@@ -50,7 +50,7 @@ for league, label in (("AL", "AL — American League"), ("NL", "NL — National 
 if "AL" in picture and "NL" in picture:
     st.markdown(
         "<div style='display:flex;justify-content:center;margin-top:8px'>"
-        "<div class='br-ws-box'>&#9917; <b style='color:#DCE1EA'>World Series</b> "
+        "<div class='br-ws-box'><b style='color:#DCE1EA'>World Series</b> "
         "— AL Champion (TBD) vs. NL Champion (TBD)</div></div>",
         unsafe_allow_html=True,
     )

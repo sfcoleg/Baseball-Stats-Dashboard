@@ -437,8 +437,8 @@ PLAYOFF_BRACKET_CSS = """
 }
 .br-seed { color:#9AA3B5; font-weight:700; font-size:0.75rem; }
 .br-badge {
-  background-color:var(--br-color); color:#FAFAFA; padding:1px 7px; border-radius:5px;
-  font-weight:700; text-decoration:none; font-size:0.8rem;
+  background-color:var(--br-color) !important; color:#FAFAFA !important; padding:1px 7px; border-radius:5px;
+  font-weight:700; text-decoration:none !important; font-size:0.8rem;
 }
 .br-rec { color:#9AA3B5; font-size:0.75rem; }
 .br-tag { color:#F5B942; font-size:0.7rem; font-weight:700; }
