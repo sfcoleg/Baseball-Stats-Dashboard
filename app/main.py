@@ -56,9 +56,22 @@ st.markdown(
     ".diamond-header {"
     f"  position: fixed; top: 0; left: 230px; height: {HEADER_HEIGHT}; z-index: 1000000;"
     "  display: flex; align-items: center; gap: 8px; padding-left: 4.5rem;"
+    "  transition: left 0.2s ease, padding-left 0.2s ease;"
     "}"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
     f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
+    # When the sidebar is collapsed, it stops reserving its 230px column
+    # (see the [aria-expanded='true']-scoped width rule below), so the
+    # header needs to reclaim that freed space too instead of leaving a
+    # 230px dead gap on the left — same idea as the mobile override, just
+    # triggered by the collapse state rather than viewport width. The
+    # sidebar and header aren't direct siblings in the DOM (a couple of
+    # Streamlit's own wrapper divs sit between them), but they do share a
+    # common ancestor close enough for a general-sibling-plus-descendant
+    # selector to reach across.
+    "[data-testid='stSidebar'][aria-expanded='false'] ~ div .diamond-header {"
+    "  left: 0 !important; padding-left: 0.75rem !important;"
+    "}"
     # Mobile: Streamlit's sidebar becomes an off-canvas overlay below this
     # width rather than a permanent 230px column, so the desktop offset
     # above (left: 230px, padding-left: 4.5rem — pushing the header clear
@@ -108,13 +121,22 @@ st.markdown(
 # Shrink the sidebar's built-in header bar (which only holds the collapse
 # arrow) so the search box sits higher, closer to the top of the sidebar.
 # Also narrows the sidebar itself (min/max-width pinned to override its
-# default draggable-resize width). No border/divider — the sidebar shares
-# the same background color as the rest of the site (see config.toml), so
-# there's nothing to visually separate it from the main content anymore.
+# default draggable-resize width) — but ONLY while expanded. Pinning the
+# width unconditionally (including while collapsed) fights Streamlit's own
+# collapse mechanism: it slides the sidebar off-screen with a translateX
+# transform sized to its width, and our forced max-width clamped that
+# computation, leaving the transform stuck at -230px even after clicking
+# the button to re-expand (aria-expanded correctly flipped back to "true",
+# but the sidebar never visually slid back into view). Scoping to
+# [aria-expanded="true"] leaves Streamlit's own collapsed-state math alone,
+# so the expand button actually works. No border/divider — the sidebar
+# shares the same background color as the rest of the site (see
+# config.toml), so there's nothing to visually separate it from the main
+# content anymore.
 st.markdown(
     "<style>"
     "[data-testid='stSidebarHeader'] { height: 1.5rem; }"
-    "[data-testid='stSidebar'] { min-width: 230px; max-width: 230px; }"
+    "[data-testid='stSidebar'][aria-expanded='true'] { min-width: 230px; max-width: 230px; }"
     "</style>",
     unsafe_allow_html=True,
 )

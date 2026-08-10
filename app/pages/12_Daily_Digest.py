@@ -44,11 +44,11 @@ else:
     for h in shown_highlights:
         st.markdown(style.on_this_day_highlight_card(h), unsafe_allow_html=True)
 
-if not otd_games:
-    st.caption("No historical games found for this date.")
+notable = [g for g in otd_games if g["blowout"]]
+if not notable:
+    st.caption("No blowouts (15+ run margin) found on this date across the last 15 years.")
 else:
-    notable = [g for g in otd_games if g["blowout"]]
-    shown_games = sorted(notable if notable else otd_games, key=lambda g: g["years_ago"])[:6]
+    shown_games = sorted(notable, key=lambda g: g["years_ago"])[:6]
     for g in shown_games:
         tag = "Blowout" if g["blowout"] else None
         tag_html = (
