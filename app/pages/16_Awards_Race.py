@@ -11,18 +11,8 @@ import teams
 st.set_page_config(page_title="Awards Race | Diamond Metrics", layout="wide")
 st.title("Awards Race")
 st.caption(
-    "A stats-only composite score, not real award-voting data. MVP spans both batters and "
-    "pitchers: batters score WAR 50% / wRC+ 25% / BsR 12.5% / OAA 12.5%; a two-way player (e.g. "
-    "Ohtani) is one combined row with their batting + pitching WAR added together, scored the same "
-    "batter formula; every other pitcher scores on WAR alone at half weight — a discount reflecting "
-    "that real MVP voting rarely puts even a great pitcher in the top 5. Cy Young (pitchers only) "
-    "weights WAR 50% / FIP 30% / ERA+ 20%, with FIP/ERA+ scaled down for pitchers with fewer "
-    "innings so a short relief sample can't out-rank a full-workload starter by rate stats alone. "
-    "Rookie of the Year uses the same two formulas restricted to players who pass MLB's AB/IP "
-    "rookie-eligibility rule — fewer than 130 career AB and fewer than 50 career IP in the majors "
-    "before this season (the 45-days-on-active-roster part of the real rule isn't tracked here, so "
-    "a small number of players may show as eligible when they weren't). Minimums: "
-    f"{db.MVP_MIN_PA}+ PA for MVP, {db.CY_YOUNG_MIN_IP}+ IP for Cy Young."
+    "A stats-only composite score, not real award-voting data — ranked by a blend of WAR and other "
+    f"advanced stats. Minimums: {db.MVP_MIN_PA}+ PA for MVP, {db.CY_YOUNG_MIN_IP}+ IP for Cy Young."
 )
 
 if not db.DB_PATH.exists():
