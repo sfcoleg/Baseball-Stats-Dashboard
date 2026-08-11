@@ -319,7 +319,7 @@ def _playoff_pct_color(pct: float) -> str:
 _CLINCH_SYMBOLS = {"division_clinch": "z", "wildcard_clinch": "x", "eliminated": "e"}
 
 
-def standings_table(div_standings, team_color_fn, clinch_symbols=None) -> str:
+def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=False) -> str:
     """One division's standings as a plain HTML table, with each team's
     abbreviation rendered as a colored badge that's also a link to
     `?team=ABBR` — clicking the team name itself (not a checkbox/selector
@@ -328,16 +328,35 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None) -> str:
     the team in session_state, and st.switch_page()s to the Team page.
 
     `div_standings` must have Team/W/L/PCT/GB/Streak plus RS/RA/Diff (runs
-    scored/allowed/differential) and Playoff% (db.compute_playoff_odds).
+    scored/allowed/differential) and Playoff% (db.compute_playoff_odds) —
+    except in `compact` mode, which only ever reads Team/W/L (everything
+    else can be present and is simply ignored), for a condensed Team/W/L-
+    only table like Home's space-constrained standings section.
     `clinch_symbols`, if given, is {team_abbr: "z"/"x"/"e"} from
     db.clinch_elimination_status — the standard newspaper-standings
     notation (z = clinched division, x = clinched a playoff spot,
     e = eliminated), rendered as a small superscript after the team badge."""
-    has_playoff_pct = "Playoff%" in div_standings.columns
+    has_playoff_pct = not compact and "Playoff%" in div_standings.columns
     clinch_symbols = clinch_symbols or {}
     rows = ""
     for _, row in div_standings.iterrows():
         color = team_color_fn(row["Team"])
+        symbol = clinch_symbols.get(row["Team"])
+        symbol_html = f"<sup style='color:#9AA3B5;font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
+        team_cell = (
+            f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
+            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
+        )
+        if compact:
+            rows += (
+                "<tr style='border-top:1px solid #4A5266'>"
+                f"{team_cell}"
+                f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
+                f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
+                "</tr>"
+            )
+            continue
         streak = row["Streak"] if pd.notna(row["Streak"]) else "—"
         gb = row["GB"] if pd.notna(row["GB"]) else "—"
         diff = row["Diff"]
@@ -352,13 +371,9 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None) -> str:
                 f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
                 f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
             )
-        symbol = clinch_symbols.get(row["Team"])
-        symbol_html = f"<sup style='color:#9AA3B5;font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
         rows += (
             "<tr style='border-top:1px solid #4A5266'>"
-            f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
-            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
-            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
+            f"{team_cell}"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['PCT']}</td>"
@@ -370,7 +385,7 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None) -> str:
             f"{playoff_cell}"
             "</tr>"
         )
-    header_cols = ["Team", "W", "L", "PCT", "GB", "Streak", "RS", "RA", "Diff"]
+    header_cols = ["Team", "W", "L"] if compact else ["Team", "W", "L", "PCT", "GB", "Streak", "RS", "RA", "Diff"]
     if has_playoff_pct:
         header_cols.append("Playoff%")
     headers = "".join(

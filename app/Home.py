@@ -327,32 +327,22 @@ standings = db.load_standings(mtime)
 if standings.empty:
     st.caption("No standings data yet.")
 else:
-    playoff_odds = db.compute_playoff_odds(mtime)
-    if not playoff_odds.empty:
-        standings = standings.merge(playoff_odds[["team_abbr", "playoff_pct"]], on="team_abbr", how="left")
     clinch_symbols = {
         e["team_abbr"]: {"division_clinch": "z", "wildcard_clinch": "x", "eliminated": "e"}[e["kind"]]
         for e in db.clinch_elimination_status(mtime)
     }
-    al_col, nl_col = st.columns(2)
-    for league_col, league in [(al_col, "AL"), (nl_col, "NL")]:
-        with league_col:
-            for division in [d for d in ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"] if d.startswith(league)]:
-                st.markdown(f"**{division}**")
-                div_standings = standings[standings["division"] == division].sort_values("div_rank")
-                display_cols = {
-                    "team_abbr": "Team", "wins": "W", "losses": "L", "pct": "PCT", "games_back": "GB",
-                    "streak": "Streak", "runs_scored": "RS", "runs_allowed": "RA", "run_diff": "Diff",
-                }
-                if "playoff_pct" in div_standings.columns:
-                    display_cols["playoff_pct"] = "Playoff%"
-                display = div_standings[list(display_cols)].rename(columns=display_cols)
-                st.markdown(
-                    "<div style='overflow-x:auto'>"
-                    + style.standings_table(display, teams.color_for_abbr, clinch_symbols)
-                    + "</div>",
-                    unsafe_allow_html=True,
-                )
+    DIVISION_ORDER = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
+    div_cols = st.columns(3)
+    for i, division in enumerate(DIVISION_ORDER):
+        with div_cols[i % 3]:
+            st.markdown(f"**{division}**")
+            div_standings = standings[standings["division"] == division].sort_values("div_rank")
+            display_cols = {"team_abbr": "Team", "wins": "W", "losses": "L"}
+            display = div_standings[list(display_cols)].rename(columns=display_cols)
+            st.markdown(
+                style.standings_table(display, teams.color_for_abbr, clinch_symbols, compact=True),
+                unsafe_allow_html=True,
+            )
     st.caption("z = clinched division, x = clinched a playoff spot, e = eliminated. See the Standings page for full detail.")
 
 st.divider()
