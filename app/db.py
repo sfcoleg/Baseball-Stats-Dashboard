@@ -907,6 +907,68 @@ def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
 
 
+def _readable_event(events) -> str:
+    return events.replace("_", " ").title() if isinstance(events, str) and events else "In Play"
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=10)
+def load_statcast_daily_leaderboard(date_iso: str) -> dict:
+    """League-wide Statcast highlights for a single date — hardest-hit ball,
+    longest home run, and fastest pitch — for the Daily Digest' Statcast
+    Highlights section. Live-fetched from Baseball Savant via pybaseball
+    (like player_batted_ball_events above, pitch-level Statcast isn't part
+    of the daily ingest — it's heavy and most days it'd go unused), but
+    unlike that per-player function this uses pybaseball.statcast() itself,
+    which pulls every pitch leaguewide for a date range in one request —
+    a leaderboard needs every player who played that day, not one player's
+    history, so one request per player would mean dozens of requests
+    instead of one.
+    Returns a dict with keys "hardest_hit", "longest_hr", "fastest_pitch" —
+    each either None (fetch failed or nothing qualified that day) or a dict
+    with mlbID (batter for the first two, pitcher for the last) and a
+    ready-to-display `detail` string."""
+    import pybaseball as pb
+    from pybaseball.utils import pitch_code_to_name_map
+
+    empty = {"hardest_hit": None, "longest_hr": None, "fastest_pitch": None}
+    try:
+        raw = pb.statcast(start_dt=date_iso, end_dt=date_iso, verbose=False)
+    except Exception:
+        return empty
+    if raw is None or raw.empty:
+        return empty
+
+    result = dict(empty)
+
+    batted = raw.dropna(subset=["launch_speed", "batter"])
+    if not batted.empty:
+        hardest = batted.loc[batted["launch_speed"].idxmax()]
+        result["hardest_hit"] = {
+            "mlbID": int(hardest["batter"]),
+            "detail": f"{hardest['launch_speed']:.1f} mph exit velo ({_readable_event(hardest.get('events'))})",
+        }
+
+    homers = raw.dropna(subset=["hit_distance_sc", "batter"])
+    homers = homers[homers["events"] == "home_run"]
+    if not homers.empty:
+        longest = homers.loc[homers["hit_distance_sc"].idxmax()]
+        result["longest_hr"] = {
+            "mlbID": int(longest["batter"]),
+            "detail": f"{longest['hit_distance_sc']:.0f} ft home run",
+        }
+
+    pitches = raw.dropna(subset=["release_speed", "pitcher"])
+    if not pitches.empty:
+        fastest = pitches.loc[pitches["release_speed"].idxmax()]
+        pitch_name = pitch_code_to_name_map.get(fastest.get("pitch_type"), fastest.get("pitch_type") or "pitch")
+        result["fastest_pitch"] = {
+            "mlbID": int(fastest["pitcher"]),
+            "detail": f"{fastest['release_speed']:.1f} mph {pitch_name}",
+        }
+
+    return result
+
+
 # Our team_abbr -> pybaseball's STADIUM_COORDS team key (lowercase franchise
 # nickname; a few are historical — "indians" predates the Guardians rename,
 # pybaseball hasn't relabeled it). No entry for a team means no digitized

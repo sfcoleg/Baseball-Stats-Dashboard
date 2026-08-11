@@ -109,6 +109,38 @@ else:
             text = style.pitching_day_stat_line(row)
             style.milestone_card(row["mlbID"], row["Name"], abbr, color, text)
 
+style.colored_header("Statcast Highlights", "batting")
+leaderboard = db.load_statcast_daily_leaderboard(yesterday.isoformat())
+# The leaderboard only has mlbID + a stat detail (no name/team — Statcast
+# doesn't give us those directly), so look each one up against yesterday's
+# already-loaded recent_batting/recent_pitching, the same player pool that
+# played that date. A player Statcast reports but recent_batting/pitching
+# doesn't (a rare Baseball-Reference/Statcast ID mismatch) is skipped
+# rather than shown without a name/team.
+LEADERBOARD_ENTRIES = [
+    ("hardest_hit", "Hardest Hit Ball", recent_batting),
+    ("longest_hr", "Longest Home Run", recent_batting),
+    ("fastest_pitch", "Fastest Pitch", recent_pitching),
+]
+shown_any = False
+for key, label, pool in LEADERBOARD_ENTRIES:
+    entry = leaderboard.get(key)
+    if not entry or pool.empty:
+        continue
+    # recent_batting's mlbID column comes back int32, but recent_pitching's
+    # comes back as str (a pre-existing dtype quirk, not something to fix
+    # broadly here) — compare as strings on both sides so either works.
+    match = pool[pool["mlbID"].astype(str) == str(entry["mlbID"])]
+    if match.empty:
+        continue
+    player_row = match.iloc[0]
+    with st.container(border=True):
+        abbr, _, color = teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))
+        style.milestone_card(entry["mlbID"], player_row["Name"], abbr, color, f"{label}: {entry['detail']}")
+    shown_any = True
+if not shown_any:
+    st.caption("No Statcast data available for this date.")
+
 style.colored_header("Transactions", "fielding")
 if txs_yesterday.empty:
     st.caption("No transactions logged for this date.")
