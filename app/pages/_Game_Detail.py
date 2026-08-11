@@ -1,0 +1,154 @@
+import sys
+from pathlib import Path
+
+import pandas as pd
+import streamlit as st
+
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+import db
+import style
+import teams
+
+st.set_page_config(page_title="Game Center | Diamond Metrics", layout="wide")
+
+if not db.DB_PATH.exists():
+    st.error("No data found yet. Run the ingest script first.")
+    st.stop()
+
+# Set by the "Game Center" button on Today's Games (st.switch_page) — no
+# query-param deep link support (unlike _Player.py's ?mlbid=), since a game
+# detail link would go stale the instant the game ends and there's no
+# followed-game/bookmark use case pulling for one yet.
+if "selected_game_pk" not in st.session_state:
+    st.title("Game Center")
+    st.info("Pick a game from Today's Games to see its live tracker, win probability, and box score here.")
+    if st.button("Go to Today's Games"):
+        st.switch_page("pages/8_Todays_Games.py")
+    st.stop()
+
+game_pk = st.session_state["selected_game_pk"]
+game_date = st.session_state["selected_game_date"]
+away_abbr = st.session_state["selected_game_away_abbr"]
+home_abbr = st.session_state["selected_game_home_abbr"]
+away_team = st.session_state["selected_game_away_team"]
+home_team = st.session_state["selected_game_home_team"]
+
+if st.button("← Back to Today's Games"):
+    st.switch_page("pages/8_Todays_Games.py")
+
+season = db.get_seasons("batting")[0]
+
+
+def team_color(abbr):
+    return teams.color_for_abbr(teams.normalize_mlb_abbr(abbr))
+
+
+def team_logo(abbr):
+    team_id = teams.team_id_for_abbr(teams.normalize_mlb_abbr(abbr))
+    return style.team_logo_for_season(teams.normalize_mlb_abbr(abbr), team_id, season) if team_id else None
+
+
+away_color, home_color = team_color(away_abbr), team_color(home_abbr)
+away_logo, home_logo = team_logo(away_abbr), team_logo(home_abbr)
+
+
+# A fragment (not the whole page) so the live tracker/win-probability/score
+# can auto-refresh on a timer without losing scroll position — same reason
+# Today's Games' render_games() is a fragment. 10s rather than that page's
+# 20s since this IS the dedicated live view; the whole point of it is
+# catching pitches as they happen, not just the score ticking over.
+@st.fragment(run_every="10s")
+def render_game_center():
+    db.load_live_scores.clear()
+    live = db.load_live_scores(game_date).get(game_pk, {})
+    status = live.get("status") or "Scheduled"
+
+    logo_col1, mid_col, logo_col2 = st.columns([3, 2, 3])
+    with logo_col1:
+        logo_html = (
+            f"<img src='{away_logo}' style='height:48px;width:48px;object-fit:contain;"
+            f"vertical-align:middle;margin-right:10px'>" if away_logo else ""
+        )
+        st.markdown(
+            f"<div style='display:flex;align-items:center'>{logo_html}"
+            f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:4px 12px;"
+            f"border-radius:8px;font-weight:700;font-size:1.1rem'>{away_abbr}</span>&nbsp;"
+            f"<span style='font-weight:700;font-size:1.3rem'>{away_team}</span></div>",
+            unsafe_allow_html=True,
+        )
+    with logo_col2:
+        logo_html = (
+            f"<img src='{home_logo}' style='height:48px;width:48px;object-fit:contain;"
+            f"vertical-align:middle;margin-right:10px'>" if home_logo else ""
+        )
+        st.markdown(
+            f"<div style='display:flex;align-items:center;justify-content:flex-end'>"
+            f"<span style='font-weight:700;font-size:1.3rem'>{home_team}</span>&nbsp;"
+            f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:4px 12px;"
+            f"border-radius:8px;font-weight:700;font-size:1.1rem'>{home_abbr}</span>{logo_html}</div>",
+            unsafe_allow_html=True,
+        )
+    with mid_col:
+        if live.get("away_score") is not None and live.get("home_score") is not None:
+            st.markdown(
+                f"<div style='text-align:center;font-size:2.4rem;font-weight:700'>"
+                f"{int(live['away_score'])} - {int(live['home_score'])}</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            st.markdown("<div style='text-align:center;color:#9AA3B5;padding-top:12px'>@</div>", unsafe_allow_html=True)
+        status_line = live.get("inning") if status == "In Progress" and live.get("inning") else status
+        outs = live.get("outs") if status == "In Progress" else None
+        st.markdown(style.game_state_html(status_line, live.get("bases", {}), outs), unsafe_allow_html=True)
+
+    if status == "In Progress":
+        style.colored_header("Live Pitch Tracker", "pitching")
+        tracker = db.load_live_pitch_tracker(game_pk)
+        if tracker.get("pitches"):
+            count = tracker.get("count", {})
+            st.caption(
+                f"{tracker.get('pitcher') or 'Pitcher'} to {tracker.get('batter') or 'batter'} — "
+                f"{count.get('balls', 0)}-{count.get('strikes', 0)}, {count.get('outs', 0)} out(s)"
+            )
+            st.plotly_chart(style.strike_zone_chart(tracker["pitches"]), use_container_width=True, key="game_center_sz")
+        else:
+            st.caption("Waiting on the next pitch...")
+
+    wp_df = db.load_win_probability(game_pk)
+    if not wp_df.empty:
+        style.colored_header("Win Probability", "batting")
+        st.plotly_chart(
+            style.win_probability_chart(wp_df, away_abbr, home_abbr, away_color, home_color),
+            use_container_width=True, key="game_center_wp",
+        )
+
+    if status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed"):
+        style.colored_header("Box Score", "fielding")
+        linescore = db.load_linescore(game_pk)
+        if not linescore or "innings" not in linescore:
+            st.caption("Box score not available yet.")
+        else:
+            st.markdown(
+                style.box_score_table(linescore, away_abbr, home_abbr, away_color, home_color),
+                unsafe_allow_html=True,
+            )
+
+        player_box = db.load_boxscore_players(game_pk)
+        if player_box:
+            pbcol1, pbcol2 = st.columns(2)
+            for col, side, abbr in ((pbcol1, "away", away_abbr), (pbcol2, "home", home_abbr)):
+                with col:
+                    batters = pd.DataFrame(player_box[side]["batters"])
+                    if not batters.empty:
+                        st.caption(f"{abbr} Batting")
+                        st.dataframe(
+                            batters[["Name", "Pos", "AB", "R", "H", "RBI", "BB", "SO"]],
+                            hide_index=True, use_container_width=True,
+                        )
+                    pitchers = pd.DataFrame(player_box[side]["pitchers"])
+                    if not pitchers.empty:
+                        st.caption(f"{abbr} Pitching")
+                        st.dataframe(pitchers, hide_index=True, use_container_width=True)
+
+
+render_game_center()

@@ -292,6 +292,7 @@ PAGES = [
     st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/22_Box_Score_Search.py", title="Box Score Search"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
+    st.Page("pages/_Game_Detail.py", title="Game Center"),  # same — reached only via Today's Games' button
 ]
 if SHOW_FREE_AGENCY:
     PAGES.insert(-1, st.Page("pages/21_Free_Agency.py", title="Free Agency"))
@@ -299,7 +300,7 @@ if SHOW_FREE_AGENCY:
 pg = st.navigation(PAGES, position="hidden")
 
 for p in PAGES:
-    if p.title != "Player":
+    if p.title not in ("Player", "Game Center"):
         st.sidebar.page_link(p, label=p.title)
 
 pg.run()

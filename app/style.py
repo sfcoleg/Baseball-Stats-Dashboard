@@ -896,6 +896,72 @@ def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, 
     return fig
 
 
+_PITCH_RESULT_COLORS = {"in_play": "#F5B942", "strike": "#F87171", "ball": "#7CFC9A"}
+
+
+def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
+    """Catcher's-eye-view strike zone for the CURRENT at-bat's pitches so
+    far (see db.load_live_pitch_tracker) — each pitch plotted at its real
+    plate location in feet, numbered in sequence, colored by result. The
+    strike zone box uses the most recent pitch's own top/bottom bounds
+    rather than an average across pitches, since those bounds are set by
+    the batter's stance and averaging across an at-bat (let alone a whole
+    game, across different batters) would blur the box away from what any
+    single pitch was actually judged against."""
+    fig = go.Figure()
+    sz_top = pitches[-1]["sz_top"] if pitches else 3.5
+    sz_bottom = pitches[-1]["sz_bottom"] if pitches else 1.5
+    fig.add_shape(
+        type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
+        line=dict(color="#9AA3B5", width=2), fillcolor="rgba(0,0,0,0)",
+    )
+    for p in pitches:
+        kind = "in_play" if p["is_in_play"] else ("strike" if p["is_strike"] else "ball")
+        speed_bit = f"{p['speed']:.1f} mph " if p.get("speed") else ""
+        fig.add_trace(go.Scatter(
+            x=[p["px"]], y=[p["pz"]], mode="markers+text",
+            marker=dict(size=28, color=_PITCH_RESULT_COLORS[kind], line=dict(color="#12141C", width=1.5)),
+            text=[str(p["number"])], textfont=dict(color="#12141C", size=12, family="Arial Black"),
+            hovertext=f"{speed_bit}{p['pitch_type']} — {p['description']}", hoverinfo="text",
+            showlegend=False,
+        ))
+    fig.update_xaxes(range=[-2.5, 2.5], visible=False, fixedrange=True)
+    fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        height=380, margin=dict(l=10, r=10, t=10, b=10),
+    )
+    return fig
+
+
+def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> "go.Figure":
+    """Home-team win probability across the game so far (see
+    db.load_win_probability) — the filled area is colored by the home
+    team's own color above the 50% line, but the line itself doesn't
+    change color when the away team takes the lead below it, since
+    plotly's single-trace fill can't cleanly split into two colors without
+    duplicating the series; away_color is used for the 50% reference
+    line's label instead so both teams' colors appear somewhere on the
+    chart."""
+    fig = go.Figure()
+    fig.add_hline(
+        y=50, line=dict(color=_hex_to_rgba(away_color, 0.5), width=1, dash="dot"),
+        annotation_text=f"{away_abbr} favored below", annotation_font_color="#9AA3B5", annotation_font_size=10,
+    )
+    fig.add_trace(go.Scatter(
+        x=wp_df["atBatIndex"], y=wp_df["home_win_pct"], mode="lines",
+        line=dict(color=home_color, width=2.5), fill="tozeroy", fillcolor=_hex_to_rgba(home_color, 0.15),
+        hovertemplate=f"{home_abbr} %{{y:.0f}}%<extra></extra>",
+    ))
+    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba("#4A5266", 0.25), color="#9AA3B5", ticksuffix="%")
+    fig.update_xaxes(visible=False)
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+    )
+    return fig
+
+
 # (label, profile key, higher_is_better, format string) — used by
 # matchup_preview_html to compare two teams stat-by-stat. Order matters:
 # it's also the display order.

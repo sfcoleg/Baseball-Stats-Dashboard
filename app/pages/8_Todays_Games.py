@@ -189,11 +189,14 @@ def render_games():
                     st.caption(f"<div style='text-align:center'>{row['venue']}</div>", unsafe_allow_html=True)
 
                 if started:
-                    box_key = f"show_box_{row['game_pk']}"
-                    is_shown = st.session_state.get(box_key, False)
-                    if st.button("Hide box score" if is_shown else "Show box score", key=f"btn_{row['game_pk']}", use_container_width=True):
-                        st.session_state[box_key] = not is_shown
-                        st.rerun(scope="fragment")
+                    if st.button("Game Center", key=f"btn_{row['game_pk']}", use_container_width=True):
+                        st.session_state["selected_game_pk"] = row["game_pk"]
+                        st.session_state["selected_game_date"] = row["date"]
+                        st.session_state["selected_game_away_abbr"] = row["away_abbr"]
+                        st.session_state["selected_game_home_abbr"] = row["home_abbr"]
+                        st.session_state["selected_game_away_team"] = row["away_team"]
+                        st.session_state["selected_game_home_team"] = row["home_team"]
+                        st.switch_page("pages/_Game_Detail.py")
 
             with hcol:
                 logo_html = (
@@ -261,36 +264,6 @@ def render_games():
                             # bottom of this file) complete on the next pass,
                             # with nothing immediately re-aborting it.
                             st.rerun()
-
-            if started and st.session_state.get(f"show_box_{row['game_pk']}", False):
-                linescore = db.load_linescore(row["game_pk"])
-                if not linescore or "innings" not in linescore:
-                    st.caption("Box score not available yet.")
-                else:
-                    st.markdown(
-                        style.box_score_table(
-                            linescore, row["away_abbr"], row["home_abbr"], away_color, home_color,
-                        ),
-                        unsafe_allow_html=True,
-                    )
-
-                player_box = db.load_boxscore_players(row["game_pk"])
-                if player_box:
-                    pbcol1, pbcol2 = st.columns(2)
-                    for col, side, abbr in ((pbcol1, "away", row["away_abbr"]), (pbcol2, "home", row["home_abbr"])):
-                        with col:
-                            batters = pd.DataFrame(player_box[side]["batters"])
-                            if not batters.empty:
-                                st.caption(f"{abbr} Batting")
-                                st.dataframe(
-                                    batters[["Name", "Pos", "AB", "R", "H", "RBI", "BB", "SO"]],
-                                    hide_index=True, use_container_width=True,
-                                )
-                            pitchers = pd.DataFrame(player_box[side]["pitchers"])
-                            if not pitchers.empty:
-                                st.caption(f"{abbr} Pitching")
-                                st.dataframe(pitchers, hide_index=True, use_container_width=True)
-
 
 render_games()
 

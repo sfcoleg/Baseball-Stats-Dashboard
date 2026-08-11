@@ -381,6 +381,96 @@ def load_live_scores(date_str: str) -> dict:
     return scores
 
 
+@st.cache_data(show_spinner=False, ttl=8, max_entries=10)
+def load_live_pitch_tracker(game_pk) -> dict:
+    """The CURRENT at-bat's pitches so far — plate location, type, speed,
+    and result — plus who's up, for the Game Center page's live strike
+    zone chart. A separate, shorter-TTL fetch from load_live_scores (8s vs
+    20s) since a single at-bat can turn over several pitches in that
+    window and the whole point of this view is watching them land one at
+    a time. Hits the full live-feed endpoint (not the lighter schedule
+    hydrate used elsewhere) since that's the only place MLB exposes
+    pitch-level plate coordinates. Returns {} if the fetch fails or the
+    game has no current play yet (hasn't started)."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return {}
+
+    current = (raw.get("liveData") or {}).get("plays", {}).get("currentPlay")
+    if not current:
+        return {}
+
+    matchup = current.get("matchup") or {}
+    pitches = []
+    for event in current.get("playEvents", []):
+        if not event.get("isPitch"):
+            continue
+        pitch_data = event.get("pitchData") or {}
+        coords = pitch_data.get("coordinates") or {}
+        details = event.get("details") or {}
+        if "pX" not in coords or "pZ" not in coords:
+            continue
+        pitches.append({
+            "number": event.get("pitchNumber"),
+            "px": coords["pX"],
+            "pz": coords["pZ"],
+            "sz_top": pitch_data.get("strikeZoneTop"),
+            "sz_bottom": pitch_data.get("strikeZoneBottom"),
+            "speed": pitch_data.get("startSpeed"),
+            "pitch_type": (details.get("type") or {}).get("description") or "Pitch",
+            "description": details.get("description") or "",
+            "is_strike": bool(details.get("isStrike")),
+            "is_ball": bool(details.get("isBall")),
+            "is_in_play": bool(details.get("isInPlay")),
+        })
+
+    return {
+        "batter": (matchup.get("batter") or {}).get("fullName"),
+        "pitcher": (matchup.get("pitcher") or {}).get("fullName"),
+        "count": current.get("count") or {},
+        "pitches": pitches,
+    }
+
+
+@st.cache_data(show_spinner=False, ttl=15, max_entries=10)
+def load_win_probability(game_pk) -> pd.DataFrame:
+    """Home-team win probability after every completed plate appearance, for
+    the Game Center page's live win-probability chart. MLB's main live-feed
+    endpoint doesn't carry this — it's only on this separate dedicated
+    endpoint. Returns an empty DataFrame (not an error) if the fetch fails
+    or the game hasn't completed any plate appearances yet."""
+    cols = ["atBatIndex", "inning", "half_inning", "home_win_pct", "away_score", "home_score"]
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1/game/{game_pk}/winProbability", timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return pd.DataFrame(columns=cols)
+
+    rows = []
+    for play in raw:
+        about = play.get("about") or {}
+        if not about.get("isComplete") or "homeTeamWinProbability" not in play:
+            continue
+        result = play.get("result") or {}
+        rows.append({
+            "atBatIndex": about.get("atBatIndex"),
+            "inning": about.get("inning"),
+            "half_inning": about.get("halfInning"),
+            "home_win_pct": play["homeTeamWinProbability"],
+            "away_score": result.get("awayScore"),
+            "home_score": result.get("homeScore"),
+        })
+    return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=500)
 def load_schedule_for_date(date_str: str) -> pd.DataFrame:
     """Every game played on `date_str` — any past date, not just today —
