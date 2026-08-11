@@ -1,8 +1,7 @@
-"""Backend for the reader prediction game (pick winners, track a
-leaderboard). There's no account system anywhere in this app, so a
-"reader" is just whatever display name they type in — the leaderboard
-tracks names, not identities, and two people can collide if they pick the
-same name.
+"""Backend for the daily prediction game — pick winners each day, track
+your own accuracy over time. Single-user (no accounts, no leaderboard):
+whoever's using the site is "the user," so picks are just keyed by
+game_pk/date, nothing else.
 
 Persistence is the real wrinkle: Streamlit Community Cloud's filesystem
 is ephemeral, wiped on every redeploy, and this app redeploys
@@ -75,17 +74,17 @@ def load_picks() -> list[dict]:
         return []
 
 
-def submit_pick(name: str, game_pk: int, date_str: str, pick_abbr: str, away_abbr: str, home_abbr: str) -> tuple[bool, str]:
-    """Upserts (name, game_pk) — resubmitting the same game with the same
-    name overwrites the earlier pick rather than duplicating it, so
-    changing your mind before first pitch is harmless."""
+def submit_pick(game_pk: int, date_str: str, pick_abbr: str, away_abbr: str, home_abbr: str) -> tuple[bool, str]:
+    """Upserts by game_pk — resubmitting the same game overwrites the
+    earlier pick rather than duplicating it, so changing your mind before
+    first pitch is harmless."""
     if not _configured():
         return False, "Not configured yet — see predictions.py's module docstring for the two secrets it needs."
 
     picks = load_picks()
-    picks = [p for p in picks if not (p["name"] == name and p["game_pk"] == game_pk)]
+    picks = [p for p in picks if p["game_pk"] != game_pk]
     picks.append({
-        "name": name, "game_pk": game_pk, "date": date_str, "pick_abbr": pick_abbr,
+        "game_pk": game_pk, "date": date_str, "pick_abbr": pick_abbr,
         "away_abbr": away_abbr, "home_abbr": home_abbr,
         "made_at": datetime.now(timezone.utc).isoformat(),
     })
@@ -106,48 +105,53 @@ def submit_pick(name: str, game_pk: int, date_str: str, pick_abbr: str, away_abb
     return False, f"GitHub API error ({resp.status_code}): {resp.text[:300]}"
 
 
-def compute_leaderboard(picks: list[dict], schedule_loader) -> pd.DataFrame:
-    """Scores every pick whose game has finished (1 point per correct
-    winner) and tallies by name. `schedule_loader` is db.load_schedule_for_date
-    — passed in rather than imported, since db.py already imports
-    plenty and this avoids a circular/duplicate MLB-API-fetch dependency
-    for a module that's otherwise standalone. Games still in progress or
-    not yet played are excluded from both the numerator and denominator
-    (they're not "wrong" yet, just unresolved)."""
+def _resolve_winners(date_str: str, schedule_loader) -> dict:
+    """{game_pk: winning_abbr} for every FINISHED game on `date_str`."""
+    schedule = schedule_loader(date_str)
+    if schedule.empty:
+        return {}
+    winners = {}
+    for _, g in schedule.iterrows():
+        if g["status"] not in ("Final", "Game Over", "Completed Early"):
+            continue
+        if pd.isna(g["away_score"]) or pd.isna(g["home_score"]):
+            continue
+        winners[g["game_pk"]] = g["home_abbr"] if g["home_score"] > g["away_score"] else g["away_abbr"]
+    return winners
+
+
+def compute_accuracy(picks: list[dict], schedule_loader) -> tuple[dict, pd.DataFrame]:
+    """Scores every pick whose game has finished (games still in progress
+    or not yet played are excluded — not "wrong" yet, just unresolved).
+    Returns (overall {correct, total, pct}, per-day breakdown DataFrame
+    sorted newest-first) for the "your accuracy through the days" section.
+    `schedule_loader` is db.load_schedule_for_date, passed in rather than
+    imported to keep this module standalone."""
+    empty_overall = {"correct": 0, "total": 0, "pct": None}
     if not picks:
-        return pd.DataFrame(columns=["Name", "Correct", "Picks", "Pct"])
+        return empty_overall, pd.DataFrame(columns=["Date", "Correct", "Picks", "Pct"])
 
     by_date = {}
     for p in picks:
         by_date.setdefault(p["date"], []).append(p)
 
-    tally = {}
-    for date_str, day_picks in by_date.items():
-        schedule = schedule_loader(date_str)
-        if schedule.empty:
+    day_rows = []
+    total_correct, total_picks = 0, 0
+    for date_str, day_picks in sorted(by_date.items(), reverse=True):
+        winners = _resolve_winners(date_str, schedule_loader)
+        correct = sum(1 for p in day_picks if winners.get(p["game_pk"]) == p["pick_abbr"])
+        resolved = sum(1 for p in day_picks if p["game_pk"] in winners)
+        if resolved == 0:
             continue
-        winners = {}
-        for _, g in schedule.iterrows():
-            if g["status"] not in ("Final", "Game Over", "Completed Early"):
-                continue
-            if pd.isna(g["away_score"]) or pd.isna(g["home_score"]):
-                continue
-            winners[g["game_pk"]] = g["home_abbr"] if g["home_score"] > g["away_score"] else g["away_abbr"]
-        for p in day_picks:
-            winner = winners.get(p["game_pk"])
-            if winner is None:
-                continue
-            row = tally.setdefault(p["name"], {"correct": 0, "total": 0})
-            row["total"] += 1
-            if winner == p["pick_abbr"]:
-                row["correct"] += 1
+        day_rows.append({
+            "Date": date_str, "Correct": correct, "Picks": resolved,
+            "Pct": round(100 * correct / resolved, 1),
+        })
+        total_correct += correct
+        total_picks += resolved
 
-    if not tally:
-        return pd.DataFrame(columns=["Name", "Correct", "Picks", "Pct"])
-
-    rows = [
-        {"Name": name, "Correct": v["correct"], "Picks": v["total"],
-         "Pct": round(100 * v["correct"] / v["total"], 1) if v["total"] else 0.0}
-        for name, v in tally.items()
-    ]
-    return pd.DataFrame(rows).sort_values(["Correct", "Pct"], ascending=False).reset_index(drop=True)
+    overall = {
+        "correct": total_correct, "total": total_picks,
+        "pct": round(100 * total_correct / total_picks, 1) if total_picks else None,
+    }
+    return overall, pd.DataFrame(day_rows)

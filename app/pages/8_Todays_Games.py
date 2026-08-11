@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import predictions
 import style
 import teams
 
@@ -33,6 +34,9 @@ live_scores = db.load_live_scores(games.iloc[0]["date"])
 if st.button("Refresh live scores"):
     db.load_live_scores.clear()
     st.rerun()
+
+predictions_on = predictions._configured()
+my_picks = {p["game_pk"]: p["pick_abbr"] for p in predictions.load_picks()} if predictions_on else {}
 
 _pitcher_ids = tuple(sorted({
     int(v) for col in ("away_pitcher_mlbID", "home_pitcher_mlbID")
@@ -161,6 +165,30 @@ for _, row in games.iterrows():
         if not pred:
             st.caption("Not enough season data yet to generate a prediction for this game.")
 
+        if predictions_on:
+            current_pick = my_picks.get(row["game_pk"])
+            if started:
+                st.caption(f"Your pick: {current_pick}" if current_pick else "Picks locked — game has started.")
+            else:
+                st.caption("Tap a team to pick the winner")
+                pcol1, pcol2 = st.columns(2)
+                for col, abbr in ((pcol1, row["away_abbr"]), (pcol2, row["home_abbr"])):
+                    with col:
+                        is_picked = current_pick == abbr
+                        label = f"✓ {abbr}" if is_picked else abbr
+                        if st.button(
+                            label, key=f"pick_{row['game_pk']}_{abbr}",
+                            type="primary" if is_picked else "secondary", use_container_width=True,
+                        ):
+                            success, message = predictions.submit_pick(
+                                row["game_pk"], row["date"], abbr, row["away_abbr"], row["home_abbr"],
+                            )
+                            if success:
+                                predictions.load_picks.clear()
+                                st.rerun()
+                            else:
+                                st.error(message)
+
         if started and st.session_state.get(f"show_box_{row['game_pk']}", False):
             linescore = db.load_linescore(row["game_pk"])
             if not linescore or "innings" not in linescore:
@@ -189,6 +217,19 @@ for _, row in games.iterrows():
                         if not pitchers.empty:
                             st.caption(f"{abbr} Pitching")
                             st.dataframe(pitchers, hide_index=True, use_container_width=True)
+
+if predictions_on:
+    st.divider()
+    style.colored_header("Your Accuracy", "chart")
+    overall, by_day = predictions.compute_accuracy(predictions.load_picks(), db.load_schedule_for_date)
+    if overall["total"] == 0:
+        st.caption("No resolved picks yet — pick some winners above, then check back once those games finish.")
+    else:
+        acol1, acol2, acol3 = st.columns(3)
+        acol1.metric("Correct", overall["correct"])
+        acol2.metric("Total Picks", overall["total"])
+        acol3.metric("Accuracy", f"{overall['pct']}%")
+        st.dataframe(by_day, hide_index=True, use_container_width=True)
 
 # Converts each game's UTC start time (stored in data-utc, e.g. "2026-07-12T23:10:00Z")
 # to the viewer's own local time/timezone client-side, so a West Coast visitor sees
