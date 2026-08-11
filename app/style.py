@@ -987,23 +987,41 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
     of floating in space, rather than this function re-deriving the park
     shape itself."""
     fig = go.Figure()
+    # Bounds tracked from the actual data (field wall + every ball's
+    # landing spot and computed arc peak) rather than a fixed guess at a
+    # generic park's size — a fixed range either clips a real long home
+    # run's peak or leaves a ton of dead space around a hitter who mostly
+    # slaps grounders. aspectmode="data" below then sizes the plot box
+    # proportionally to these actual spans, which is also what fixes the
+    # field looking stretched: a "manual" aspectratio has to be hand-kept
+    # in sync with whatever the axis ranges happen to be, and it wasn't.
+    max_x_abs, min_y, max_y, max_z = 0.0, 0.0, 0.0, 20.0
+
     for xs, ys in field_lines:
         fig.add_trace(go.Scatter3d(
             x=xs, y=ys, z=[0] * len(xs), mode="lines",
             line=dict(color="#111318", width=3), showlegend=False, hoverinfo="skip",
         ))
+        if xs:
+            max_x_abs = max(max_x_abs, max(abs(v) for v in xs))
+        if ys:
+            min_y = min(min_y, min(ys))
+            max_y = max(max_y, max(ys))
 
     for outcome, group in batted_balls.groupby("outcome"):
         color = colors.get(outcome, "#6B7280")
         legend_shown = False
         for _, row in group.iterrows():
             x1, y1 = row["x_ft"], row["y_ft"]
+            max_x_abs = max(max_x_abs, abs(x1))
+            min_y, max_y = min(min_y, y1), max(max_y, y1)
             angle, speed = row.get("launch_angle"), row.get("launch_speed")
             if pd.isna(angle) or pd.isna(speed) or angle <= 0:
                 path_x, path_y, path_z = [0, x1], [0, y1], [_CONTACT_HEIGHT_FT, 0]
             else:
                 vy0 = (speed * _MPH_TO_FT_PER_S) * math.sin(math.radians(angle))
                 peak_height = (vy0 ** 2) / (2 * _GRAVITY_FT_S2)
+                max_z = max(max_z, peak_height)
                 steps = [i / 24 for i in range(25)]
                 path_x = [t * x1 for t in steps]
                 path_y = [t * y1 for t in steps]
@@ -1025,11 +1043,11 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
         height=600, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
         scene=dict(
-            xaxis=dict(visible=False, range=[-420, 420]),
-            yaxis=dict(visible=False, range=[-70, 440]),
-            zaxis=dict(visible=False, range=[0, 120]),
-            aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.3),
-            camera=dict(eye=dict(x=0, y=-1.8, z=0.6)),
+            xaxis=dict(visible=False, range=[-max_x_abs * 1.05, max_x_abs * 1.05]),
+            yaxis=dict(visible=False, range=[min_y - 10, max_y * 1.05]),
+            zaxis=dict(visible=False, range=[0, max_z * 1.15]),
+            aspectmode="data",
+            camera=dict(eye=dict(x=0, y=-1.15, z=0.45)),
             bgcolor="rgba(0,0,0,0)",
         ),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
