@@ -71,18 +71,28 @@ st.markdown(
     # sidebar and header aren't direct siblings in the DOM (a couple of
     # Streamlit's own wrapper divs sit between them), but they do share a
     # common ancestor close enough for a general-sibling-plus-descendant
-    # selector to reach across.
+    # selector to reach across. padding-left has to clear Streamlit's own
+    # floating "expand sidebar" arrow (stExpandSidebarButton), which sits at
+    # roughly 18-46px from the left edge whenever the sidebar is collapsed —
+    # anything smaller than that visually stacks the diamond logo right on
+    # top of it.
     "[data-testid='stSidebar'][aria-expanded='false'] ~ div .diamond-header {"
-    "  left: 0 !important; padding-left: 0.75rem !important;"
+    "  left: 0 !important; padding-left: 3.5rem !important;"
     "}"
     # Mobile: Streamlit's sidebar becomes an off-canvas overlay below this
     # width rather than a permanent 230px column, so the desktop offset
     # above (left: 230px, padding-left: 4.5rem — pushing the header clear
     # of the sidebar AND its own collapse arrow) leaves nothing but empty
     # space on a phone and shoves the logo/title towards the right edge.
-    # Anchor to the left edge instead and shrink both down to fit.
+    # Anchor to the left edge instead and shrink both down to fit. Still
+    # needs the same 3.5rem clearance as the desktop collapsed case above
+    # when the sidebar itself is collapsed — a flat 0.75rem here used to
+    # override that rule (this media query comes later in the stylesheet)
+    # and land the logo right on top of the floating expand arrow.
     "@media (max-width: 640px) {"
-    "  .diamond-header { left: 0 !important; padding-left: 0.75rem !important; gap: 6px !important; }"
+    "  .diamond-header { left: 0 !important; gap: 6px !important; }"
+    "  [data-testid='stSidebar'][aria-expanded='true'] ~ div .diamond-header { padding-left: 0.75rem !important; }"
+    "  [data-testid='stSidebar'][aria-expanded='false'] ~ div .diamond-header { padding-left: 3.5rem !important; }"
     "  .diamond-logo svg { width: 20px !important; height: 20px !important; }"
     "  .diamond-title { font-size: 1.05rem !important; line-height: 1.05rem !important; }"
     "}"
