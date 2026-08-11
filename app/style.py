@@ -302,6 +302,41 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
     )
 
 
+def bases_outs_html(bases: dict, outs) -> str:
+    """A small rotated-square diamond (filled corner = runner on that base)
+    plus filled/empty out-dots — the same compact "mini diamond" convention
+    most scoreboard apps use, next to the inning line on Today's Games.
+    `bases` is {"first"/"second"/"third": bool} (see db.load_live_scores);
+    `outs` is an int 0-3 or None if the game isn't actually in progress."""
+    if outs is None:
+        return ""
+    on = "#F5B942"
+    off = "#4A5266"
+
+    def corner(top, left, occupied):
+        return (
+            f"<div style='position:absolute;top:{top}px;left:{left}px;width:10px;height:10px;"
+            f"transform:rotate(45deg);background-color:{occupied and on or off}'></div>"
+        )
+
+    diamond = (
+        "<div style='position:relative;width:34px;height:34px'>"
+        + corner(0, 12, bases.get("second"))
+        + corner(12, 24, bases.get("first"))
+        + corner(12, 0, bases.get("third"))
+        + "</div>"
+    )
+    dots = "".join(
+        f"<span style='display:inline-block;width:7px;height:7px;border-radius:50%;"
+        f"background-color:{on if i < outs else off};margin-right:3px'></span>"
+        for i in range(3)
+    )
+    return (
+        "<div style='display:flex;flex-direction:column;align-items:center;gap:4px'>"
+        f"{diamond}<div>{dots}</div></div>"
+    )
+
+
 def _playoff_pct_color(pct: float) -> str:
     """Red (0%) -> yellow (50%) -> green (100%) — same visual language as
     the rest of the app's background_gradient(cmap="RdYlGn") stat columns,

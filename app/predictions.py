@@ -1,108 +1,90 @@
-"""Backend for the daily prediction game — pick winners each day, track
-your own accuracy over time. Single-user (no accounts, no leaderboard):
-whoever's using the site is "the user," so picks are just keyed by
-game_pk/date, nothing else.
-
-Persistence is the real wrinkle: Streamlit Community Cloud's filesystem
-is ephemeral, wiped on every redeploy, and this app redeploys
-automatically whenever the daily stats-refresh workflow pushes to GitHub
-— i.e. daily. A normal sqlite write here would get wiped within a day.
-Instead picks live in a private GitHub Gist, read/written via the GitHub
-API — a Gist isn't part of this repo, so writing to it doesn't trigger a
-redeploy and isn't wiped by one either.
-
-Requires two Streamlit secrets, DIFFERENT from articles.py's
-github_token/github_repo (gists need a classic PAT with the "gist"
-scope — fine-grained repo-scoped PATs don't grant Gist access):
-  predictions_gist_token — a classic personal access token
-    (github.com/settings/tokens/new) with the "gist" scope checked
-  predictions_gist_id — the id of a private gist you create yourself
-    (gist.github.com/new -> filename "predictions.json", content "{}",
-    Create secret gist) — the id is the last path segment of its URL.
-Set both in the app's Settings -> Secrets on share.streamlit.io (and,
-for local testing, in .streamlit/secrets.toml — gitignored).
+"""Client-side (browser localStorage) persistence for the daily prediction
+game. Deliberately NOT server-side — this app has no accounts/login, and a
+shared store would mean every visitor sees the same picks. Storing them in
+each visitor's own browser makes the accuracy tracker genuinely personal
+without needing auth, at the cost of not following the visitor across
+devices/browsers. Same two-bridge pattern as following.py — see that
+module's docstring for why a redirect-based LOAD and an unconditional SAVE
+are needed instead of a real two-way JS<->Python channel.
 """
 import json
-from datetime import datetime, timezone
 
 import pandas as pd
-import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
-GIST_FILENAME = "predictions.json"
-
-
-def _secret(key):
-    """st.secrets.get() raises StreamlitSecretNotFoundError rather than
-    returning None when no secrets.toml exists at all (as opposed to one
-    that exists but lacks this key) — a real gap when this whole feature
-    is meant to degrade gracefully, not crash, on a fresh checkout with no
-    secrets configured yet."""
-    try:
-        return st.secrets.get(key)
-    except Exception:
-        return None
+_STORAGE_KEY = "sabermetrics_predictions"
 
 
-def _configured() -> bool:
-    return bool(_secret("predictions_gist_token")) and bool(_secret("predictions_gist_id"))
+def bootstrap() -> None:
+    """Call once, early in main.py (before any page renders). Seeds
+    st.session_state["prediction_picks"] — from a ?predictions= query
+    param if present (set by the redirect below on a prior run), else []
+    with a one-time check for saved localStorage data on a fresh session."""
+    if "prediction_picks" in st.session_state:
+        st.session_state["_predictions_safe_to_save"] = True
+        return
+
+    raw = st.query_params.get("predictions")
+    if raw:
+        try:
+            st.session_state["prediction_picks"] = json.loads(raw)
+        except (ValueError, TypeError):
+            st.session_state["prediction_picks"] = []
+        st.session_state["_predictions_safe_to_save"] = True
+        return
+
+    st.session_state["prediction_picks"] = []
+    st.session_state["_predictions_safe_to_save"] = False
+
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const saved = localStorage.getItem('{_STORAGE_KEY}');
+            if (!saved) return;
+            const url = new URL(window.parent.location.href);
+            if (url.searchParams.has('predictions')) return;
+            url.searchParams.set('predictions', saved);
+            const a = window.parent.document.createElement('a');
+            a.href = url.toString();
+            window.parent.document.body.appendChild(a);
+            a.click();
+        }})();
+        </script>
+        """,
+        height=0,
+    )
 
 
-def _headers():
-    return {
-        "Authorization": f"token {_secret('predictions_gist_token')}",
-        "Accept": "application/vnd.github+json",
-    }
+def save() -> None:
+    """Writes the current st.session_state picks into the browser's
+    localStorage. No-ops on the very first render of a fresh session (see
+    bootstrap()) so it can't clobber real saved data with a placeholder
+    empty list while the localStorage-redirect check is still in flight."""
+    if not st.session_state.get("_predictions_safe_to_save"):
+        return
+    payload = json.dumps(st.session_state.get("prediction_picks", []))
+    js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
+    components.html(f"<script>localStorage.setItem('{_STORAGE_KEY}', {js_literal});</script>", height=0)
 
 
-@st.cache_data(show_spinner=False, ttl=30, max_entries=1)
-def load_picks() -> list[dict]:
-    """Every pick ever submitted, oldest first. Returns [] if not
-    configured or the gist is empty/unreachable — callers treat that the
-    same as "no picks yet" rather than erroring."""
-    if not _configured():
-        return []
-    try:
-        resp = requests.get(
-            f"https://api.github.com/gists/{_secret('predictions_gist_id')}",
-            headers=_headers(), timeout=15,
-        )
-        resp.raise_for_status()
-        content = resp.json()["files"].get(GIST_FILENAME, {}).get("content", "{}")
-        return json.loads(content).get("picks", [])
-    except Exception:
-        return []
+def get_picks() -> list[dict]:
+    return st.session_state.get("prediction_picks", [])
 
 
-def submit_pick(game_pk: int, date_str: str, pick_abbr: str, away_abbr: str, home_abbr: str) -> tuple[bool, str]:
+def add_pick(game_pk: int, date_str: str, pick_abbr: str, away_abbr: str, home_abbr: str) -> None:
     """Upserts by game_pk — resubmitting the same game overwrites the
     earlier pick rather than duplicating it, so changing your mind before
-    first pitch is harmless."""
-    if not _configured():
-        return False, "Not configured yet — see predictions.py's module docstring for the two secrets it needs."
-
-    picks = load_picks()
-    picks = [p for p in picks if p["game_pk"] != game_pk]
+    first pitch is harmless. Doesn't call save() itself; the caller is
+    expected to st.rerun() right after, and save() runs again on that
+    rerun since Today's Games calls it unconditionally near the top."""
+    picks = [p for p in get_picks() if p["game_pk"] != game_pk]
     picks.append({
         "game_pk": game_pk, "date": date_str, "pick_abbr": pick_abbr,
         "away_abbr": away_abbr, "home_abbr": home_abbr,
-        "made_at": datetime.now(timezone.utc).isoformat(),
     })
-
-    try:
-        resp = requests.patch(
-            f"https://api.github.com/gists/{_secret('predictions_gist_id')}",
-            headers=_headers(),
-            json={"files": {GIST_FILENAME: {"content": json.dumps({"picks": picks}, indent=2)}}},
-            timeout=15,
-        )
-    except requests.RequestException as e:
-        return False, f"Couldn't reach GitHub ({e})."
-
-    if resp.status_code == 200:
-        load_picks.clear()
-        return True, "Pick saved!"
-    return False, f"GitHub API error ({resp.status_code}): {resp.text[:300]}"
+    st.session_state["prediction_picks"] = picks
 
 
 def _resolve_winners(date_str: str, schedule_loader) -> dict:

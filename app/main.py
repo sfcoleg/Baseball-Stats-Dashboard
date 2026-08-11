@@ -24,6 +24,7 @@ import streamlit.components.v1 as components
 sys.path.append(str(Path(__file__).resolve().parent))
 import db
 import following
+import predictions
 import sidebar
 import style
 
@@ -32,9 +33,12 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them.
 following.bootstrap()
+# Same localStorage pattern for the prediction game's picks (see
+# predictions.py) — must also run before Today's Games can read them.
+predictions.bootstrap()
 # The bracket predictor's picks (see bracket_picks.py) are URL-based, not
-# localStorage-based, so unlike following.py that module's bootstrap() only
-# needs to run on the Playoffs page itself, not globally here.
+# localStorage-based, so unlike following.py/predictions.py that module's
+# bootstrap() only needs to run on the Playoffs page itself, not globally here.
 
 # Logo + title header — rendered once here (not per-page) so it shows up on
 # every page. Streamlit's own toolbar (hamburger menu / Deploy button) is an

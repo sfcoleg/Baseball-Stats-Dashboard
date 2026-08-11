@@ -363,11 +363,20 @@ def load_live_scores(date_str: str) -> dict:
         if linescore.get("currentInningOrdinal"):
             half = "Top" if linescore.get("isTopInning") else "Bottom"
             inning_text = f"{half} {linescore['currentInningOrdinal']}"
+        offense = linescore.get("offense") or {}
         scores[g.get("gamePk")] = {
             "away_score": away.get("score"),
             "home_score": home.get("score"),
             "status": g.get("status", {}).get("detailedState"),
             "inning": inning_text,
+            "outs": linescore.get("outs"),
+            # Each True/False for whether a runner's currently on that base —
+            # only meaningful when the game is actually in progress (outs is
+            # not None); the offense dict is present-but-baseless between
+            # innings/at-bats too, so absence of a key just means "empty".
+            "bases": {
+                "first": "first" in offense, "second": "second" in offense, "third": "third" in offense,
+            },
         }
     return scores
 
