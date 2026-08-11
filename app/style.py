@@ -329,15 +329,34 @@ def game_state_html(status_line: str, bases: dict, outs, scale: float = 1.0) -> 
     corner_size = round(10 * scale)
 
     def corner(top, left, runner_name):
-        title_attr = f" title='{runner_name} on base'" if runner_name else ""
+        # The visible square is what's rotated 45° into a diamond; the
+        # tooltip lives on an UNROTATED wrapper around it instead of on the
+        # rotated square itself, so the tooltip's own text renders upright
+        # and its position math doesn't have to account for the parent's
+        # rotation. A native `title` attribute was tried first, but its
+        # browser-default tooltip has a ~1s hover delay and can fail to
+        # show at all on an element this small — this CSS ::after tooltip
+        # (see the <style> block below) shows instantly and reliably.
+        wrap_attr = f" class='diamond-corner-runner' data-tooltip='{runner_name} on base'" if runner_name else ""
         return (
-            f"<div{title_attr} style='position:absolute;top:{round(top * scale)}px;left:{round(left * scale)}px;"
-            f"width:{corner_size}px;height:{corner_size}px;cursor:{'help' if runner_name else 'default'};"
-            f"transform:rotate(45deg);background-color:{on if runner_name else off}'></div>"
+            f"<div{wrap_attr} style='position:absolute;top:{round(top * scale)}px;left:{round(left * scale)}px;"
+            f"width:{corner_size}px;height:{corner_size}px'>"
+            f"<div style='width:100%;height:100%;transform:rotate(45deg);"
+            f"background-color:{on if runner_name else off}'></div></div>"
         )
 
     diamond_size = round(34 * scale)
     diamond = (
+        f"<style>"
+        ".diamond-corner-runner { cursor: pointer; }"
+        ".diamond-corner-runner:hover::after {"
+        "  content: attr(data-tooltip); position: absolute; bottom: 130%; left: 50%;"
+        "  transform: translateX(-50%); background-color: #12141C; color: #FAFAFA;"
+        "  padding: 3px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;"
+        "  white-space: nowrap; z-index: 1000; pointer-events: none;"
+        "  box-shadow: 0 2px 6px rgba(0,0,0,0.4);"
+        "}"
+        "</style>"
         f"<div style='position:relative;width:{diamond_size}px;height:{diamond_size}px'>"
         + corner(0, 12, bases.get("second"))
         + corner(12, 24, bases.get("first"))
