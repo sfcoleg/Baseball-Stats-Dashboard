@@ -2,6 +2,7 @@
 import math
 import sqlite3
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -914,6 +915,30 @@ def _game_player_highlights(game_pk, years_ago, year, away_name, home_name):
     return highlights
 
 
+def _fetch_on_this_day_schedule(args) -> tuple:
+    """One year's worth of load_on_this_day's work — its own schedule
+    fetch, split out so the `years_back` years can run concurrently (see
+    below) instead of one after another."""
+    current_year, month, day, years_ago = args
+    year = current_year - years_ago
+    try:
+        d = date(year, month, day)
+    except ValueError:
+        return years_ago, year, []  # Feb 29 in a non-leap year
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "date": d.isoformat(), "hydrate": "linescore"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        dates_ = resp.json().get("dates", [])
+        games = dates_[0].get("games", []) if dates_ else []
+    except Exception:
+        games = []
+    return years_ago, year, games
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=1)
 def load_on_this_day(month: int, day: int, years_back: int = 15) -> dict:
     """Real completed MLB games played on this calendar date in each of the
@@ -923,30 +948,24 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> dict:
     come from one schedule API call per year (hydrate=linescore); player
     milestones require an extra boxscore call per completed game found
     (there's no way to know a cycle happened without looking at the box
-    score), so this is heavier than a schedule-only lookup but still just a
-    few hundred requests once a day, not per page view.
+    score) — up to a few hundred requests total once a day, not per page
+    view, but run through thread pools (both the per-year schedule calls
+    and the per-game boxscore calls are independent I/O-bound requests
+    with nothing to gain from going one at a time) rather than serially,
+    which was the actual dominant cause of the Daily Digest's slow first
+    load each day — this dwarfed every other section's cost combined.
     Returns {"games": [...], "highlights": [...]}; a blowout in "games" is
     flagged at a ON_THIS_DAY_BLOWOUT_MARGIN+ run margin."""
     current_year = today_pacific().year
+    with ThreadPoolExecutor(max_workers=years_back) as pool:
+        year_results = list(pool.map(
+            _fetch_on_this_day_schedule,
+            [(current_year, month, day, years_ago) for years_ago in range(1, years_back + 1)],
+        ))
+
     games_out = []
-    highlights_out = []
-    for years_ago in range(1, years_back + 1):
-        year = current_year - years_ago
-        try:
-            d = date(year, month, day)
-        except ValueError:
-            continue  # Feb 29 in a non-leap year
-        try:
-            resp = requests.get(
-                "https://statsapi.mlb.com/api/v1/schedule",
-                params={"sportId": 1, "date": d.isoformat(), "hydrate": "linescore"},
-                timeout=10,
-            )
-            resp.raise_for_status()
-            dates_ = resp.json().get("dates", [])
-            games = dates_[0].get("games", []) if dates_ else []
-        except Exception:
-            continue
+    finished_games = []
+    for years_ago, year, games in year_results:
         for g in games:
             if g.get("status", {}).get("codedGameState") != "F":
                 continue
@@ -965,9 +984,13 @@ def load_on_this_day(month: int, day: int, years_back: int = 15) -> dict:
                 "home_score": int(home_score),
                 "blowout": margin >= ON_THIS_DAY_BLOWOUT_MARGIN,
             })
-            highlights_out.extend(
-                _game_player_highlights(g.get("gamePk"), years_ago, year, away_name, home_name)
-            )
+            finished_games.append((g.get("gamePk"), years_ago, year, away_name, home_name))
+
+    highlights_out = []
+    if finished_games:
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            for result in pool.map(lambda args: _game_player_highlights(*args), finished_games):
+                highlights_out.extend(result)
     return {"games": games_out, "highlights": highlights_out}
 
 
