@@ -37,6 +37,11 @@ if st.button("Refresh live scores"):
 
 predictions_on = predictions._configured()
 my_picks = {p["game_pk"]: p["pick_abbr"] for p in predictions.load_picks()} if predictions_on else {}
+if not predictions_on:
+    st.caption(
+        "Prediction picks aren't set up yet — see predictions.py's module docstring for the "
+        "predictions_gist_token / predictions_gist_id secrets it needs."
+    )
 
 _pitcher_ids = tuple(sorted({
     int(v) for col in ("away_pitcher_mlbID", "home_pitcher_mlbID")
