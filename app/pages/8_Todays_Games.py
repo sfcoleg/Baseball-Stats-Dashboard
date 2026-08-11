@@ -87,6 +87,29 @@ def render_games():
         status = live.get("status") or row["status"]
         started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
 
+        # Compares this poll's score against the previous one (kept in
+        # session_state, since the fragment has no other memory between its
+        # own 20s reruns) to detect a run just being scored — drives the
+        # "+N" flash next to whichever team's abbreviation badge scored.
+        # Updated for every game on every run regardless of whether this
+        # particular game changed, so a game that hasn't started yet (no
+        # scores) doesn't leave a stale/missing entry that would misfire
+        # once it does.
+        prev_scores = st.session_state.setdefault("_prev_scores", {})
+        away_score, home_score = live.get("away_score"), live.get("home_score")
+        prev_away_score, prev_home_score = prev_scores.get(row["game_pk"], (None, None))
+        away_runs_scored = (
+            away_score - prev_away_score
+            if away_score is not None and prev_away_score is not None and away_score > prev_away_score
+            else None
+        )
+        home_runs_scored = (
+            home_score - prev_home_score
+            if home_score is not None and prev_home_score is not None and home_score > prev_home_score
+            else None
+        )
+        prev_scores[row["game_pk"]] = (away_score, home_score)
+
         with st.container(border=True):
             if status == "In Progress":
                 st.markdown(
@@ -103,10 +126,11 @@ def render_games():
                     f"<img src='{away_logo}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if away_logo else ""
                 )
+                away_badge = style.run_scored_badge_html(away_runs_scored, away_color) if away_runs_scored else ""
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
                     f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
-                    f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
+                    f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span>{away_badge} &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span></div>",
                     unsafe_allow_html=True,
                 )
@@ -138,13 +162,12 @@ def render_games():
                 status_line = status
                 if status == "In Progress" and live.get("inning"):
                     status_line = live["inning"]
-                st.caption(f"<div style='text-align:center'>{status_line}</div>", unsafe_allow_html=True)
-                if status == "In Progress" and live.get("outs") is not None:
-                    st.markdown(
-                        f"<div style='display:flex;justify-content:center'>"
-                        f"{style.bases_outs_html(live.get('bases', {}), live['outs'])}</div>",
-                        unsafe_allow_html=True,
-                    )
+                outs = live.get("outs") if status == "In Progress" else None
+                st.markdown(
+                    f"<div style='display:flex;justify-content:center'>"
+                    f"{style.game_state_html(status_line, live.get('bases', {}), outs)}</div>",
+                    unsafe_allow_html=True,
+                )
                 if row.get("game_time") and not started:
                     st.markdown(
                         f"<div class='game-time-local' data-utc='{row['game_time']}' "
@@ -166,10 +189,11 @@ def render_games():
                     f"<img src='{home_logo}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if home_logo else ""
                 )
+                home_badge = style.run_scored_badge_html(home_runs_scored, home_color) if home_runs_scored else ""
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
                     f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
-                    f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
+                    f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span>{home_badge} &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span></div>",
                     unsafe_allow_html=True,
                 )

@@ -302,14 +302,22 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
     )
 
 
-def bases_outs_html(bases: dict, outs) -> str:
-    """A small rotated-square diamond (filled corner = runner on that base)
-    plus filled/empty out-dots — the same compact "mini diamond" convention
-    most scoreboard apps use, next to the inning line on Today's Games.
-    `bases` is {"first"/"second"/"third": bool} (see db.load_live_scores);
-    `outs` is an int 0-3 or None if the game isn't actually in progress."""
+def game_state_html(status_line: str, bases: dict, outs) -> str:
+    """The inning line, a small rotated-square-corner diamond (filled
+    corner = runner on that base), and filled/empty out-dots — the same
+    compact "mini diamond" convention most scoreboard apps use. All three
+    rows share ONE flex column with a single `gap`, so the inning-to-diamond
+    distance and the diamond-to-dots distance are identical by construction
+    rather than one coming from st.caption's own margin and the other from
+    a separate div (which drifted out of sync before). `bases` is
+    {"first"/"second"/"third": bool} (see db.load_live_scores); `outs` is
+    an int 0-3 or None if the game isn't actually in progress (in which
+    case only the status line renders, no diamond/dots)."""
+    GAP = 6  # px — the single source of truth both rows below are spaced by
+    status_html = f"<div style='color:#9AA3B5;font-size:0.85rem'>{status_line}</div>"
     if outs is None:
-        return ""
+        return f"<div style='display:flex;flex-direction:column;align-items:center;gap:{GAP}px'>{status_html}</div>"
+
     on = "#F5B942"
     off = "#4A5266"
 
@@ -332,9 +340,19 @@ def bases_outs_html(bases: dict, outs) -> str:
         for i in range(3)
     )
     return (
-        "<div style='display:flex;flex-direction:column;align-items:center;gap:4px'>"
-        f"{diamond}<div>{dots}</div></div>"
+        f"<div style='display:flex;flex-direction:column;align-items:center;gap:{GAP}px'>"
+        f"{status_html}{diamond}<div>{dots}</div></div>"
     )
+
+
+def run_scored_badge_html(runs: int, team_color: str) -> str:
+    """A "+N" pill in the scoring team's own color that pops in and fades
+    out (see main.py's diamondRunScored keyframes) — meant to be rendered
+    ONLY on the fragment rerun where Today's Games detects a team's score
+    just went up (comparing against the previous poll's score in
+    st.session_state), so it naturally appears once per run scored rather
+    than needing to be explicitly dismissed."""
+    return f"<span class='run-scored-badge' style='background-color:{team_color}'>+{runs}</span>"
 
 
 def _playoff_pct_color(pct: float) -> str:

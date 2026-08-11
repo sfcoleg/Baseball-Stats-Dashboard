@@ -137,6 +137,22 @@ st.markdown(
     "  50% { box-shadow: 0 0 0 6px rgba(211,47,47,0); }"
     "}"
     ".live-badge { animation: diamondLivePulse 1.6s ease-in-out infinite; }"
+    # Today's Games' "+N" run-scored flash (see style.run_scored_badge_html)
+    # — pops in with a little overshoot, holds, then drifts up and fades.
+    # forwards keeps it at its final (invisible) state rather than
+    # snapping back to frame 0 once the animation completes, so it doesn't
+    # flicker back into view while sitting in the DOM waiting for the next
+    # fragment rerun to either replace or drop it.
+    "@keyframes diamondRunScored {"
+    "  0% { transform: scale(0.4) translateY(6px); opacity: 0; }"
+    "  20% { transform: scale(1.25) translateY(0); opacity: 1; }"
+    "  40% { transform: scale(1) translateY(0); opacity: 1; }"
+    "  100% { transform: scale(1) translateY(-18px); opacity: 0; }"
+    "}"
+    ".run-scored-badge {"
+    "  display:inline-block; animation: diamondRunScored 2.8s ease-out forwards;"
+    "  font-weight:800; padding:2px 9px; border-radius:8px; margin-left:6px; color:#12141C;"
+    "}"
     "</style>",
     unsafe_allow_html=True,
 )
