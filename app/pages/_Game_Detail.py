@@ -99,7 +99,7 @@ def render_game_center():
             st.markdown("<div style='text-align:center;color:#9AA3B5;padding-top:12px'>@</div>", unsafe_allow_html=True)
         status_line = live.get("inning") if status == "In Progress" and live.get("inning") else status
         outs = live.get("outs") if status == "In Progress" else None
-        st.markdown(style.game_state_html(status_line, live.get("bases", {}), outs), unsafe_allow_html=True)
+        st.markdown(style.game_state_html(status_line, live.get("bases", {}), outs, scale=2.2), unsafe_allow_html=True)
 
     if status == "In Progress":
         style.colored_header("Live Pitch Tracker", "pitching")

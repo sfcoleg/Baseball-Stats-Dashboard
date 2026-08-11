@@ -303,45 +303,56 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
     )
 
 
-def game_state_html(status_line: str, bases: dict, outs) -> str:
+def game_state_html(status_line: str, bases: dict, outs, scale: float = 1.0) -> str:
     """The inning line, a small rotated-square-corner diamond (filled
-    corner = runner on that base), and filled/empty out-dots — the same
-    compact "mini diamond" convention most scoreboard apps use. All three
-    rows share ONE flex column with a single `gap`, so the inning-to-diamond
-    distance and the diamond-to-dots distance are identical by construction
-    rather than one coming from st.caption's own margin and the other from
-    a separate div (which drifted out of sync before). `bases` is
-    {"first"/"second"/"third": bool} (see db.load_live_scores); `outs` is
-    an int 0-3 or None if the game isn't actually in progress (in which
-    case only the status line renders, no diamond/dots)."""
-    GAP = 6  # px — the single source of truth both rows below are spaced by
-    status_html = f"<div style='color:#9AA3B5;font-size:0.85rem'>{status_line}</div>"
+    corner = runner on that base, hoverable for who's actually on it), and
+    filled/empty out-dots — the same compact "mini diamond" convention
+    most scoreboard apps use. All three rows share ONE flex column with a
+    single `gap`, so the inning-to-diamond distance and the diamond-to-
+    dots distance are identical by construction rather than one coming
+    from st.caption's own margin and the other from a separate div (which
+    drifted out of sync before). `bases` is {"first"/"second"/"third":
+    name-or-None} (see db.load_live_scores); `outs` is an int 0-3 or None
+    if the game isn't actually in progress (in which case only the status
+    line renders, no diamond/dots). `scale` multiplies every dimension
+    uniformly (Today's Games' compact cards use the default 1.0; Game
+    Center's own dedicated page has room to render it larger) rather than
+    exposing separate width/gap/etc. parameters callers would have to keep
+    proportional themselves."""
+    gap = round(6 * scale)
+    status_html = f"<div style='color:#9AA3B5;font-size:{0.85 * scale:.2f}rem'>{status_line}</div>"
     if outs is None:
-        return f"<div style='display:flex;flex-direction:column;align-items:center;gap:{GAP}px'>{status_html}</div>"
+        return f"<div style='display:flex;flex-direction:column;align-items:center;gap:{gap}px'>{status_html}</div>"
 
     on = "#F5B942"
     off = "#4A5266"
+    corner_size = round(10 * scale)
 
-    def corner(top, left, occupied):
+    def corner(top, left, runner_name):
+        title_attr = f" title='{runner_name} on base'" if runner_name else ""
         return (
-            f"<div style='position:absolute;top:{top}px;left:{left}px;width:10px;height:10px;"
-            f"transform:rotate(45deg);background-color:{occupied and on or off}'></div>"
+            f"<div{title_attr} style='position:absolute;top:{round(top * scale)}px;left:{round(left * scale)}px;"
+            f"width:{corner_size}px;height:{corner_size}px;cursor:{'help' if runner_name else 'default'};"
+            f"transform:rotate(45deg);background-color:{on if runner_name else off}'></div>"
         )
 
+    diamond_size = round(34 * scale)
     diamond = (
-        "<div style='position:relative;width:34px;height:34px'>"
+        f"<div style='position:relative;width:{diamond_size}px;height:{diamond_size}px'>"
         + corner(0, 12, bases.get("second"))
         + corner(12, 24, bases.get("first"))
         + corner(12, 0, bases.get("third"))
         + "</div>"
     )
+    dot_size = round(7 * scale)
+    dot_gap = round(3 * scale)
     dots = "".join(
-        f"<span style='display:inline-block;width:7px;height:7px;border-radius:50%;"
-        f"background-color:{on if i < outs else off};margin-right:3px'></span>"
+        f"<span style='display:inline-block;width:{dot_size}px;height:{dot_size}px;border-radius:50%;"
+        f"background-color:{on if i < outs else off};margin-right:{dot_gap}px'></span>"
         for i in range(3)
     )
     return (
-        f"<div style='display:flex;flex-direction:column;align-items:center;gap:{GAP}px'>"
+        f"<div style='display:flex;flex-direction:column;align-items:center;gap:{gap}px'>"
         f"{status_html}{diamond}<div>{dots}</div></div>"
     )
 

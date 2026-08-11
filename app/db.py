@@ -370,12 +370,18 @@ def load_live_scores(date_str: str) -> dict:
             "status": g.get("status", {}).get("detailedState"),
             "inning": inning_text,
             "outs": linescore.get("outs"),
-            # Each True/False for whether a runner's currently on that base —
-            # only meaningful when the game is actually in progress (outs is
-            # not None); the offense dict is present-but-baseless between
-            # innings/at-bats too, so absence of a key just means "empty".
+            # Each base's runner name (or None if empty) rather than a plain
+            # bool — style.game_state_html uses the name for a hover
+            # tooltip, but still just checks truthiness for occupied/empty,
+            # so this is a drop-in replacement for the old True/False.
+            # Only meaningful when the game is actually in progress (outs
+            # is not None); the offense dict is present-but-baseless
+            # between innings/at-bats too, so a missing key just means
+            # "empty" rather than "unknown".
             "bases": {
-                "first": "first" in offense, "second": "second" in offense, "third": "third" in offense,
+                "first": (offense.get("first") or {}).get("fullName"),
+                "second": (offense.get("second") or {}).get("fullName"),
+                "third": (offense.get("third") or {}).get("fullName"),
             },
         }
     return scores
