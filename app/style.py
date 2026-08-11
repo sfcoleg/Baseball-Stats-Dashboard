@@ -345,6 +345,24 @@ def game_state_html(status_line: str, bases: dict, outs) -> str:
     )
 
 
+def _readable_text_color(bg_hex: str) -> str:
+    """Black or white, whichever has the higher WCAG contrast ratio against
+    `bg_hex` — used instead of a hardcoded per-team lookup so it stays
+    correct automatically (e.g. a team rebrand or color tweak in teams.py
+    just works) rather than needing a second table kept in sync by hand."""
+    bg_hex = bg_hex.lstrip("#")
+    r, g, b = int(bg_hex[0:2], 16), int(bg_hex[2:4], 16), int(bg_hex[4:6], 16)
+
+    def _linear(channel: int) -> float:
+        c = channel / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    luminance = 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+    white_contrast = 1.05 / (luminance + 0.05)
+    black_contrast = (luminance + 0.05) / 0.05
+    return "#FFFFFF" if white_contrast > black_contrast else "#000000"
+
+
 def run_scored_badge_html(runs: int, team_color: str, fly_x: str) -> str:
     """A circular "+N" badge in the scoring team's own color that pops in
     next to the score, then flies the short distance `fly_x` (a CSS length
@@ -355,10 +373,14 @@ def run_scored_badge_html(runs: int, team_color: str, fly_x: str) -> str:
     the fragment rerun where Today's Games detects a team's score just went
     up (comparing against the previous poll's score in st.session_state),
     so it naturally appears once per run scored rather than needing to be
-    explicitly dismissed."""
+    explicitly dismissed. Text color is computed per-team (see
+    _readable_text_color) rather than a fixed dark color, since several
+    team colors (e.g. the Athletics' dark green) are too dark for black
+    text to read against."""
+    text_color = _readable_text_color(team_color)
     return (
-        f"<span class='run-scored-badge' style='background-color:{team_color};--fly-x:{fly_x}'>"
-        f"+{runs}</span>"
+        f"<span class='run-scored-badge' style='background-color:{team_color};"
+        f"color:{text_color};--fly-x:{fly_x}'>+{runs}</span>"
     )
 
 

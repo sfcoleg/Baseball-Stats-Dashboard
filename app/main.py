@@ -157,7 +157,7 @@ st.markdown(
     "  display:inline-flex; align-items:center; justify-content:center;"
     "  width:22px; height:22px; border-radius:50%; vertical-align:middle;"
     "  animation: diamondRunFlyIn 0.9s cubic-bezier(.34,1.56,.64,1) forwards;"
-    "  font-weight:800; font-size:0.75rem; margin:0 4px; color:#12141C;"
+    "  font-weight:800; font-size:0.75rem; margin:0 4px;"
     "}"
     "@keyframes diamondScorePop {"
     "  0%, 55% { transform: scale(1); }"
