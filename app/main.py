@@ -211,6 +211,13 @@ components.html(
 
 sidebar.render_search()
 
+# Free agency is an offseason feature — irrelevant (and a little confusing,
+# since "unattached" reads oddly for a guy who's mid-season on a roster)
+# while the season's actually being played. Flip this to True once the
+# regular season wraps up, and back to False again once free agents start
+# signing in bulk and pennant races take back over.
+SHOW_FREE_AGENCY = False
+
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
     st.Page("pages/12_Daily_Digest.py", title="Daily Digest"),
@@ -230,6 +237,8 @@ PAGES = [
     st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
 ]
+if SHOW_FREE_AGENCY:
+    PAGES.insert(-1, st.Page("pages/21_Free_Agency.py", title="Free Agency"))
 
 pg = st.navigation(PAGES, position="hidden")
 

@@ -1151,6 +1151,139 @@ def load_transactions(days: int) -> pd.DataFrame:
     return df.sort_values("date", ascending=False, kind="stable").reset_index(drop=True)
 
 
+# Free agency isn't a clean flag anywhere in the Stats API — it has to be
+# inferred from the transaction log: whichever of these event types last
+# happened to a player determines whether they're currently unattached.
+_FA_TYPES = {"Declared Free Agency", "Released"}
+_FA_RESOLVED_TYPES = {
+    "Signed as Free Agent", "Signed", "Trade", "Claimed Off Waivers",
+    "Rule 5 Selection", "Rule 5 Draft Minors",
+}
+_FA_EXCLUDE_TYPES = {"Retired"}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=500)
+def _people_lookup(mlb_ids: tuple) -> pd.DataFrame:
+    """Batched name/position/age/debut-date lookup for a list of mlbIDs —
+    chunked at 300 ids per call, same limit fetch_career_totals's ingest
+    step works around (the endpoint 414s past that many comma-joined ids
+    in one request). `mlb_ids` is a tuple (not list) so it's hashable for
+    st.cache_data's key."""
+    rows = []
+    ids = list(mlb_ids)
+    for i in range(0, len(ids), 300):
+        chunk = ids[i:i + 300]
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/people",
+                params={"personIds": ",".join(str(x) for x in chunk)},
+                timeout=30,
+            )
+            resp.raise_for_status()
+            people = resp.json().get("people", [])
+        except Exception:
+            continue
+        for p in people:
+            rows.append({
+                "mlbID": p["id"],
+                "Name": p.get("fullName"),
+                "Pos": (p.get("primaryPosition") or {}).get("abbreviation"),
+                "Age": p.get("currentAge"),
+                "debut_date": p.get("mlbDebutDate"),
+            })
+    return pd.DataFrame(rows) if rows else pd.DataFrame(columns=["mlbID", "Name", "Pos", "Age", "debut_date"])
+
+
+def _years_experience(debut_date) -> float | None:
+    if not debut_date:
+        return None
+    try:
+        debut = datetime.strptime(debut_date, "%Y-%m-%d")
+    except (ValueError, TypeError):
+        return None
+    return round((datetime.now() - debut).days / 365.25, 1)
+
+
+def _latest_season_stat_line(mlbID: int, db_mtime_val: float) -> dict:
+    """Whichever of the current or prior season has this player's most
+    recent stat line (a released player often has zero rows in the
+    current season if they were let go before ever appearing in a game
+    this year) — batting checked before pitching, same "primary role"
+    tie-break precedent as player_primary_role elsewhere in this file."""
+    for season in (get_seasons("batting")[0], get_seasons("batting")[0] - 1):
+        bat = get_player_batting(mlbID, season, db_mtime_val)
+        if bat is not None:
+            return {
+                "season": season, "role": "Batter", "PA": bat.get("PA"),
+                "line": f"{bat.get('BA', float('nan')):.3f} AVG, {int(bat.get('HR', 0))} HR, {bat.get('OPS', float('nan')):.3f} OPS",
+            }
+        pit = get_player_pitching(mlbID, season, db_mtime_val)
+        if pit is not None:
+            return {
+                "season": season, "role": "Pitcher", "IP": pit.get("IP"),
+                "line": f"{pit.get('ERA', float('nan')):.2f} ERA, {int(pit.get('SO', 0))} SO, {pit.get('IP', float('nan')):.1f} IP",
+            }
+    return {"season": None, "role": None, "line": "No recent MLB stats"}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=2)
+def free_agent_tracker(db_mtime_val: float) -> pd.DataFrame:
+    """Currently-unattached players, inferred from the transaction log (see
+    _FA_TYPES/_FA_RESOLVED_TYPES/_FA_EXCLUDE_TYPES) — whoever's most recent
+    relevant transaction was a release or free-agency declaration, with no
+    signing/trade/waiver-claim since. Approximate by nature (a team's own
+    internal roster moves the Stats API doesn't publish as a transaction
+    could theoretically be missed), but covers the vast majority of real
+    free agents. 420-day lookback covers a full offseason plus in-season
+    releases; someone who's been unsigned longer than that still shows up
+    as long as nothing else happened to their transaction record since."""
+    txs = load_transactions(420)
+    if txs.empty:
+        return pd.DataFrame()
+
+    relevant_types = _FA_TYPES | _FA_RESOLVED_TYPES | _FA_EXCLUDE_TYPES
+    relevant = txs[txs["type"].isin(relevant_types) & txs["mlbID"].notna()].copy()
+    if relevant.empty:
+        return pd.DataFrame()
+    relevant["mlbID"] = relevant["mlbID"].astype(int)
+    relevant = relevant.sort_values("date")
+    latest = relevant.groupby("mlbID", as_index=False).tail(1)
+    fa = latest[latest["type"].isin(_FA_TYPES)].copy()
+    if fa.empty:
+        return pd.DataFrame()
+
+    people = _people_lookup(tuple(sorted(fa["mlbID"].unique().tolist())))
+    fa = fa.merge(people, on="mlbID", how="left")
+    fa["experience_years"] = fa["debut_date"].map(_years_experience)
+    stat_lines = fa["mlbID"].map(lambda mid: _latest_season_stat_line(mid, db_mtime_val))
+    fa["last_season"] = stat_lines.map(lambda d: d["season"])
+    fa["last_stat_line"] = stat_lines.map(lambda d: d["line"])
+
+    return fa.rename(columns={"to_abbr": "last_team", "date": "fa_date", "type": "fa_type"})[
+        ["mlbID", "Name", "Pos", "Age", "experience_years", "last_team", "fa_date", "fa_type",
+         "last_season", "last_stat_line", "description"]
+    ].sort_values("fa_date", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=2)
+def recent_free_agent_signings(db_mtime_val: float, days: int = 90) -> pd.DataFrame:
+    """Free agents who signed somewhere in the last `days` days — the
+    "moved off the market" counterpart to free_agent_tracker, from the
+    same transaction log (see _FA_RESOLVED_TYPES)."""
+    txs = load_transactions(days)
+    if txs.empty:
+        return pd.DataFrame()
+    signed = txs[txs["type"].isin({"Signed as Free Agent", "Signed"}) & txs["mlbID"].notna()].copy()
+    if signed.empty:
+        return pd.DataFrame()
+    signed["mlbID"] = signed["mlbID"].astype(int)
+    people = _people_lookup(tuple(sorted(signed["mlbID"].unique().tolist())))
+    signed = signed.merge(people, on="mlbID", how="left")
+    return signed.rename(columns={"to_abbr": "new_team", "date": "signed_date", "type": "sign_type"})[
+        ["mlbID", "Name", "Pos", "Age", "new_team", "signed_date", "sign_type", "description"]
+    ].sort_values("signed_date", ascending=False).reset_index(drop=True)
+
+
 _COMPOSITE_FIELD_POSITIONS = ["1B", "2B", "3B", "SS", "LF", "CF", "RF"]
 _COMPOSITE_MIN_PA = 150
 _COMPOSITE_MIN_IP = 20
