@@ -18,18 +18,28 @@ File format — simple frontmatter, then the body:
     Body text here, plain text or markdown (headers, bold, links all work
     since it's rendered through st.markdown).
 """
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 ARTICLES_DIR = Path(__file__).resolve().parent.parent / "content" / "articles"
 
 
 def load_articles() -> list[dict]:
-    """Every article in content/articles/, newest first (by the `date`
-    frontmatter field, not file mtime — so backdating or reordering is just
-    a matter of editing that field). Malformed files (no frontmatter, no
+    """Today's articles in content/articles/ (by the `date` frontmatter
+    field, not file mtime — so backdating is just a matter of editing that
+    field), newest first. Each article is only shown on its own date — the
+    Digest is meant to be a snapshot of "what happened yesterday/today",
+    not an ever-growing archive, so a piece written for 2026-08-10 quietly
+    disappears once 2026-08-11 rolls around rather than needing to be
+    manually deleted. Uses the same Pacific-day convention as the rest of
+    the live app (see db.today_pacific()) — duplicated here rather than
+    importing db, to keep this module's stated independence from the
+    SQLite/ingest side of the app. Malformed files (no frontmatter, no
     title) are skipped rather than crashing the page."""
     if not ARTICLES_DIR.exists():
         return []
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
     articles = []
     for path in sorted(ARTICLES_DIR.glob("*.md")):
         text = path.read_text(encoding="utf-8")
@@ -43,7 +53,7 @@ def load_articles() -> list[dict]:
             if ":" in line:
                 key, value = line.split(":", 1)
                 meta[key.strip().lower()] = value.strip()
-        if not meta.get("title"):
+        if not meta.get("title") or meta.get("date") != today:
             continue
         image_path = ARTICLES_DIR / "images" / meta["image"] if meta.get("image") else None
         articles.append({
