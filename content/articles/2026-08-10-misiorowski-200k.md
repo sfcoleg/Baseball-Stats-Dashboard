@@ -1,5 +1,5 @@
 ---
-title: Jacob Misiorowski Is Making His Case for NL Cy Young
+title: Jacob Misiorowski Reaches 200 Strikeouts
 author: Cole Gardner
 date: 2026-08-10
 mlbid: 694819
