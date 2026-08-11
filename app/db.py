@@ -507,6 +507,67 @@ def load_schedule_for_date(date_str: str) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+# get_milestones' `category` -> the highlight taxonomy tag(s) MLB's own
+# clip-tagging uses for that kind of play — used by find_milestone_highlight
+# below to pick a clip that's actually ABOUT the milestone, not just any
+# clip of that player from that game. SO/IP milestones have no entry (and
+# so never get a video) since crossing a strikeout/innings-pitched total
+# isn't itself a single taggable play the way a home run or save is.
+_HIGHLIGHT_CATEGORY_TAGS = {
+    "HR Milestone": {"home-run"},
+    "Cycle": {"home-run"},  # closest single clip a cycle has — no dedicated "cycle" tag
+    "SV Milestone": {"relief-performance"},
+    "Perfect Game": {"highlight-reel-pitching", "highlight-reel-starting-pitching"},
+    "No-Hitter": {"highlight-reel-pitching", "highlight-reel-starting-pitching"},
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
+def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> str | None:
+    """Best-effort highlight clip (a direct .mp4 URL, playable via
+    st.video) for one of get_milestones' entries — looks up the player's
+    game on `date_str` via the schedule, then searches that game's
+    content/highlights for a clip tagged for both that player
+    (keywordsAll's player_id) and a category-appropriate taxonomy tag (see
+    _HIGHLIGHT_CATEGORY_TAGS). Deliberately NOT called from inside
+    get_milestones itself, which promises "no extra network calls" — video
+    lookup is a nice-to-have the Daily Digest can afford to wait on, not
+    something every milestone consumer (e.g. the Home page's alert banner)
+    needs to pay for. Returns None (never raises) if there's no schedule
+    match, no content, or nothing tagged for both the player and the
+    category — a milestone should still render without a video rather
+    than disappear or error out."""
+    tags = _HIGHLIGHT_CATEGORY_TAGS.get(category)
+    if not tags:
+        return None
+    schedule = load_schedule_for_date(date_str)
+    if schedule.empty:
+        return None
+    match = schedule[(schedule["away_abbr"] == abbr) | (schedule["home_abbr"] == abbr)]
+    if match.empty:
+        return None
+    game_pk = int(match.iloc[0]["game_pk"])
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{game_pk}/content", timeout=10)
+        resp.raise_for_status()
+        items = ((resp.json().get("highlights") or {}).get("highlights") or {}).get("items", [])
+    except Exception:
+        return None
+
+    for item in items:
+        keywords = item.get("keywordsAll", [])
+        if not any(k.get("type") == "player_id" and k.get("value") == str(mlbID) for k in keywords):
+            continue
+        item_tags = {k["value"] for k in keywords if k.get("type") == "taxonomy"}
+        if not (item_tags & tags):
+            continue
+        for pb in item.get("playbacks", []):
+            url = pb.get("url") or ""
+            if pb.get("name") == "mp4Avc" or url.endswith(".mp4"):
+                return url
+    return None
+
+
 @st.cache_data(show_spinner=False, ttl=60, max_entries=20)
 def load_linescore(game_pk) -> dict | None:
     """Live per-inning box score for one game, fetched on demand (not part

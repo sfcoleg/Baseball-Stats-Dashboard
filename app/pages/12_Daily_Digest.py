@@ -84,6 +84,9 @@ if milestones:
         with st.container(border=True):
             abbr, _, color = teams.team_meta_from_city(m["Tm"], m.get("Lev"))
             style.milestone_card(m["mlbID"], m["Name"], abbr, color, m["text"])
+            clip_url = db.find_milestone_highlight(m["mlbID"], abbr, yesterday.isoformat(), m["category"])
+            if clip_url:
+                st.video(clip_url)
 else:
     st.caption("Nothing notable yesterday.")
 
