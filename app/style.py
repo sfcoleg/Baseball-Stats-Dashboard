@@ -921,8 +921,8 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
         speed_bit = f"{p['speed']:.1f} mph " if p.get("speed") else ""
         fig.add_trace(go.Scatter(
             x=[p["px"]], y=[p["pz"]], mode="markers+text",
-            marker=dict(size=28, color=_PITCH_RESULT_COLORS[kind], line=dict(color="#12141C", width=1.5)),
-            text=[str(p["number"])], textfont=dict(color="#12141C", size=12, family="Arial Black"),
+            marker=dict(size=36, color=_PITCH_RESULT_COLORS[kind], line=dict(color="#12141C", width=1.5)),
+            text=[str(p["number"])], textfont=dict(color="#12141C", size=15, family="Arial Black"),
             hovertext=f"{speed_bit}{p['pitch_type']} — {p['description']}", hoverinfo="text",
             showlegend=False,
         ))
@@ -930,7 +930,7 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        height=380, margin=dict(l=10, r=10, t=10, b=10),
+        height=650, margin=dict(l=10, r=10, t=10, b=10),
     )
     return fig
 
