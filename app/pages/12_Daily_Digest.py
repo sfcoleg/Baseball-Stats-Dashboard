@@ -140,6 +140,9 @@ for key, label, pool in LEADERBOARD_ENTRIES:
     with st.container(border=True):
         abbr, _, color = teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))
         style.milestone_card(entry["mlbID"], player_row["Name"], abbr, color, f"{label}: {entry['detail']}")
+        clip_url = db.find_statcast_highlight(entry["mlbID"], abbr, yesterday.isoformat(), key)
+        if clip_url:
+            st.video(clip_url)
     shown_any = True
 if not shown_any:
     st.caption("No Statcast data available for this date.")

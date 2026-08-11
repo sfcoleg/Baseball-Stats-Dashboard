@@ -521,25 +521,32 @@ _HIGHLIGHT_CATEGORY_TAGS = {
     "No-Hitter": {"highlight-reel-pitching", "highlight-reel-starting-pitching"},
 }
 
+# load_statcast_daily_leaderboard's leaderboard keys -> taxonomy tag(s).
+# Looser than _HIGHLIGHT_CATEGORY_TAGS above by necessity: "hardest hit
+# ball" and "fastest pitch" aren't a distinct taggable PLAY the way a home
+# run or save is (a hardest-hit ball might be a single, an out, anything;
+# a fastest pitch might not even be a strikeout) — so these fall back to
+# the broadest tag for that side of the ball (any hitting clip / any
+# pitching clip) rather than an exact match. That means the embedded clip
+# is guaranteed to be of the right PLAYER and the right general type of
+# play, but for "hardest_hit"/"fastest_pitch" specifically it's not
+# guaranteed to be that literal pitch or swing.
+_STATCAST_HIGHLIGHT_TAGS = {
+    "longest_hr": {"home-run"},
+    "hardest_hit": {"home-run", "hitting"},
+    "fastest_pitch": {"pitching"},
+}
 
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
-def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> str | None:
-    """Best-effort highlight clip (a direct .mp4 URL, playable via
-    st.video) for one of get_milestones' entries — looks up the player's
-    game on `date_str` via the schedule, then searches that game's
-    content/highlights for a clip tagged for both that player
-    (keywordsAll's player_id) and a category-appropriate taxonomy tag (see
-    _HIGHLIGHT_CATEGORY_TAGS). Deliberately NOT called from inside
-    get_milestones itself, which promises "no extra network calls" — video
-    lookup is a nice-to-have the Daily Digest can afford to wait on, not
-    something every milestone consumer (e.g. the Home page's alert banner)
-    needs to pay for. Returns None (never raises) if there's no schedule
-    match, no content, or nothing tagged for both the player and the
-    category — a milestone should still render without a video rather
-    than disappear or error out."""
-    tags = _HIGHLIGHT_CATEGORY_TAGS.get(category)
-    if not tags:
-        return None
+
+def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str | None:
+    """Shared lookup behind find_milestone_highlight/find_statcast_highlight
+    — finds the player's game on `date_str` via the schedule, then searches
+    that game's content/highlights for a clip tagged for both that player
+    (keywordsAll's player_id) and any of `tags` (keywordsAll's taxonomy
+    values), returning the first match's direct .mp4 URL (playable via
+    st.video). Returns None (never raises) if there's no schedule match,
+    no content, or nothing tagged for both the player and the given tags —
+    callers should render without a video rather than error out."""
     schedule = load_schedule_for_date(date_str)
     if schedule.empty:
         return None
@@ -566,6 +573,34 @@ def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> 
             if pb.get("name") == "mp4Avc" or url.endswith(".mp4"):
                 return url
     return None
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
+def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> str | None:
+    """Best-effort highlight clip for one of get_milestones' entries — see
+    _find_tagged_player_clip for how the match works, _HIGHLIGHT_CATEGORY_TAGS
+    for the category->tag mapping. Deliberately NOT called from inside
+    get_milestones itself, which promises "no extra network calls" — video
+    lookup is a nice-to-have the Daily Digest can afford to wait on, not
+    something every milestone consumer (e.g. the Home page's alert banner)
+    needs to pay for."""
+    tags = _HIGHLIGHT_CATEGORY_TAGS.get(category)
+    if not tags:
+        return None
+    return _find_tagged_player_clip(mlbID, abbr, date_str, tags)
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
+def find_statcast_highlight(mlbID, abbr: str, date_str: str, kind: str) -> str | None:
+    """Best-effort highlight clip for one of load_statcast_daily_leaderboard's
+    entries ("hardest_hit", "longest_hr", "fastest_pitch") — see
+    _find_tagged_player_clip for how the match works, _STATCAST_HIGHLIGHT_TAGS
+    for the kind->tag mapping (looser than milestones' — see that dict's
+    comment for why "hardest hit"/"fastest pitch" can't be matched exactly)."""
+    tags = _STATCAST_HIGHLIGHT_TAGS.get(kind)
+    if not tags:
+        return None
+    return _find_tagged_player_clip(mlbID, abbr, date_str, tags)
 
 
 @st.cache_data(show_spinner=False, ttl=60, max_entries=20)
