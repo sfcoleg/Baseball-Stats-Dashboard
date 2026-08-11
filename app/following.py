@@ -7,12 +7,17 @@ needing auth, at the cost of not following the visitor across devices/browsers.
 Streamlit has no built-in two-way JS<->Python data channel without a full
 custom component, so this uses two one-way bridges instead:
   - LOAD (JS -> Python): on a fresh session with no ?following= query param
-    yet, a components.html script checks localStorage and, if it finds saved
-    data, redirects the browser to include it as a query param — one extra
-    page load, then bootstrap() reads it into st.session_state and never
-    re-reads it for the rest of that session (session_state becomes
-    authoritative; re-reading the query param on every rerun would silently
-    undo a just-made change with stale data).
+    yet, this module's own localStorage data is picked up by ONE shared
+    redirect script in main.py (see localstorage_bridge.py) — NOT a
+    redirect fired from here. Two independent modules each firing their own
+    `window.parent.location` redirect on the same fresh load race each
+    other: whichever navigates first can tear down the other's iframe
+    mid-script, silently dropping its data. bootstrap() here only reads
+    the ?following= param (set by that shared redirect on a prior run)
+    into st.session_state, and never re-reads it for the rest of that
+    session (session_state becomes authoritative; re-reading the query
+    param on every rerun would silently undo a just-made change with stale
+    data).
   - SAVE (Python -> JS): the Following page calls save() unconditionally on
     every render, writing the current session_state into localStorage. Cheap
     and idempotent, so it doesn't need to be wired to specific mutations.
@@ -22,7 +27,7 @@ import json
 import streamlit as st
 import streamlit.components.v1 as components
 
-_STORAGE_KEY = "sabermetrics_following"
+STORAGE_KEY = "sabermetrics_following"
 
 
 def bootstrap() -> None:
@@ -52,39 +57,12 @@ def bootstrap() -> None:
     st.session_state["followed_teams"] = []
     st.session_state["followed_players"] = []
     # Not safe to save yet: this render's lists are just a placeholder in
-    # case localStorage turns out to have real data and the redirect below
-    # fires. Saving now would clobber that data with an empty list before
-    # the browser gets a chance to run the redirect. save() starts working
-    # again from the next rerun onward (see the branch above).
+    # case localStorage turns out to have real data and the shared redirect
+    # (see localstorage_bridge.py, called once from main.py) fires. Saving
+    # now would clobber that data with an empty list before the browser
+    # gets a chance to run the redirect. save() starts working again from
+    # the next rerun onward (see the branch above).
     st.session_state["_following_safe_to_save"] = False
-
-    # No query param yet — check localStorage once and redirect if it has
-    # saved data. A genuinely new visitor has nothing saved, so this is a
-    # no-op for them (no redirect, no flicker).
-    components.html(
-        f"""
-        <script>
-        (function() {{
-            const saved = localStorage.getItem('{_STORAGE_KEY}');
-            if (!saved) return;
-            const url = new URL(window.parent.location.href);
-            if (url.searchParams.has('following')) return;
-            url.searchParams.set('following', saved);
-            // components.html() renders in a sandboxed iframe without
-            // allow-top-navigation, so window.parent.location.href = ...
-            // is silently blocked by the browser. Workaround: build the
-            // link IN the parent document (allowed via allow-same-origin)
-            // and click it there, so the navigation is parent-initiated
-            // rather than a cross-frame navigation from the sandboxed iframe.
-            const a = window.parent.document.createElement('a');
-            a.href = url.toString();
-            window.parent.document.body.appendChild(a);
-            a.click();
-        }})();
-        </script>
-        """,
-        height=0,
-    )
 
 
 def save() -> None:
@@ -99,4 +77,4 @@ def save() -> None:
         "players": st.session_state.get("followed_players", []),
     })
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
-    components.html(f"<script>localStorage.setItem('{_STORAGE_KEY}', {js_literal});</script>", height=0)
+    components.html(f"<script>localStorage.setItem('{STORAGE_KEY}', {js_literal});</script>", height=0)

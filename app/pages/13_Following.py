@@ -7,6 +7,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import following
+import localstorage_bridge
 import style
 import teams
 
@@ -29,6 +30,15 @@ season = db.get_seasons("batting")[0]
 # pages/-folder auto-discovery can route a direct URL hit straight to this
 # page's script (bypassing main.py entirely) — so bootstrap defensively here too.
 following.bootstrap()
+# The actual localStorage->query-param redirect (not just the bootstrap()
+# read) has to run from HERE, not main.py — components.html() calls made
+# from main.py never execute their script in the browser at all; only ones
+# made from within the routed page's own script reliably do. following's
+# key is only ever registered here (main.py's own register() call for
+# "following" is now effectively unused dead weight from that same lesson,
+# but harmless to leave — it's pure Python, not a render).
+localstorage_bridge.register("following", following.STORAGE_KEY)
+localstorage_bridge.redirect()
 followed_teams = st.session_state["followed_teams"]  # [{"abbr", "nickname"}, ...]
 followed_players = st.session_state["followed_players"]  # [{"mlbID", "name"}, ...]
 

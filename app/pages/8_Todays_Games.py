@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import localstorage_bridge
 import predictions
 import style
 import teams
@@ -14,6 +15,16 @@ import teams
 st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
 st.caption("Our own win probabilities/odds — not real sportsbook lines. Based on Log5 + starter/bullpen ERA, lineup wOBA, and platoon splits.")
+
+# Normally seeded by predictions.bootstrap() in main.py, but Streamlit's
+# legacy pages/-folder auto-discovery can route a direct URL hit straight to
+# this page's script (bypassing main.py entirely) — so bootstrap defensively
+# here too. The actual localStorage->query-param redirect has to run from
+# HERE (not main.py) — see following.py's identical comment on this in
+# pages/13_Following.py for why.
+predictions.bootstrap()
+localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
+localstorage_bridge.redirect()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -187,14 +198,35 @@ def render_games():
                 for col, abbr in ((pcol1, row["away_abbr"]), (pcol2, row["home_abbr"])):
                     with col:
                         is_picked = current_pick == abbr
+                        pick_key = f"pick_{row['game_pk']}_{abbr}"
+                        # Streamlit exposes each widget's `key` as a
+                        # `st-key-{key}` class on its wrapper div — the only
+                        # way to reach a SPECIFIC button's own <button> with
+                        # CSS, since type="primary"/"secondary" only offers
+                        # two canned looks, not an arbitrary team color.
+                        st.markdown(
+                            f"<style>.st-key-{pick_key} button {{"
+                            "padding:2px 0 !important;min-height:1.8rem !important;font-size:0.8rem !important;"
+                            + (
+                                f"background-color:{team_color(abbr)} !important;"
+                                "border-color:transparent !important;color:#FAFAFA !important;"
+                                if is_picked else ""
+                            )
+                            + "}}</style>",
+                            unsafe_allow_html=True,
+                        )
                         label = f"✓ {abbr}" if is_picked else abbr
-                        if st.button(
-                            label, key=f"pick_{row['game_pk']}_{abbr}",
-                            type="primary" if is_picked else "secondary", use_container_width=True,
-                        ):
+                        if st.button(label, key=pick_key, use_container_width=True):
                             predictions.add_pick(row["game_pk"], row["date"], abbr, row["away_abbr"], row["home_abbr"])
-                            predictions.save()
-                            st.rerun(scope="fragment")
+                            # A full rerun, not scope="fragment" — st.rerun()
+                            # aborts the script immediately, so a save() call
+                            # placed right before it (in-fragment) never gives
+                            # its injected iframe time to actually run the
+                            # localStorage write. A full rerun instead lets
+                            # the page's own predictions.save() backstop (see
+                            # bottom of this file) complete on the next pass,
+                            # with nothing immediately re-aborting it.
+                            st.rerun()
 
             if started and st.session_state.get(f"show_box_{row['game_pk']}", False):
                 linescore = db.load_linescore(row["game_pk"])
@@ -242,9 +274,10 @@ else:
 
 # Persists any pick made above into localStorage — unconditional/idempotent
 # per render, same pattern as following.save(), so it doesn't need to be
-# wired to the specific button that changed something. (render_games()
-# already saves right after a pick for an immediate fragment-scoped update;
-# this is the backstop for whenever a full-page rerun happens instead.)
+# wired to the specific button that changed something. This is the ONLY
+# place that actually calls save(): a pick button triggers a full st.rerun()
+# (see render_games()) specifically so this line gets a clean, unraced
+# chance to run afterward.
 predictions.save()
 
 # Converts each game's UTC start time (stored in data-utc, e.g. "2026-07-12T23:10:00Z")

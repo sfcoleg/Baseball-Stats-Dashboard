@@ -4,8 +4,10 @@ shared store would mean every visitor sees the same picks. Storing them in
 each visitor's own browser makes the accuracy tracker genuinely personal
 without needing auth, at the cost of not following the visitor across
 devices/browsers. Same two-bridge pattern as following.py — see that
-module's docstring for why a redirect-based LOAD and an unconditional SAVE
-are needed instead of a real two-way JS<->Python channel.
+module's docstring for why the LOAD redirect is fired ONCE from a shared
+script in main.py (see localstorage_bridge.py) rather than independently
+from here: two modules each firing their own redirect on the same fresh
+load race each other and can silently drop one's data.
 """
 import json
 
@@ -13,14 +15,13 @@ import pandas as pd
 import streamlit as st
 import streamlit.components.v1 as components
 
-_STORAGE_KEY = "sabermetrics_predictions"
+STORAGE_KEY = "sabermetrics_predictions"
 
 
 def bootstrap() -> None:
     """Call once, early in main.py (before any page renders). Seeds
     st.session_state["prediction_picks"] — from a ?predictions= query
-    param if present (set by the redirect below on a prior run), else []
-    with a one-time check for saved localStorage data on a fresh session."""
+    param if present (set by the shared redirect on a prior run), else []."""
     if "prediction_picks" in st.session_state:
         st.session_state["_predictions_safe_to_save"] = True
         return
@@ -35,26 +36,9 @@ def bootstrap() -> None:
         return
 
     st.session_state["prediction_picks"] = []
+    # Not safe to save yet: see following.py's identical placeholder-guard
+    # for why (the shared redirect in main.py may still be in flight).
     st.session_state["_predictions_safe_to_save"] = False
-
-    components.html(
-        f"""
-        <script>
-        (function() {{
-            const saved = localStorage.getItem('{_STORAGE_KEY}');
-            if (!saved) return;
-            const url = new URL(window.parent.location.href);
-            if (url.searchParams.has('predictions')) return;
-            url.searchParams.set('predictions', saved);
-            const a = window.parent.document.createElement('a');
-            a.href = url.toString();
-            window.parent.document.body.appendChild(a);
-            a.click();
-        }})();
-        </script>
-        """,
-        height=0,
-    )
 
 
 def save() -> None:
@@ -66,7 +50,7 @@ def save() -> None:
         return
     payload = json.dumps(st.session_state.get("prediction_picks", []))
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
-    components.html(f"<script>localStorage.setItem('{_STORAGE_KEY}', {js_literal});</script>", height=0)
+    components.html(f"<script>localStorage.setItem('{STORAGE_KEY}', {js_literal});</script>", height=0)
 
 
 def get_picks() -> list[dict]:

@@ -24,6 +24,7 @@ import streamlit.components.v1 as components
 sys.path.append(str(Path(__file__).resolve().parent))
 import db
 import following
+import localstorage_bridge
 import predictions
 import sidebar
 import style
@@ -31,11 +32,23 @@ import style
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
 # Seeds st.session_state's follow lists from the browser's own localStorage
-# (see following.py) — must run before any page can read them.
+# (see following.py) — must run before any page can read them. Each
+# bootstrap() only reads whatever ?param= is already in the URL; it does
+# NOT fire the actual localStorage->query-param redirect itself (see
+# localstorage_bridge.py's register()/redirect()) — that has to be called
+# from WITHIN a routed page's own script (see e.g. pages/13_Following.py
+# and pages/8_Todays_Games.py), not from here. Empirically, anything
+# main.py components.html()'s outside of pg.run()'s execution — before OR
+# after it — never actually executes its script in the browser; only
+# components.html calls made from inside the routed page itself reliably
+# run. register() itself is just plain Python (no rendering), so it's safe
+# to call here regardless.
 following.bootstrap()
+localstorage_bridge.register("following", following.STORAGE_KEY)
 # Same localStorage pattern for the prediction game's picks (see
 # predictions.py) — must also run before Today's Games can read them.
 predictions.bootstrap()
+localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
 # The bracket predictor's picks (see bracket_picks.py) are URL-based, not
 # localStorage-based, so unlike following.py/predictions.py that module's
 # bootstrap() only needs to run on the Playoffs page itself, not globally here.
