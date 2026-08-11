@@ -1,6 +1,7 @@
 """Reusable pandas Styler helpers for dashboard tables: color-coded stat
 columns (green = better, red = worse) and team-color badges."""
 import base64
+import math
 from pathlib import Path
 
 import pandas as pd
@@ -958,6 +959,80 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
         height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+    )
+    return fig
+
+
+_CONTACT_HEIGHT_FT = 3.0  # roughly where bat meets ball, used as each arc's starting height
+_MPH_TO_FT_PER_S = 1.46667
+_GRAVITY_FT_S2 = 32.174
+
+
+def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: dict) -> go.Figure:
+    """A 3D fly-path view of the same batted balls the 2D spray chart plots
+    — one line per ball from home plate to its real landing spot (the same
+    hc_x/hc_y-derived x_ft/y_ft the 2D chart uses), arced using basic
+    (drag-free) projectile-motion height from that ball's launch angle and
+    exit velocity. This is necessarily an APPROXIMATION of the real flight
+    path: Statcast's actual (drag-affected) trajectory polynomial isn't
+    part of the public API, only the launch/landing numbers are, so a real
+    trajectory's flatter-early/steeper-late asymmetry isn't reproduced —
+    only the START and END points are real data; the parabola connecting
+    them is a plain physics curve, not a measured path. Grounders
+    (launch_angle <= 0, or missing angle/speed) get a flat line at ground
+    level instead of a physically nonsensical arc.
+    `field_lines` is the same [(x_list, y_list), ...] wall/foul-line
+    segments the 2D chart draws (see pages/_Player.py) — redrawn here at
+    z=0 as a ground reference so the arcs read as "over a field" instead
+    of floating in space, rather than this function re-deriving the park
+    shape itself."""
+    fig = go.Figure()
+    for xs, ys in field_lines:
+        fig.add_trace(go.Scatter3d(
+            x=xs, y=ys, z=[0] * len(xs), mode="lines",
+            line=dict(color="#111318", width=3), showlegend=False, hoverinfo="skip",
+        ))
+
+    for outcome, group in batted_balls.groupby("outcome"):
+        color = colors.get(outcome, "#6B7280")
+        legend_shown = False
+        for _, row in group.iterrows():
+            x1, y1 = row["x_ft"], row["y_ft"]
+            angle, speed = row.get("launch_angle"), row.get("launch_speed")
+            if pd.isna(angle) or pd.isna(speed) or angle <= 0:
+                path_x, path_y, path_z = [0, x1], [0, y1], [_CONTACT_HEIGHT_FT, 0]
+            else:
+                vy0 = (speed * _MPH_TO_FT_PER_S) * math.sin(math.radians(angle))
+                peak_height = (vy0 ** 2) / (2 * _GRAVITY_FT_S2)
+                steps = [i / 24 for i in range(25)]
+                path_x = [t * x1 for t in steps]
+                path_y = [t * y1 for t in steps]
+                path_z = [_CONTACT_HEIGHT_FT * (1 - t) + 4 * peak_height * t * (1 - t) for t in steps]
+            fig.add_trace(go.Scatter3d(
+                x=path_x, y=path_y, z=path_z, mode="lines",
+                line=dict(color=color, width=4),
+                name=outcome, legendgroup=outcome, showlegend=not legend_shown,
+                hovertext=(
+                    f"{outcome}<br>Exit velo: {speed:.1f} mph<br>Launch angle: {angle:.0f}°"
+                    f"<br>Distance: {row.get('hit_distance_sc', 0):.0f} ft"
+                    if pd.notna(speed) and pd.notna(angle) else outcome
+                ),
+                hoverinfo="text",
+            ))
+            legend_shown = True
+
+    fig.update_layout(
+        height=600, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        scene=dict(
+            xaxis=dict(visible=False, range=[-420, 420]),
+            yaxis=dict(visible=False, range=[-70, 440]),
+            zaxis=dict(visible=False, range=[0, 120]),
+            aspectmode="manual", aspectratio=dict(x=1, y=1, z=0.3),
+            camera=dict(eye=dict(x=0, y=-1.8, z=0.6)),
+            bgcolor="rgba(0,0,0,0)",
+        ),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
     )
     return fig
 
