@@ -79,6 +79,67 @@ if notable:
             unsafe_allow_html=True,
         )
 
+if not otd_highlights and not notable:
+    # Without this, a date with nothing notable in the past 15 years just
+    # renders an empty header and nothing else — reads as broken/stuck
+    # rather than "genuinely nothing happened", the same reason Milestones
+    # below has its own "Nothing notable yesterday." fallback.
+    st.caption("No cycles, big HR games, no-hitters, or blowouts on this date in the past 15 years.")
+
+# Up near the top rather than at the bottom of the page — this section's
+# own leaderboard fetch (a single league-wide Statcast pull) can still
+# take 30+ seconds cold on its own, since that's one external call that
+# can't be split up further, but load_on_this_day above (which used to
+# make this whole page feel stuck) is now fast, so there's no longer a
+# reason to bury this down at the end.
+style.colored_header("Statcast Highlights", "batting")
+with st.spinner("Loading Statcast highlights..."):
+    leaderboard = db.load_statcast_daily_leaderboard(yesterday.isoformat())
+    # The leaderboard only has mlbID + a stat detail (no name/team — Statcast
+    # doesn't give us those directly), so look each one up against yesterday's
+    # already-loaded recent_batting/recent_pitching, the same player pool that
+    # played that date. A player Statcast reports but recent_batting/pitching
+    # doesn't (a rare Baseball-Reference/Statcast ID mismatch) is skipped
+    # rather than shown without a name/team.
+    LEADERBOARD_ENTRIES = [
+        ("hardest_hit", "Hardest Hit Ball", recent_batting),
+        ("fastest_pitch", "Fastest Pitch", recent_pitching),
+        ("longest_hr", "Longest Home Run", recent_batting),
+    ]
+    matched = []
+    for key, label, pool in LEADERBOARD_ENTRIES:
+        entry = leaderboard.get(key)
+        if not entry or pool.empty:
+            continue
+        # recent_batting's mlbID column comes back int32, but recent_pitching's
+        # comes back as str (a pre-existing dtype quirk, not something to fix
+        # broadly here) — compare as strings on both sides so either works.
+        match = pool[pool["mlbID"].astype(str) == str(entry["mlbID"])]
+        if match.empty:
+            continue
+        matched.append((key, label, entry, match.iloc[0]))
+
+    # Each entry's highlight clip is its own network round trip — fired off
+    # together via a thread pool rather than one at a time, same reasoning
+    # as the Milestones section below.
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        clip_urls = list(pool.map(
+            lambda args: db.find_statcast_highlight(*args),
+            [
+                (entry["mlbID"], teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))[0], yesterday.isoformat(), key)
+                for key, label, entry, player_row in matched
+            ],
+        ))
+
+for (key, label, entry, player_row), clip_url in zip(matched, clip_urls):
+    with st.container(border=True):
+        abbr, _, color = teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))
+        style.milestone_card(entry["mlbID"], player_row["Name"], abbr, color, f"{label}: {entry['detail']}")
+        if clip_url:
+            st.video(clip_url)
+if not matched:
+    st.caption("No Statcast data available for this date.")
+
 style.colored_header("Milestones", "headliners")
 if milestones:
     # Each milestone's highlight clip is its own network round trip (a
@@ -157,58 +218,3 @@ else:
             f"border-radius:6px;margin:4px 0;color:#DCE1EA'>{row['description']}</div>",
             unsafe_allow_html=True,
         )
-
-# Deliberately LAST on the page, not up with the other sections — this is
-# by far the slowest part of the Digest (a single league-wide Statcast
-# fetch that can take 30+ seconds cold, since Streamlit reruns the whole
-# script top-to-bottom but renders each st.markdown/st.video call as soon
-# as it executes). Putting it last means everything above is already on
-# screen while this is still loading, instead of the whole page appearing
-# to hang before showing anything.
-style.colored_header("Statcast Highlights", "batting")
-with st.spinner("Loading Statcast highlights..."):
-    leaderboard = db.load_statcast_daily_leaderboard(yesterday.isoformat())
-    # The leaderboard only has mlbID + a stat detail (no name/team — Statcast
-    # doesn't give us those directly), so look each one up against yesterday's
-    # already-loaded recent_batting/recent_pitching, the same player pool that
-    # played that date. A player Statcast reports but recent_batting/pitching
-    # doesn't (a rare Baseball-Reference/Statcast ID mismatch) is skipped
-    # rather than shown without a name/team.
-    LEADERBOARD_ENTRIES = [
-        ("hardest_hit", "Hardest Hit Ball", recent_batting),
-        ("fastest_pitch", "Fastest Pitch", recent_pitching),
-        ("longest_hr", "Longest Home Run", recent_batting),
-    ]
-    matched = []
-    for key, label, pool in LEADERBOARD_ENTRIES:
-        entry = leaderboard.get(key)
-        if not entry or pool.empty:
-            continue
-        # recent_batting's mlbID column comes back int32, but recent_pitching's
-        # comes back as str (a pre-existing dtype quirk, not something to fix
-        # broadly here) — compare as strings on both sides so either works.
-        match = pool[pool["mlbID"].astype(str) == str(entry["mlbID"])]
-        if match.empty:
-            continue
-        matched.append((key, label, entry, match.iloc[0]))
-
-    # Each entry's highlight clip is its own network round trip — fired off
-    # together via a thread pool rather than one at a time, same reasoning
-    # as the Milestones section above.
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        clip_urls = list(pool.map(
-            lambda args: db.find_statcast_highlight(*args),
-            [
-                (entry["mlbID"], teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))[0], yesterday.isoformat(), key)
-                for key, label, entry, player_row in matched
-            ],
-        ))
-
-for (key, label, entry, player_row), clip_url in zip(matched, clip_urls):
-    with st.container(border=True):
-        abbr, _, color = teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))
-        style.milestone_card(entry["mlbID"], player_row["Name"], abbr, color, f"{label}: {entry['detail']}")
-        if clip_url:
-            st.video(clip_url)
-if not matched:
-    st.caption("No Statcast data available for this date.")
