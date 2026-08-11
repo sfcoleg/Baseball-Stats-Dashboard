@@ -25,6 +25,10 @@ if all_articles:
             byline = " · ".join(p for p in (article["author"], article["date"]) if p)
             if byline:
                 st.caption(byline)
+            if article.get("image_path") and article["image_path"].exists():
+                st.image(str(article["image_path"]), width=320)
+            elif article.get("mlbid"):
+                st.image(style.headshot_url(article["mlbid"], width=360), width=320)
             st.markdown(article["body"])
     st.divider()
 

@@ -48,10 +48,13 @@ def load_articles() -> list[dict]:
                 meta[key.strip().lower()] = value.strip()
         if not meta.get("title"):
             continue
+        image_path = ARTICLES_DIR / "images" / meta["image"] if meta.get("image") else None
         articles.append({
             "title": meta["title"],
             "author": meta.get("author", ""),
             "date": meta.get("date", ""),
+            "mlbid": meta.get("mlbid", ""),
+            "image_path": image_path,
             "body": parts[2].strip(),
             "slug": path.stem,
         })
