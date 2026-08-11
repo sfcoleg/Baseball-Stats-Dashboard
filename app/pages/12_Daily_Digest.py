@@ -122,8 +122,8 @@ leaderboard = db.load_statcast_daily_leaderboard(yesterday.isoformat())
 # rather than shown without a name/team.
 LEADERBOARD_ENTRIES = [
     ("hardest_hit", "Hardest Hit Ball", recent_batting),
-    ("longest_hr", "Longest Home Run", recent_batting),
     ("fastest_pitch", "Fastest Pitch", recent_pitching),
+    ("longest_hr", "Longest Home Run", recent_batting),
 ]
 shown_any = False
 for key, label, pool in LEADERBOARD_ENTRIES:
