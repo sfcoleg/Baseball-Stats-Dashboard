@@ -150,5 +150,37 @@ def render_game_center():
                         st.caption(f"{abbr} Pitching")
                         st.dataframe(pitchers, hide_index=True, use_container_width=True)
 
+        style.colored_header("Spray Chart", "batting")
+        batted_balls = db.load_game_batted_balls(game_pk)
+        if batted_balls.empty:
+            st.caption("No batted-ball data available for this game yet.")
+        else:
+            team_filter = st.radio(
+                "Team filter", ["Both Teams", away_abbr, home_abbr],
+                horizontal=True, key="game_center_spray_team_filter",
+            )
+            if team_filter == "Both Teams":
+                filtered = batted_balls
+            else:
+                filtered = batted_balls[batted_balls["team_abbr"] == team_filter]
+
+            view_mode = st.radio(
+                "View", ["Top-Down", "3D Trajectory"],
+                horizontal=True, key="game_center_spray_view_mode",
+            )
+            field_lines = style.field_wall_lines(db.team_stadium_outline(home_abbr))
+            if filtered.empty:
+                st.caption("No batted balls for this selection.")
+            elif view_mode == "3D Trajectory":
+                st.plotly_chart(
+                    style.trajectory_3d_chart(filtered, field_lines, db.SPRAY_EVENT_COLORS),
+                    use_container_width=True, key="game_center_spray_3d",
+                )
+            else:
+                st.plotly_chart(
+                    style.spray_chart_2d(filtered, field_lines, db.SPRAY_EVENT_COLORS),
+                    width=800, height=490, key="game_center_spray_2d",
+                )
+
 
 render_game_center()

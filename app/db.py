@@ -1122,6 +1122,51 @@ def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
+def load_game_batted_balls(game_pk) -> pd.DataFrame:
+    """Every ball put in play by EITHER team in one specific game, for
+    Game Center's own spray chart — same shape as player_batted_ball_events
+    above plus `batter_name` and `team_abbr`, since a whole-game chart
+    (unlike a single player's season) needs to say whose ball is whose and
+    let the page filter to one team. Uses pybaseball's statcast_single_game
+    (a per-game pull) rather than statcast_batter per player on the roster,
+    since that would mean ~18-20 requests instead of one. Live-fetched, not
+    part of the daily ingest, same reasoning as player_batted_ball_events.
+    Returns empty (never raises) if the fetch fails or the game has no
+    batted-ball data yet (still in progress, or hasn't started)."""
+    cols = ["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc", "batter_name", "team_abbr"]
+    try:
+        import pybaseball as pb
+        raw = pb.statcast_single_game(int(game_pk))
+    except Exception:
+        return pd.DataFrame(columns=cols)
+    if raw is None or raw.empty:
+        return pd.DataFrame(columns=cols)
+
+    bb = raw.dropna(subset=["hc_x", "hc_y", "events"]).copy()
+    if bb.empty:
+        return pd.DataFrame(columns=cols)
+
+    bb["x_ft"] = (bb["hc_x"] - _HC_X0) * _HC_SCALE
+    bb["y_ft"] = (_HC_Y0 - bb["hc_y"]) * _HC_SCALE
+    bb["outcome"] = bb["events"].map(_SPRAY_EVENT_LABELS).fillna("Out")
+    # "Top" of the inning means the AWAY team is at bat, "Bot(tom)" the
+    # home team — statcast_single_game's own home_team/away_team columns
+    # give the batting team's actual abbreviation from that.
+    bb["team_abbr"] = bb.apply(
+        lambda r: r["away_team"] if r.get("inning_topbot") == "Top" else r["home_team"], axis=1
+    )
+    # player_name here is "Last, First" (e.g. "Lee, Jung Hoo") — reformat
+    # to the "First Last" convention used everywhere else in the app.
+    def _first_last(name):
+        if not isinstance(name, str) or ", " not in name:
+            return name
+        last, first = name.split(", ", 1)
+        return f"{first} {last}"
+    bb["batter_name"] = bb["player_name"].map(_first_last)
+    return bb[cols].reset_index(drop=True)
+
+
 def _readable_event(events) -> str:
     return events.replace("_", " ").title() if isinstance(events, str) and events else "In Play"
 

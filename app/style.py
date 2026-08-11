@@ -993,6 +993,105 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
     return fig
 
 
+def field_wall_lines(stadium_outline: dict | None) -> list:
+    """Wall/foul-line segments as plain [(x_list, y_list), ...] pairs, feet
+    from home plate — shared ground-shape data for both the 2D spray chart
+    (drawn flat) and the 3D trajectory chart (redrawn at z=0 as a ground
+    reference), and for any other view (e.g. Game Center) that wants the
+    same field outline. `stadium_outline` is db.team_stadium_outline's
+    result (None when no digitized shape is available for that team,
+    which falls back to a stylized generic park instead of a real one)."""
+    field_lines = []
+    if stadium_outline:
+        # This team's real park — see db.team_stadium_outline for how
+        # pybaseball's bundled per-park wall digitization gets calibrated
+        # into this same feet-from-home-plate space (using outfield_inner,
+        # the actual fence — outfield_outer is the back-of-stands
+        # boundary, deliberately left out).
+        for segment in ("outfield_inner", "infield_outer", "infield_inner", "foul_lines"):
+            pts = stadium_outline.get(segment)
+            if not pts:
+                continue
+            field_lines.append(([p[0] for p in pts], [p[1] for p in pts]))
+    else:
+        # Stylized fallback: foul lines to the poles, an outfield wall arc
+        # (shallower down the lines than to straightaway center, like a
+        # real ballpark), and the infield dirt diamond — drawn from
+        # scratch, not any specific park's real dimensions.
+        wall_theta = list(range(-45, 46))
+        wall_x = [(330 + 70 * (1 - abs(t) / 45)) * math.sin(math.radians(t)) for t in wall_theta]
+        wall_y = [(330 + 70 * (1 - abs(t) / 45)) * math.cos(math.radians(t)) for t in wall_theta]
+        field_lines.append((wall_x, wall_y))
+        field_lines.append(([0, wall_x[0]], [0, wall_y[0]]))
+        field_lines.append(([0, wall_x[-1]], [0, wall_y[-1]]))
+        field_lines.append(([0, 63.6, 0, -63.6, 0], [0, 63.6, 127.3, 63.6, 0]))
+    return field_lines
+
+
+def spray_chart_2d(batted_balls: pd.DataFrame, field_lines: list, colors: dict) -> go.Figure:
+    """Top-down spray chart — the flip side of trajectory_3d_chart below,
+    same field_lines/colors inputs, same real hc_x/hc_y-derived x_ft/y_ft
+    landing spots. Includes the batter's name in each point's hover when
+    `batted_balls` has a batter_name column (Game Center's whole-game
+    chart, where the ball could be anyone's — a single player's own
+    season chart doesn't need to repeat their own name on every point)."""
+    fig = go.Figure()
+    field_line_style = dict(color="#111318", width=2.5)
+    for xs, ys in field_lines:
+        fig.add_trace(go.Scatter(
+            x=xs, y=ys, mode="lines", line=field_line_style, showlegend=False, hoverinfo="skip",
+        ))
+    has_names = "batter_name" in batted_balls.columns
+    for outcome, group in batted_balls.groupby("outcome"):
+        # Plain Python lists, not pandas Series/DataFrame — passing the
+        # latter through st.plotly_chart here mis-serializes (a bad typed-
+        # array encoding that silently produces garbage-scale coordinates),
+        # while the field-outline traces above, built from plain lists,
+        # render fine.
+        if has_names:
+            customdata = group[["launch_speed", "launch_angle", "hit_distance_sc", "batter_name"]].values.tolist()
+            hovertemplate = (
+                "%{customdata[3]}<br>" + f"{outcome}<br>Exit velo: %{{customdata[0]}} mph<br>"
+                "Launch angle: %{customdata[1]}°<br>Distance: %{customdata[2]} ft<extra></extra>"
+            )
+        else:
+            customdata = group[["launch_speed", "launch_angle", "hit_distance_sc"]].values.tolist()
+            hovertemplate = (
+                f"{outcome}<br>Exit velo: %{{customdata[0]}} mph<br>"
+                "Launch angle: %{customdata[1]}°<br>Distance: %{customdata[2]} ft<extra></extra>"
+            )
+        fig.add_trace(go.Scatter(
+            x=group["x_ft"].tolist(), y=group["y_ft"].tolist(), mode="markers", name=outcome,
+            marker=dict(color=colors.get(outcome, "#6B7280"), size=8, opacity=0.75),
+            customdata=customdata, hovertemplate=hovertemplate,
+        ))
+    # scaleanchor forces equal x/y pixel scale (so the field isn't visually
+    # stretched into an oval) — but that only renders at a sensible size if
+    # the chart's own pixel box already matches the data's aspect ratio;
+    # st.plotly_chart's default width="stretch" doesn't, which is what
+    # squashed this into a tiny centered cluster before. Fixed width/height
+    # (set by the caller, matching this ~800:490 ratio) fixes it instead.
+    fig.update_layout(
+        width=800, height=490, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        # No scaleanchor: forcing a strict 1:1 pixel scale fights the fixed
+        # width/height above in a way that keeps blowing the range out to
+        # several times its intended size (Plotly recomputing to satisfy
+        # the ratio against the actual plot-area pixels, e.g. after the
+        # legend eats into it, not just the figure's nominal box). The
+        # ranges below already approximate the same ~800:490 aspect ratio,
+        # which is enough to read as correctly-proportioned without
+        # scaleanchor fighting to enforce it exactly. The y-axis floor sits
+        # at -70 (not 0) because real park outlines dip behind home plate
+        # by up to ~60ft (backstop/foul-territory shape) — a tighter floor
+        # clipped the bottom of the park for several teams.
+        xaxis=dict(visible=False, range=[-420, 420], autorange=False),
+        yaxis=dict(visible=False, range=[-70, 440], autorange=False),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+    )
+    return fig
+
+
 _CONTACT_HEIGHT_FT = 3.0  # roughly where bat meets ball, used as each arc's starting height
 _MPH_TO_FT_PER_S = 1.46667
 _GRAVITY_FT_S2 = 32.174
@@ -1056,14 +1155,20 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
                 path_x = [t * x1 for t in steps]
                 path_y = [t * y1 for t in steps]
                 path_z = [_CONTACT_HEIGHT_FT * (1 - t) + 4 * peak_height * t * (1 - t) for t in steps]
+            # batter_name is only present on Game Center's whole-game chart
+            # (a single player's own spray chart has no reason to repeat
+            # their own name in every hover) — row.get() rather than
+            # row["batter_name"] since the column may not exist at all.
+            batter_name = row.get("batter_name")
+            name_prefix = f"{batter_name}<br>" if pd.notna(batter_name) else ""
             fig.add_trace(go.Scatter3d(
                 x=path_x, y=path_y, z=path_z, mode="lines",
                 line=dict(color=color, width=4),
                 name=outcome, legendgroup=outcome, showlegend=not legend_shown,
                 hovertext=(
-                    f"{outcome}<br>Exit velo: {speed:.1f} mph<br>Launch angle: {angle:.0f}°"
+                    f"{name_prefix}{outcome}<br>Exit velo: {speed:.1f} mph<br>Launch angle: {angle:.0f}°"
                     f"<br>Distance: {row.get('hit_distance_sc', 0):.0f} ft"
-                    if pd.notna(speed) and pd.notna(angle) else outcome
+                    if pd.notna(speed) and pd.notna(angle) else f"{name_prefix}{outcome}"
                 ),
                 hoverinfo="text",
             ))
