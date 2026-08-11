@@ -345,14 +345,21 @@ def game_state_html(status_line: str, bases: dict, outs) -> str:
     )
 
 
-def run_scored_badge_html(runs: int, team_color: str) -> str:
-    """A "+N" pill in the scoring team's own color that pops in and fades
-    out (see main.py's diamondRunScored keyframes) — meant to be rendered
-    ONLY on the fragment rerun where Today's Games detects a team's score
-    just went up (comparing against the previous poll's score in
-    st.session_state), so it naturally appears once per run scored rather
-    than needing to be explicitly dismissed."""
-    return f"<span class='run-scored-badge' style='background-color:{team_color}'>+{runs}</span>"
+def run_scored_badge_html(runs: int, team_color: str, fly_x: str) -> str:
+    """A circular "+N" badge in the scoring team's own color that pops in
+    next to the score, then flies the short distance `fly_x` (a CSS length
+    with sign, e.g. "10px" or "-10px" — positive travels right) into the
+    score digit and shrinks away, timed (see main.py's diamondRunFlyIn
+    keyframes) to land right as that digit's own diamondScorePop animation
+    peaks — the "jumps into the score" effect. Meant to be rendered ONLY on
+    the fragment rerun where Today's Games detects a team's score just went
+    up (comparing against the previous poll's score in st.session_state),
+    so it naturally appears once per run scored rather than needing to be
+    explicitly dismissed."""
+    return (
+        f"<span class='run-scored-badge' style='background-color:{team_color};--fly-x:{fly_x}'>"
+        f"+{runs}</span>"
+    )
 
 
 def _playoff_pct_color(pct: float) -> str:

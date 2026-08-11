@@ -126,11 +126,10 @@ def render_games():
                     f"<img src='{away_logo}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if away_logo else ""
                 )
-                away_badge = style.run_scored_badge_html(away_runs_scored, away_color) if away_runs_scored else ""
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
                     f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
-                    f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span>{away_badge} &nbsp;"
+                    f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span></div>",
                     unsafe_allow_html=True,
                 )
@@ -149,9 +148,21 @@ def render_games():
 
             with mid:
                 if started and live.get("away_score") is not None and live.get("home_score") is not None:
+                    away_span_class = "score-pop" if away_runs_scored else ""
+                    home_span_class = "score-pop" if home_runs_scored else ""
+                    # Badges sit right next to whichever number changed and
+                    # fly a short distance TOWARD it (away's badge is to its
+                    # left and flies right; home's is to its right and flies
+                    # left) — see style.run_scored_badge_html for the sign
+                    # convention and main.py's diamondRunFlyIn/.score-pop
+                    # keyframes for how the two are timed to land together.
+                    away_badge = style.run_scored_badge_html(away_runs_scored, away_color, "10px") if away_runs_scored else ""
+                    home_badge = style.run_scored_badge_html(home_runs_scored, home_color, "-10px") if home_runs_scored else ""
                     st.markdown(
                         f"<div style='text-align:center;font-size:1.8rem;font-weight:700'>"
-                        f"{int(live['away_score'])} - {int(live['home_score'])}</div>",
+                        f"{away_badge}<span class='{away_span_class}'>{int(live['away_score'])}</span>"
+                        f" - "
+                        f"<span class='{home_span_class}'>{int(live['home_score'])}</span>{home_badge}</div>",
                         unsafe_allow_html=True,
                     )
                 else:
@@ -189,11 +200,10 @@ def render_games():
                     f"<img src='{home_logo}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if home_logo else ""
                 )
-                home_badge = style.run_scored_badge_html(home_runs_scored, home_color) if home_runs_scored else ""
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
                     f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
-                    f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span>{home_badge} &nbsp;"
+                    f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span></div>",
                     unsafe_allow_html=True,
                 )

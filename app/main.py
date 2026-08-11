@@ -138,21 +138,33 @@ st.markdown(
     "}"
     ".live-badge { animation: diamondLivePulse 1.6s ease-in-out infinite; }"
     # Today's Games' "+N" run-scored flash (see style.run_scored_badge_html)
-    # — pops in with a little overshoot, holds, then drifts up and fades.
-    # forwards keeps it at its final (invisible) state rather than
-    # snapping back to frame 0 once the animation completes, so it doesn't
-    # flicker back into view while sitting in the DOM waiting for the next
-    # fragment rerun to either replace or drop it.
-    "@keyframes diamondRunScored {"
-    "  0% { transform: scale(0.4) translateY(6px); opacity: 0; }"
-    "  20% { transform: scale(1.25) translateY(0); opacity: 1; }"
-    "  40% { transform: scale(1) translateY(0); opacity: 1; }"
-    "  100% { transform: scale(1) translateY(-18px); opacity: 0; }"
+    # — pops in next to the score with a little overshoot, holds, then
+    # flies sideways by --fly-x (set per-instance, positive = rightward)
+    # while shrinking away, landing right as the score digit itself
+    # (.score-pop, same duration so their timelines stay in sync) peaks its
+    # own scale-up — the two together read as the run "jumping into" the
+    # score. forwards keeps the badge at its final (invisible) state
+    # rather than snapping back to frame 0 once the animation completes,
+    # so it doesn't flicker back into view while sitting in the DOM
+    # waiting for the next fragment rerun to either replace or drop it.
+    "@keyframes diamondRunFlyIn {"
+    "  0% { transform: scale(0.5) translateX(0); opacity: 0; }"
+    "  25% { transform: scale(1.2) translateX(0); opacity: 1; }"
+    "  55% { transform: scale(1) translateX(0); opacity: 1; }"
+    "  100% { transform: scale(0.3) translateX(var(--fly-x)); opacity: 0; }"
     "}"
     ".run-scored-badge {"
-    "  display:inline-block; animation: diamondRunScored 2.8s ease-out forwards;"
-    "  font-weight:800; padding:2px 9px; border-radius:8px; margin-left:6px; color:#12141C;"
+    "  display:inline-flex; align-items:center; justify-content:center;"
+    "  width:22px; height:22px; border-radius:50%; vertical-align:middle;"
+    "  animation: diamondRunFlyIn 0.9s cubic-bezier(.34,1.56,.64,1) forwards;"
+    "  font-weight:800; font-size:0.75rem; margin:0 4px; color:#12141C;"
     "}"
+    "@keyframes diamondScorePop {"
+    "  0%, 55% { transform: scale(1); }"
+    "  75% { transform: scale(1.3); }"
+    "  100% { transform: scale(1); }"
+    "}"
+    ".score-pop { display:inline-block; animation: diamondScorePop 0.9s ease-out; }"
     "</style>",
     unsafe_allow_html=True,
 )
