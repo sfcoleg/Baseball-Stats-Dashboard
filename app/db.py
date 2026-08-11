@@ -372,6 +372,42 @@ def load_live_scores(date_str: str) -> dict:
     return scores
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=500)
+def load_schedule_for_date(date_str: str) -> pd.DataFrame:
+    """Every game played on `date_str` — any past date, not just today —
+    fetched directly from the MLB Stats API (not part of the daily ingest,
+    which only ever pulls today's slate into the todays_games table; a
+    historical lookup is rare enough per-date that fetching on demand beats
+    pre-loading every date that might ever get searched). Long TTL since a
+    past date's final scores never change once the games are over."""
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "date": date_str, "hydrate": "team,linescore"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        dates = resp.json().get("dates", [])
+        games = dates[0].get("games", []) if dates else []
+    except Exception:
+        return pd.DataFrame()
+
+    rows = []
+    for g in games:
+        away, home = g["teams"]["away"], g["teams"]["home"]
+        rows.append({
+            "game_pk": g.get("gamePk"),
+            "status": g.get("status", {}).get("detailedState"),
+            "away_team": away["team"]["name"],
+            "home_team": home["team"]["name"],
+            "away_abbr": teams.abbr_for_team_id(away["team"]["id"]),
+            "home_abbr": teams.abbr_for_team_id(home["team"]["id"]),
+            "away_score": away.get("score"),
+            "home_score": home.get("score"),
+        })
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(show_spinner=False, ttl=60, max_entries=20)
 def load_linescore(game_pk) -> dict | None:
     """Live per-inning box score for one game, fetched on demand (not part
