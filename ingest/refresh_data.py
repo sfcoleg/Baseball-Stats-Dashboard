@@ -30,6 +30,7 @@ from pybaseball import (
     bwar_pitch,
     statcast_batter_exitvelo_barrels,
     statcast_batter_expected_stats,
+    statcast_batter_percentile_ranks,
     statcast_pitcher_exitvelo_barrels,
     statcast_pitcher_expected_stats,
     statcast_outs_above_average,
@@ -307,6 +308,22 @@ def fetch_batting(season=CURRENT_SEASON):
         "est_woba_minus_woba_diff": "xwOBA_diff",
     })
 
+    print(f"Fetching {season} Statcast contact rate (batters)...")
+    # statcast_batter_percentile_ranks returns PERCENTILE RANKS (0-100 vs.
+    # that season's league), not raw rates — confirmed directly: Arraez
+    # (an elite-contact hitter) came back with whiff_percent=100, a high-K
+    # hitter came back near 0. Savant's own convention inverts "bad-when-
+    # high" stats so 100 always means "best in the league" regardless of
+    # stat direction — so this whiff_percent column already IS a contact
+    # percentile (100 = least swing-and-miss) with no further inversion
+    # needed; renamed to contact_pctile (not contact_pct) to make clear
+    # it's a percentile rank, not a literal contact-rate percentage.
+    # Confirmed (unlike baserunning-run-value below) that this endpoint
+    # actually varies by the `season` argument rather than silently always
+    # returning the current season.
+    contact = statcast_batter_percentile_ranks(season)[["player_id", "whiff_percent"]]
+    contact = contact.rename(columns={"whiff_percent": "contact_pctile"})
+
     print(f"Fetching {season} WAR (Baseball-Reference)...")
     war = fetch_war(is_pitcher=False, season=season)
 
@@ -331,7 +348,7 @@ def fetch_batting(season=CURRENT_SEASON):
         baserunning_value = pd.DataFrame({"player_id": pd.Series(dtype="float64"), "baserunning_runs": pd.Series(dtype="float64")})
 
     batting["mlbID"] = pd.to_numeric(batting["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, sprint, baserunning_value, war):
+    for stats_df in (exitvelo, expected, contact, sprint, baserunning_value, war):
         batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
         batting = batting.drop(columns="player_id")
 
