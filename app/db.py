@@ -653,6 +653,13 @@ _STATCAST_HIGHLIGHT_TAGS = {
     "fastest_pitch": {"pitching"},
 }
 
+# Procedural/review clips that can carry a real player's ID and a broad
+# category tag (e.g. "pitching") without being footage of an actual play —
+# confirmed via a real "Ball 1 overturned by ABS" clip matching a
+# fastest-pitch lookup this way. Excluded outright in
+# _find_tagged_player_clip regardless of what else the clip is tagged.
+_NON_HIGHLIGHT_TAGS = {"abs", "challenge"}
+
 
 def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str | None:
     """Shared lookup behind find_milestone_highlight/find_statcast_highlight
@@ -667,6 +674,11 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
     unrelated player's ID) beat the correct player's own individual home-
     run clip purely because it appeared first in MLB's list; a multi-player
     clip is only used as a last resort, if no individual one matches.
+    Clips tagged as an Automated Ball-Strike challenge (taxonomy "abs" or
+    "challenge") are skipped outright regardless of tag match — confirmed
+    one such clip ("Ball 1 overturned by ABS") matched a "fastest_pitch"
+    lookup purely by carrying the right player's ID and the generic
+    "pitching" tag, despite having nothing to do with that pitch's speed.
     Returns None (never raises) if there's no schedule match, no content,
     or nothing tagged for both the player and the given tags — callers
     should render without a video rather than error out."""
@@ -691,6 +703,8 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
         if str(mlbID) not in player_ids:
             continue
         item_tags = {k["value"] for k in keywords if k.get("type") == "taxonomy"}
+        if item_tags & _NON_HIGHLIGHT_TAGS:
+            continue
         if not (item_tags & tags):
             continue
         url = None
