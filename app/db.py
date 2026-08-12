@@ -1228,7 +1228,7 @@ def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
 
 
-@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
+@st.cache_data(show_spinner=False, ttl=600, max_entries=30)
 def load_game_batted_balls(game_pk) -> pd.DataFrame:
     """Every ball put in play by EITHER team in one specific game, for
     Game Center's own spray chart — same shape as player_batted_ball_events
@@ -1239,10 +1239,16 @@ def load_game_batted_balls(game_pk) -> pd.DataFrame:
     since that would mean ~18-20 requests instead of one. Live-fetched, not
     part of the daily ingest, same reasoning as player_batted_ball_events.
     Only ever called for a finished game (see _Game_Detail.py's Spray Chart
-    section) — confirmed directly against Baseball Savant's own CSV export
-    that it has zero rows for a game still in progress, so there's nothing
-    to gain from a short live-refresh ttl here; once a game is final this
-    data doesn't change, hence the long ttl.
+    section) — confirmed it has zero rows for a game still in progress, so
+    there's nothing to gain from a live-refresh ttl here. BUT Baseball
+    Savant's own per-game export lags MLB's "Final"/"Game Over" status by
+    some real amount too (confirmed directly: a game showing Game Over
+    still had zero Savant rows, while a game from the previous day that
+    had the exact same empty result right after ending was fully populated
+    the next time it was checked) — so a long ttl here previously meant an
+    empty first check right after the game ended stayed cached and "broken
+    looking" for hours even once Savant caught up. 10 minutes balances
+    that lag against not hammering Savant on every page load.
     Returns empty (never raises) if the fetch fails or the game genuinely
     has no batted-ball data."""
     cols = ["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc", "batter_name", "team_abbr"]

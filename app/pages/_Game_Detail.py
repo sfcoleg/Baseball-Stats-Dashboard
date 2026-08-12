@@ -178,9 +178,12 @@ def render_game_center():
             style.colored_header("Game Highs", "batting")
             hi_col1, hi_col2 = st.columns(2)
             with hi_col1:
-                hardest_label = f"{hardest_hit:.1f} mph" if pd.notna(hardest_hit) else (
-                    "Final only" if status not in db.FINAL_STATUSES else "—"
-                )
+                if pd.notna(hardest_hit):
+                    hardest_label = f"{hardest_hit:.1f} mph"
+                elif status not in db.FINAL_STATUSES:
+                    hardest_label = "Final only"
+                else:
+                    hardest_label = "Processing…"
                 st.metric("Hardest Hit Ball", hardest_label)
             with hi_col2:
                 st.metric("Fastest Pitch", f"{fastest_pitch:.1f} mph" if fastest_pitch else "—")
@@ -196,7 +199,10 @@ def render_game_center():
         else:
             batted_balls = db.load_game_batted_balls(game_pk)
             if batted_balls.empty:
-                st.caption("No batted-ball data available for this game.")
+                st.caption(
+                    "Baseball Savant hasn't finished processing this game's batted-ball data yet — "
+                    "check back in a bit."
+                )
             else:
                 team_filter = st.radio(
                     "Team filter", ["Both Teams", away_abbr, home_abbr],
@@ -225,59 +231,26 @@ def render_game_center():
                         width=800, height=490, key="game_center_spray_2d",
                     )
 
-        style.colored_header("Replay", "pitching")
-        replay_steps = replay_for_highs
-        if not replay_steps:
-            st.caption("No pitch-by-pitch replay data available for this game yet.")
-        else:
-            idx = st.slider(
-                "Pitch", 0, len(replay_steps) - 1, len(replay_steps) - 1, key="game_center_replay_slider",
-            )
-            step = replay_steps[idx]
-            half_label = "Top" if step["half_inning"] == "top" else "Bottom"
-            st.caption(
-                f"{step['pitcher']} to {step['batter']} — "
-                f"{step['balls']}-{step['strikes']}, {step['outs']} out(s)"
-            )
-            score_col, sz_col = st.columns([1, 1])
-            with score_col:
-                st.markdown(
-                    f"<div style='font-size:2rem;font-weight:700'>"
-                    f"{away_abbr} {step['away_score']} - {step['home_score']} {home_abbr}</div>",
-                    unsafe_allow_html=True,
-                )
-                st.markdown(
-                    style.game_state_html(f"{half_label} {step['inning']}", step["bases"], step["outs"], scale=1.6),
-                    unsafe_allow_html=True,
-                )
-                if step.get("description"):
-                    speed_bit = f"{step['speed']:.1f} mph " if step.get("speed") else ""
-                    st.caption(f"{speed_bit}{step['pitch_type']} — {step['description']}")
-            with sz_col:
-                st.plotly_chart(
-                    style.strike_zone_chart([step]), use_container_width=True, key="game_center_replay_sz",
-                )
-
         style.colored_header("Pitcher Breakdown", "pitching")
         all_pitches = replay_for_highs
         pitchers = sorted({p["pitcher"] for p in all_pitches if p.get("pitcher")})
         if not pitchers:
             st.caption("No pitch data available for this game yet.")
         else:
-                selected_pitcher = st.selectbox("Pitcher", pitchers, key="game_center_pitcher_breakdown")
-                pitcher_pitches = [p for p in all_pitches if p["pitcher"] == selected_pitcher]
-                st.caption(f"{len(pitcher_pitches)} pitches")
-                mix_col, heat_col = st.columns(2)
-                with mix_col:
-                    st.plotly_chart(
-                        style.pitch_mix_chart(pitcher_pitches), use_container_width=True,
-                        key="game_center_pitch_mix",
-                    )
-                with heat_col:
-                    st.plotly_chart(
-                        style.zone_heatmap_chart(pitcher_pitches), use_container_width=True,
-                        key="game_center_zone_heatmap",
-                    )
+            selected_pitcher = st.selectbox("Pitcher", pitchers, key="game_center_pitcher_breakdown")
+            pitcher_pitches = [p for p in all_pitches if p["pitcher"] == selected_pitcher]
+            st.caption(f"{len(pitcher_pitches)} pitches")
+            mix_col, heat_col = st.columns(2)
+            with mix_col:
+                st.plotly_chart(
+                    style.pitch_mix_chart(pitcher_pitches), use_container_width=True,
+                    key="game_center_pitch_mix",
+                )
+            with heat_col:
+                st.plotly_chart(
+                    style.zone_heatmap_chart(pitcher_pitches), use_container_width=True,
+                    key="game_center_zone_heatmap",
+                )
 
 
 render_game_center()
