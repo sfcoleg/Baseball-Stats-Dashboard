@@ -152,12 +152,11 @@ def render_game_center():
 
         style.colored_header("Spray Chart", "batting")
         if status not in db.FINAL_STATUSES:
-            # pybaseball's statcast_single_game pull for a live game is slow
-            # and unreliable enough (Baseball Savant's pitch-tracking data
-            # lags live play, sometimes badly) that trying to keep it fresh
-            # every 10s fragment refresh just produces an empty/stale chart
-            # mid-game. Simpler and more honest to wait for the final,
-            # complete pull once the game's actually over.
+            # Confirmed directly against Baseball Savant's own CSV export
+            # (the source behind pybaseball's statcast_single_game): for an
+            # in-progress game it returns the header row and zero data rows
+            # — not a lag, not partial data, nothing at all until the game
+            # is over. So there's no live version of this chart to show.
             st.caption("Spray chart available once the game is final.")
         else:
             batted_balls = db.load_game_batted_balls(game_pk)

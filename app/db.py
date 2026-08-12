@@ -1134,8 +1134,13 @@ def load_game_batted_balls(game_pk) -> pd.DataFrame:
     (a per-game pull) rather than statcast_batter per player on the roster,
     since that would mean ~18-20 requests instead of one. Live-fetched, not
     part of the daily ingest, same reasoning as player_batted_ball_events.
-    Returns empty (never raises) if the fetch fails or the game has no
-    batted-ball data yet (still in progress, or hasn't started)."""
+    Only ever called for a finished game (see _Game_Detail.py's Spray Chart
+    section) — confirmed directly against Baseball Savant's own CSV export
+    that it has zero rows for a game still in progress, so there's nothing
+    to gain from a short live-refresh ttl here; once a game is final this
+    data doesn't change, hence the long ttl.
+    Returns empty (never raises) if the fetch fails or the game genuinely
+    has no batted-ball data."""
     cols = ["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc", "batter_name", "team_abbr"]
     try:
         import pybaseball as pb
