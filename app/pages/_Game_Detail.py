@@ -155,7 +155,7 @@ def render_game_center():
                     if not batters.empty:
                         st.caption(f"{abbr} Batting")
                         st.dataframe(
-                            batters[["Name", "Pos", "AB", "R", "H", "RBI", "BB", "SO"]],
+                            batters[["Name", "Pos", "AB", "R", "H", "HR", "RBI", "BB", "SO"]],
                             hide_index=True, use_container_width=True,
                         )
                     pitchers = pd.DataFrame(player_box[side]["pitchers"])
