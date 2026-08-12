@@ -33,6 +33,7 @@ from pybaseball import (
     statcast_batter_percentile_ranks,
     statcast_pitcher_exitvelo_barrels,
     statcast_pitcher_expected_stats,
+    statcast_pitcher_percentile_ranks,
     statcast_outs_above_average,
     statcast_sprint_speed,
 )
@@ -339,20 +340,34 @@ def fetch_batting(season=CURRENT_SEASON):
     # Confirmed (unlike baserunning-run-value below) that this endpoint
     # actually varies by the `season` argument rather than silently always
     # returning the current season.
-    contact = statcast_batter_percentile_ranks(season)[["player_id", "whiff_percent"]]
-    contact = contact.rename(columns={"whiff_percent": "contact_pctile"})
-
-    print(f"Fetching {season} Statcast raw contact rate (batters)...")
-    # The literal rate this time (e.g. Arraez ~94.7%), not a percentile —
-    # see fetch_savant_custom_leaderboard's docstring for how this differs
-    # from contact_pctile above. Both are kept: contact_pctile answers "how
-    # does this compare to the league," contact_pct answers "what's the
-    # actual number."
-    contact_raw = fetch_savant_custom_leaderboard(season, "batter", ["whiff_percent"])[
-        ["player_id", "whiff_percent"]
+    # chase_percent and bat_speed ride along on the same call as
+    # whiff_percent — one fetch, three percentile columns, not three
+    # separate requests.
+    contact = statcast_batter_percentile_ranks(season)[
+        ["player_id", "whiff_percent", "chase_percent", "bat_speed"]
     ]
+    contact = contact.rename(columns={
+        "whiff_percent": "contact_pctile",
+        "chase_percent": "chase_pctile",
+        "bat_speed": "bat_speed_pctile",
+    })
+
+    print(f"Fetching {season} Statcast raw contact/chase/bat-speed rate (batters)...")
+    # Literal numbers this time, not percentiles — see
+    # fetch_savant_custom_leaderboard's docstring for how this differs from
+    # the _pctile columns above. Both kept: the _pctile columns answer "how
+    # does this compare to the league," these answer "what's the actual
+    # number." oz_swing_percent (not "chase_percent") is this endpoint's
+    # actual selection name for raw chase rate — confirmed by testing
+    # several candidate names directly against the live endpoint.
+    contact_raw = fetch_savant_custom_leaderboard(
+        season, "batter", ["whiff_percent", "oz_swing_percent", "avg_swing_speed"]
+    )[["player_id", "whiff_percent", "oz_swing_percent", "avg_swing_speed"]]
     contact_raw["contact_pct"] = 100 - contact_raw["whiff_percent"]
-    contact_raw = contact_raw.drop(columns="whiff_percent")
+    contact_raw = contact_raw.drop(columns="whiff_percent").rename(columns={
+        "oz_swing_percent": "chase_pct",
+        "avg_swing_speed": "bat_speed",
+    })
 
     print(f"Fetching {season} WAR (Baseball-Reference)...")
     war = fetch_war(is_pitcher=False, season=season)
@@ -427,11 +442,32 @@ def fetch_pitching(season=CURRENT_SEASON):
         "era_minus_xera_diff": "xERA_diff",
     })
 
+    print(f"Fetching {season} Statcast velocity/chase percentile (pitchers)...")
+    # Same percentile-rank convention confirmed for the batter side above —
+    # verified directly here too (Chapman/Skenes both came back with high
+    # fb_velocity and chase_percent percentiles, matching their real
+    # elite velocity/deception reputations), no inversion needed.
+    stuff_pctile = statcast_pitcher_percentile_ranks(season)[
+        ["player_id", "fb_velocity", "chase_percent"]
+    ].rename(columns={"fb_velocity": "fastball_velo_pctile", "chase_percent": "induced_chase_pctile"})
+
+    print(f"Fetching {season} Statcast raw velocity/chase rate (pitchers)...")
+    # oz_swing_percent is this endpoint's actual selection name for raw
+    # chase rate (same as the batter side) — here it's rate INDUCED by
+    # the pitcher, higher is better for them (confirmed: Chapman/Skenes
+    # both above league-average).
+    stuff_raw = fetch_savant_custom_leaderboard(
+        season, "pitcher", ["fastball_avg_speed", "oz_swing_percent"]
+    )[["player_id", "fastball_avg_speed", "oz_swing_percent"]].rename(columns={
+        "fastball_avg_speed": "fastball_velo",
+        "oz_swing_percent": "induced_chase_pct",
+    })
+
     print(f"Fetching {season} WAR (Baseball-Reference)...")
     war = fetch_war(is_pitcher=True, season=season)
 
     pitching["mlbID"] = pd.to_numeric(pitching["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, war):
+    for stats_df in (exitvelo, expected, stuff_pctile, stuff_raw, war):
         pitching = pitching.merge(stats_df, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
         pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
 
