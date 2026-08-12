@@ -635,19 +635,17 @@ _HIGHLIGHT_CATEGORY_TAGS = {
 }
 
 # load_statcast_daily_leaderboard's leaderboard keys -> taxonomy tag(s).
-# Looser than _HIGHLIGHT_CATEGORY_TAGS above by necessity: "hardest hit
-# ball" and "fastest pitch" aren't a distinct taggable PLAY the way a home
-# run or save is (a hardest-hit ball might be a single, an out, anything;
-# a fastest pitch might not even be a strikeout) — so these fall back to
-# the broadest tag for that side of the ball (any hitting clip / any
-# pitching clip) rather than an exact match. That means the embedded clip
-# is guaranteed to be of the right PLAYER and the right general type of
-# play, but for "hardest_hit"/"fastest_pitch" specifically it's not
-# guaranteed to be that literal pitch or swing.
+# "hardest_hit" and "fastest_pitch" deliberately have NO entry here (and so
+# never get a video) — confirmed by direct inspection that MLB has no tag
+# meaning "this pitcher's single fastest pitch" or "this batter's single
+# hardest-hit ball", only the broadest "pitching"/"hitting" tags, which can
+# and did match something totally unrelated (an Automated Ball-Strike
+# challenge clip, for a "fastest pitch" entry, just because it carried the
+# same pitcher's player_id and the generic "pitching" tag). A wrong video
+# sitting next to a specific stat is worse than no video — "longest_hr"
+# keeps its entry since "home-run" IS an exact tag for that literal play.
 _STATCAST_HIGHLIGHT_TAGS = {
     "longest_hr": {"home-run"},
-    "hardest_hit": {"home-run", "hitting"},
-    "fastest_pitch": {"pitching"},
 }
 
 
@@ -656,10 +654,17 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
     — finds the player's game on `date_str` via the schedule, then searches
     that game's content/highlights for a clip tagged for both that player
     (keywordsAll's player_id) and any of `tags` (keywordsAll's taxonomy
-    values), returning the first match's direct .mp4 URL (playable via
-    st.video). Returns None (never raises) if there's no schedule match,
-    no content, or nothing tagged for both the player and the given tags —
-    callers should render without a video rather than error out."""
+    values), returning the first matching individual clip's direct .mp4 URL
+    (playable via st.video). Among matches, a clip tagged with ONLY this
+    player's ID is preferred over one tagged with several players' IDs
+    (e.g. a "three players homered today" roundup) — confirmed via a real
+    case where such a roundup clip (which happened to also carry an
+    unrelated player's ID) beat the correct player's own individual home-
+    run clip purely because it appeared first in MLB's list; a multi-player
+    clip is only used as a last resort, if no individual one matches.
+    Returns None (never raises) if there's no schedule match, no content,
+    or nothing tagged for both the player and the given tags — callers
+    should render without a video rather than error out."""
     schedule = load_schedule_for_date(date_str)
     if schedule.empty:
         return None
@@ -674,18 +679,28 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
     except Exception:
         return None
 
+    fallback_url = None
     for item in items:
         keywords = item.get("keywordsAll", [])
-        if not any(k.get("type") == "player_id" and k.get("value") == str(mlbID) for k in keywords):
+        player_ids = {k["value"] for k in keywords if k.get("type") == "player_id"}
+        if str(mlbID) not in player_ids:
             continue
         item_tags = {k["value"] for k in keywords if k.get("type") == "taxonomy"}
         if not (item_tags & tags):
             continue
+        url = None
         for pb in item.get("playbacks", []):
-            url = pb.get("url") or ""
-            if pb.get("name") == "mp4Avc" or url.endswith(".mp4"):
-                return url
-    return None
+            pb_url = pb.get("url") or ""
+            if pb.get("name") == "mp4Avc" or pb_url.endswith(".mp4"):
+                url = pb_url
+                break
+        if not url:
+            continue
+        if len(player_ids) == 1:
+            return url
+        if fallback_url is None:
+            fallback_url = url
+    return fallback_url
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
