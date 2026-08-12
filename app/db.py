@@ -16,6 +16,8 @@ import teams
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
 
+FINAL_STATUSES = {"Final", "Game Over", "Completed Early"}
+
 
 def today_pacific() -> date:
     """The current Pacific calendar date — the one source of truth for

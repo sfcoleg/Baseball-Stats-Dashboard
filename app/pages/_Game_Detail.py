@@ -151,44 +151,45 @@ def render_game_center():
                         st.dataframe(pitchers, hide_index=True, use_container_width=True)
 
         style.colored_header("Spray Chart", "batting")
-        if status == "In Progress":
-            # Unlike a finished game, a live game's batted-ball list grows
-            # every half-inning — without clearing this, whatever was cached
-            # on the first visit (possibly zero balls, if opened before the
-            # game's first plate appearance) sticks around for the full 6h
-            # ttl and new batted balls never show up. Same reasoning as
-            # load_live_scores.clear() above.
-            db.load_game_batted_balls.clear()
-        batted_balls = db.load_game_batted_balls(game_pk)
-        if batted_balls.empty:
-            st.caption("No batted-ball data available for this game yet.")
+        if status not in db.FINAL_STATUSES:
+            # pybaseball's statcast_single_game pull for a live game is slow
+            # and unreliable enough (Baseball Savant's pitch-tracking data
+            # lags live play, sometimes badly) that trying to keep it fresh
+            # every 10s fragment refresh just produces an empty/stale chart
+            # mid-game. Simpler and more honest to wait for the final,
+            # complete pull once the game's actually over.
+            st.caption("Spray chart available once the game is final.")
         else:
-            team_filter = st.radio(
-                "Team filter", ["Both Teams", away_abbr, home_abbr],
-                horizontal=True, key="game_center_spray_team_filter",
-            )
-            if team_filter == "Both Teams":
-                filtered = batted_balls
+            batted_balls = db.load_game_batted_balls(game_pk)
+            if batted_balls.empty:
+                st.caption("No batted-ball data available for this game.")
             else:
-                filtered = batted_balls[batted_balls["team_abbr"] == team_filter]
+                team_filter = st.radio(
+                    "Team filter", ["Both Teams", away_abbr, home_abbr],
+                    horizontal=True, key="game_center_spray_team_filter",
+                )
+                if team_filter == "Both Teams":
+                    filtered = batted_balls
+                else:
+                    filtered = batted_balls[batted_balls["team_abbr"] == team_filter]
 
-            view_mode = st.radio(
-                "View", ["Top-Down", "3D Trajectory"],
-                horizontal=True, key="game_center_spray_view_mode",
-            )
-            field_lines = style.field_wall_lines(db.team_stadium_outline(home_abbr))
-            if filtered.empty:
-                st.caption("No batted balls for this selection.")
-            elif view_mode == "3D Trajectory":
-                st.plotly_chart(
-                    style.trajectory_3d_chart(filtered, field_lines, db.SPRAY_EVENT_COLORS),
-                    use_container_width=True, key="game_center_spray_3d",
+                view_mode = st.radio(
+                    "View", ["Top-Down", "3D Trajectory"],
+                    horizontal=True, key="game_center_spray_view_mode",
                 )
-            else:
-                st.plotly_chart(
-                    style.spray_chart_2d(filtered, field_lines, db.SPRAY_EVENT_COLORS),
-                    width=800, height=490, key="game_center_spray_2d",
-                )
+                field_lines = style.field_wall_lines(db.team_stadium_outline(home_abbr))
+                if filtered.empty:
+                    st.caption("No batted balls for this selection.")
+                elif view_mode == "3D Trajectory":
+                    st.plotly_chart(
+                        style.trajectory_3d_chart(filtered, field_lines, db.SPRAY_EVENT_COLORS),
+                        use_container_width=True, key="game_center_spray_3d",
+                    )
+                else:
+                    st.plotly_chart(
+                        style.spray_chart_2d(filtered, field_lines, db.SPRAY_EVENT_COLORS),
+                        width=800, height=490, key="game_center_spray_2d",
+                    )
 
 
 render_game_center()
