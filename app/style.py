@@ -965,6 +965,42 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     return fig
 
 
+def batter_zone_heatmap_chart(spray: pd.DataFrame) -> "go.Figure":
+    """A batter's own hot/cold zone — average exit velocity by plate
+    location, over the same catcher's-eye strike-zone box strike_zone_chart
+    draws, for every ball they've put in play this season (see
+    db.player_batted_ball_events, which already carries px/pz alongside
+    the landing-spot data the spray chart uses). Unlike a pitcher-facing
+    zone chart (density of where pitches land), this bins by AVERAGE EXIT
+    VELOCITY per cell (`histfunc="avg"`) — the question this answers is
+    "where does this player do the most damage," not just "where do they
+    put the bat on the ball.\""""
+    fig = go.Figure()
+    sz_top = spray["sz_top"].median() if not spray.empty else 3.5
+    sz_bottom = spray["sz_bottom"].median() if not spray.empty else 1.5
+    fig.add_trace(go.Histogram2d(
+        x=spray["px"], y=spray["pz"], z=spray["launch_speed"], histfunc="avg",
+        xbins=dict(start=-2.5, end=2.5, size=0.5), ybins=dict(start=0.5, end=4.5, size=0.5),
+        colorscale=[[0, "#3B82F6"], [0.5, "#FAFAFA"], [1, "#D32F2F"]],
+        colorbar=dict(
+            title=dict(text="Avg EV", font=dict(color="#9AA3B5")),
+            tickfont=dict(color="#9AA3B5"),
+        ),
+        hovertemplate="Avg exit velo: %{z:.1f} mph<extra></extra>",
+    ))
+    fig.add_shape(
+        type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
+        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(0,0,0,0)",
+    )
+    fig.update_xaxes(range=[-2.5, 2.5], visible=False, fixedrange=True)
+    fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        height=500, margin=dict(l=10, r=10, t=10, b=10),
+    )
+    return fig
+
+
 def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> "go.Figure":
     """Home-team win probability across the game so far (see
     db.load_win_probability) — the filled area is colored by the home

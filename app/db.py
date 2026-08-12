@@ -1141,39 +1141,49 @@ SPRAY_EVENT_COLORS = {
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)
 def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     """Every ball a batter has put in play in a season, with a plot-ready
-    (x_ft, y_ft) position (see _HC_X0/_HC_Y0/_HC_SCALE) and a grouped
-    outcome label — powers the player page's spray chart. Live-fetched
-    from Baseball Savant via pybaseball (pitch-level Statcast data isn't
-    part of the daily ingest — it's heavy and most players' pages are
-    never visited, so backfilling it for everyone would be wasted work);
-    pybaseball is imported lazily here so pages that don't need it don't
-    pay its import cost. Returns columns: x_ft, y_ft, outcome,
-    launch_speed, launch_angle, hit_distance_sc — empty if the fetch
-    fails or the player has no batted-ball data that season."""
+    (x_ft, y_ft) landing position (see _HC_X0/_HC_Y0/_HC_SCALE) AND its
+    plate location (px, pz, sz_top, sz_bottom — same field names
+    strike_zone_chart expects) plus a grouped outcome label. Landing
+    position powers the player page's spray chart; plate location powers
+    its hot/cold zone heatmap (where they hit it hardest, not where it
+    landed) — both views share this one fetch rather than each pulling
+    Statcast separately. Live-fetched from Baseball Savant via pybaseball
+    (pitch-level Statcast data isn't part of the daily ingest — it's heavy
+    and most players' pages are never visited, so backfilling it for
+    everyone would be wasted work); pybaseball is imported lazily here so
+    pages that don't need it don't pay its import cost. Returns columns:
+    x_ft, y_ft, outcome, launch_speed, launch_angle, hit_distance_sc, px,
+    pz, sz_top, sz_bottom — empty if the fetch fails or the player has no
+    batted-ball data that season."""
     from pybaseball import statcast_batter
 
+    cols = [
+        "x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc",
+        "px", "pz", "sz_top", "sz_bottom",
+    ]
     today = today_pacific()
     start_dt = date(season, 1, 1)
     end_dt = date(season, 12, 31) if season < today.year else today
     if start_dt > end_dt:
-        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+        return pd.DataFrame(columns=cols)
 
     try:
         raw = statcast_batter(start_dt.isoformat(), end_dt.isoformat(), int(mlbID))
     except Exception:
-        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+        return pd.DataFrame(columns=cols)
 
     if raw.empty:
-        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+        return pd.DataFrame(columns=cols)
 
     bb = raw.dropna(subset=["hc_x", "hc_y", "events"]).copy()
     if bb.empty:
-        return pd.DataFrame(columns=["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"])
+        return pd.DataFrame(columns=cols)
 
     bb["x_ft"] = (bb["hc_x"] - _HC_X0) * _HC_SCALE
     bb["y_ft"] = (_HC_Y0 - bb["hc_y"]) * _HC_SCALE
     bb["outcome"] = bb["events"].map(_SPRAY_EVENT_LABELS).fillna("Out")
-    return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
+    bb = bb.rename(columns={"plate_x": "px", "plate_z": "pz", "sz_bot": "sz_bottom"})
+    return bb[cols].reset_index(drop=True)
 
 
 _QOC_HARD_HIT_MPH = 95.0

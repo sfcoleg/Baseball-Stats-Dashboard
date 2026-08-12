@@ -770,6 +770,13 @@ if batting is not None and is_batter_role:
             # explicitly here is what actually pins it.
             st.plotly_chart(fig, width=800, height=490)
 
+        style.colored_header("Hot/Cold Zone", "chart")
+        st.caption(
+            "Average exit velocity by plate location — where this player does the most damage, not just "
+            "where they put the bat on the ball. Blue = weak contact, red = hard contact."
+        )
+        st.plotly_chart(style.batter_zone_heatmap_chart(spray), use_container_width=True)
+
 # Batting comps for a two-way player (both roles True) — matches the same
 # "batting is authoritative" convention used for the header team badge above.
 similarity_is_batter = batting is not None and is_batter_role
