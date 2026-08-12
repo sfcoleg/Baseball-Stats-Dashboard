@@ -151,6 +151,14 @@ def render_game_center():
                         st.dataframe(pitchers, hide_index=True, use_container_width=True)
 
         style.colored_header("Spray Chart", "batting")
+        if status == "In Progress":
+            # Unlike a finished game, a live game's batted-ball list grows
+            # every half-inning — without clearing this, whatever was cached
+            # on the first visit (possibly zero balls, if opened before the
+            # game's first plate appearance) sticks around for the full 6h
+            # ttl and new batted balls never show up. Same reasoning as
+            # load_live_scores.clear() above.
+            db.load_game_batted_balls.clear()
         batted_balls = db.load_game_batted_balls(game_pk)
         if batted_balls.empty:
             st.caption("No batted-ball data available for this game yet.")
