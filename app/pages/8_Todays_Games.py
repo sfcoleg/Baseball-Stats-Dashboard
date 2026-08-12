@@ -139,6 +139,9 @@ def render_games():
                     sp_line += f" ({era:.2f} ERA)"
                 st.caption(f"SP: {sp_line}")
                 st.caption(f"Record: {row['away_wins']}-{row['away_losses']}")
+                away_form = db.team_recent_form(row["away_abbr"], mtime)
+                if away_form:
+                    st.caption(f"Last 10: {away_form['last10']} · {away_form['streak']}")
                 if pred:
                     st.markdown(
                         f"<div style='font-size:1.3rem;font-weight:700'>{pred['away_odds']}</div>"
@@ -216,6 +219,9 @@ def render_games():
                     sp_line += f" ({era:.2f} ERA)"
                 st.caption(f"SP: {sp_line}")
                 st.caption(f"Record: {row['home_wins']}-{row['home_losses']}")
+                home_form = db.team_recent_form(row["home_abbr"], mtime)
+                if home_form:
+                    st.caption(f"Last 10: {home_form['last10']} · {home_form['streak']}")
                 if pred:
                     st.markdown(
                         f"<div style='font-size:1.3rem;font-weight:700'>{pred['home_odds']}</div>"

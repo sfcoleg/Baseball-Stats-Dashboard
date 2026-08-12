@@ -2005,6 +2005,29 @@ def team_schedule(team_abbr: str, db_mtime_val: float) -> pd.DataFrame:
     return mine[columns].sort_values("game_time").reset_index(drop=True)
 
 
+def team_recent_form(team_abbr: str, db_mtime_val: float) -> dict | None:
+    """Last-10 record and current win/loss streak for one team, from
+    team_schedule's played games — for Today's Games' streak ticker, a
+    lightweight view of how a team's been trending lately, beyond the
+    season-long win% predict_game/log5_win_prob already use for the odds
+    themselves. Returns None if the team has no played games yet."""
+    played = team_schedule(team_abbr, db_mtime_val)
+    played = played[played["result"].notna()]
+    if played.empty:
+        return None
+    last10 = played.tail(10)
+    wins = int((last10["result"] == "W").sum())
+    losses = int((last10["result"] == "L").sum())
+    results = played["result"].tolist()
+    streak_result = results[-1]
+    streak_len = 0
+    for r in reversed(results):
+        if r != streak_result:
+            break
+        streak_len += 1
+    return {"last10": f"{wins}-{losses}", "streak": f"{streak_result}{streak_len}"}
+
+
 # Pythagenport exponent — how strongly a team's run differential (rather
 # than its raw W-L record, which is noisier over a partial season) predicts
 # its "true" winning percentage. 1.83 is the commonly-used refinement of
