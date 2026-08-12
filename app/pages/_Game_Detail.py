@@ -190,5 +190,41 @@ def render_game_center():
                         width=800, height=490, key="game_center_spray_2d",
                     )
 
+        style.colored_header("Replay", "pitching")
+        if status not in db.FINAL_STATUSES:
+            st.caption("Replay available once the game is final.")
+        else:
+            replay_steps = db.load_game_replay(game_pk)
+            if not replay_steps:
+                st.caption("No pitch-by-pitch replay data available for this game.")
+            else:
+                idx = st.slider(
+                    "Pitch", 0, len(replay_steps) - 1, 0, key="game_center_replay_slider",
+                )
+                step = replay_steps[idx]
+                half_label = "Top" if step["half_inning"] == "top" else "Bottom"
+                st.caption(
+                    f"{step['pitcher']} to {step['batter']} — "
+                    f"{step['balls']}-{step['strikes']}, {step['outs']} out(s)"
+                )
+                score_col, sz_col = st.columns([1, 1])
+                with score_col:
+                    st.markdown(
+                        f"<div style='font-size:2rem;font-weight:700'>"
+                        f"{away_abbr} {step['away_score']} - {step['home_score']} {home_abbr}</div>",
+                        unsafe_allow_html=True,
+                    )
+                    st.markdown(
+                        style.game_state_html(f"{half_label} {step['inning']}", step["bases"], step["outs"], scale=1.6),
+                        unsafe_allow_html=True,
+                    )
+                    if step.get("description"):
+                        speed_bit = f"{step['speed']:.1f} mph " if step.get("speed") else ""
+                        st.caption(f"{speed_bit}{step['pitch_type']} — {step['description']}")
+                with sz_col:
+                    st.plotly_chart(
+                        style.strike_zone_chart([step]), use_container_width=True, key="game_center_replay_sz",
+                    )
+
 
 render_game_center()

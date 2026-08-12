@@ -446,6 +446,94 @@ def load_live_pitch_tracker(game_pk) -> dict:
     }
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=50)
+def load_game_replay(game_pk) -> list[dict]:
+    """Every pitch of a finished game, in order, each carrying the game
+    state AS OF that pitch — inning/half, count, outs, score, and
+    baserunners — for Game Center's pitch-by-pitch Replay scrubber. Hits
+    the same live-feed endpoint as load_live_pitch_tracker, but walks
+    every completed play instead of only the current one.
+    Each play's own `runners` list (start base -> end base, or an out)
+    is applied to a running bases dict after that play's pitches are
+    recorded, so a step's `bases` reflects who was on base ENTERING that
+    pitch, not the result of it. A pickoff/stolen-base/wild-pitch play
+    that isn't itself a batter's plate appearance still updates `bases`
+    even though it contributes no pitch steps — so the next at-bat's
+    first pitch correctly reflects a mid-at-bat steal, though the steal
+    itself won't appear as its own visible step (a deliberate
+    simplification: reconstructing sub-play event ordering isn't worth
+    the complexity for a replay feature).
+    Each dict has the same pitch-location keys strike_zone_chart already
+    expects (px, pz, sz_top, sz_bottom, speed, pitch_type, description,
+    is_strike, is_ball, is_in_play, number) plus inning, half_inning,
+    batter, pitcher, balls, strikes, outs, away_score, home_score, and
+    bases ({"first"/"second"/"third": name-or-None}, matching
+    game_state_html's expected shape).
+    Returns [] if the fetch fails or the game has no completed plays."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=15,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return []
+
+    plays = (raw.get("liveData") or {}).get("plays", {}).get("allPlays") or []
+    base_key = {"1B": "first", "2B": "second", "3B": "third"}
+    bases = {"first": None, "second": None, "third": None}
+    away_score = home_score = 0
+    steps = []
+
+    for play in plays:
+        about = play.get("about") or {}
+        if not about.get("isComplete"):
+            continue
+        matchup = play.get("matchup") or {}
+        result = play.get("result") or {}
+        batter = (matchup.get("batter") or {}).get("fullName")
+        pitcher = (matchup.get("pitcher") or {}).get("fullName")
+
+        for event in play.get("playEvents", []):
+            if not event.get("isPitch"):
+                continue
+            pitch_data = event.get("pitchData") or {}
+            coords = pitch_data.get("coordinates") or {}
+            details = event.get("details") or {}
+            if "pX" not in coords or "pZ" not in coords:
+                continue
+            count = event.get("count") or {}
+            steps.append({
+                "inning": about.get("inning"), "half_inning": about.get("halfInning"),
+                "batter": batter, "pitcher": pitcher,
+                "balls": count.get("balls"), "strikes": count.get("strikes"), "outs": count.get("outs"),
+                "away_score": away_score, "home_score": home_score,
+                "bases": dict(bases),
+                "number": event.get("pitchNumber"),
+                "px": coords["pX"], "pz": coords["pZ"],
+                "sz_top": pitch_data.get("strikeZoneTop"), "sz_bottom": pitch_data.get("strikeZoneBottom"),
+                "speed": pitch_data.get("startSpeed"),
+                "pitch_type": (details.get("type") or {}).get("description") or "Pitch",
+                "description": details.get("description") or "",
+                "is_strike": bool(details.get("isStrike")),
+                "is_ball": bool(details.get("isBall")),
+                "is_in_play": bool(details.get("isInPlay")),
+            })
+
+        away_score = result.get("awayScore", away_score)
+        home_score = result.get("homeScore", home_score)
+        for r in play.get("runners", []):
+            movement = r.get("movement") or {}
+            start, end, is_out = movement.get("start"), movement.get("end"), movement.get("isOut")
+            name = ((r.get("details") or {}).get("runner") or {}).get("fullName")
+            if start in base_key:
+                bases[base_key[start]] = None
+            if not is_out and end in base_key:
+                bases[base_key[end]] = name
+
+    return steps
+
+
 @st.cache_data(show_spinner=False, ttl=15, max_entries=10)
 def load_win_probability(game_pk) -> pd.DataFrame:
     """Home-team win probability after every completed plate appearance, for
