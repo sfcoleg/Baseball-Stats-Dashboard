@@ -1330,6 +1330,54 @@ def quality_of_contact_score(mlbID: int, season: int) -> dict | None:
     }
 
 
+_HTS_WEIGHTS = {"hard_contact": 0.30, "power": 0.25, "bat_to_ball": 0.30, "plate_eye": 0.15}
+# Sub-weights within the Hard Contact category only — same split
+# quality_of_contact_score above already uses for its three Statcast
+# inputs, reused here rather than re-deriving a second opinion.
+_HTS_HARD_CONTACT_SUBWEIGHTS = {"hard_hit_pct": 0.35, "barrel_pct": 0.40, "avg_exit_velo": 0.25}
+
+
+def hit_tool_score(batting: pd.DataFrame, min_pa: int = 100) -> pd.Series:
+    """HTS ("Hit Tool Score") — our own 1-100 composite blending four
+    categories: Hard Contact (hard_hit_pct/barrel_pct/avg_exit_velo, 30%),
+    Power (ISO, 25%), Bat-to-Ball (contact_pct, 30%), Plate Eye (BB_PCT,
+    15%). Deliberately excludes WAR/wRC+/OPS+ (already comprehensive
+    weighted composites of their own — folding them in would just double-
+    count the same underlying production) and speed/baserunning stats (a
+    different skill from hitting).
+    Unlike quality_of_contact_score's FIXED reference constants (needed
+    there since that function only ever sees one player at a time, with
+    no pool to measure against), this scales each stat against the ACTUAL
+    mean/std of `batting`'s own qualified players (PA >= min_pa) — more
+    accurate for whatever season/pool is actually being viewed, and no
+    guessed constants to keep in sync with reality.
+    `batting` must have hard_hit_pct, barrel_pct, avg_exit_velo, ISO,
+    contact_pct, BB_PCT, PA (see load_batting). Returns a 1-100 Series
+    aligned to `batting`'s index, NaN wherever the underlying stats are
+    NaN (e.g. contact_pctile's tighter minimum leaves some rows without
+    contact_pct)."""
+    qualified = batting[batting["PA"] >= min_pa]
+
+    def z(col):
+        std = qualified[col].std()
+        if not std or pd.isna(std):
+            return pd.Series(0.0, index=batting.index)
+        return (batting[col] - qualified[col].mean()) / std
+
+    hard_contact_z = (
+        _HTS_HARD_CONTACT_SUBWEIGHTS["hard_hit_pct"] * z("hard_hit_pct")
+        + _HTS_HARD_CONTACT_SUBWEIGHTS["barrel_pct"] * z("barrel_pct")
+        + _HTS_HARD_CONTACT_SUBWEIGHTS["avg_exit_velo"] * z("avg_exit_velo")
+    )
+    composite_z = (
+        _HTS_WEIGHTS["hard_contact"] * hard_contact_z
+        + _HTS_WEIGHTS["power"] * z("ISO")
+        + _HTS_WEIGHTS["bat_to_ball"] * z("contact_pct")
+        + _HTS_WEIGHTS["plate_eye"] * z("BB_PCT")
+    )
+    return (50 + 15 * composite_z).round().clip(1, 100)
+
+
 @st.cache_data(show_spinner=False, ttl=600, max_entries=30)
 def load_game_batted_balls(game_pk) -> pd.DataFrame:
     """Every ball put in play by EITHER team in one specific game, for
