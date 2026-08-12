@@ -635,17 +635,22 @@ _HIGHLIGHT_CATEGORY_TAGS = {
 }
 
 # load_statcast_daily_leaderboard's leaderboard keys -> taxonomy tag(s).
-# "hardest_hit" and "fastest_pitch" deliberately have NO entry here (and so
-# never get a video) — confirmed by direct inspection that MLB has no tag
-# meaning "this pitcher's single fastest pitch" or "this batter's single
-# hardest-hit ball", only the broadest "pitching"/"hitting" tags, which can
-# and did match something totally unrelated (an Automated Ball-Strike
-# challenge clip, for a "fastest pitch" entry, just because it carried the
-# same pitcher's player_id and the generic "pitching" tag). A wrong video
-# sitting next to a specific stat is worse than no video — "longest_hr"
-# keeps its entry since "home-run" IS an exact tag for that literal play.
+# "hardest_hit" and "fastest_pitch" fall back to the broadest tag for that
+# side of the ball ("hitting"/"pitching") since MLB has no tag meaning
+# "this specific pitch/swing" — confirmed this CAN match a clip that isn't
+# literally that pitch/swing (e.g. an Automated Ball-Strike challenge clip
+# carrying the right pitcher's ID and the generic "pitching" tag, not
+# footage of their actual fastest pitch). The single-player-clip
+# preference in _find_tagged_player_clip below cuts down how often that
+# happens, but doesn't eliminate it for these two loose categories —
+# unlike "longest_hr", where "home-run" IS an exact tag for that literal
+# play. Re-added after being removed for exactly this reason: showing
+# something (usually right, occasionally not) was preferred over showing
+# nothing.
 _STATCAST_HIGHLIGHT_TAGS = {
     "longest_hr": {"home-run"},
+    "hardest_hit": {"home-run", "hitting"},
+    "fastest_pitch": {"pitching"},
 }
 
 
