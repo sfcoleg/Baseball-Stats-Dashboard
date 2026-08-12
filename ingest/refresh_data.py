@@ -171,6 +171,24 @@ def fetch_savant_leaderboard_csv(path, year):
     return pd.read_csv(io.StringIO(resp.content.decode("utf-8")))
 
 
+def fetch_savant_custom_leaderboard(year, player_type, selections):
+    """Fetch Baseball Savant's "custom leaderboard" builder as a CSV — one
+    bulk call for the whole league (not per-player), whole-league RAW rates
+    (unlike statcast_batter_percentile_ranks above, which returns each
+    stat as a percentile rank vs. that season's league, not the literal
+    rate). `selections` is a list of Savant's internal stat names (e.g.
+    "whiff_percent"); confirmed against a known player (Arraez, 2025:
+    5.3% whiff — matches his real elite contact skill) that this endpoint
+    really does return raw percentages, not percentiles."""
+    url = (
+        f"https://baseballsavant.mlb.com/leaderboard/custom?year={year}&type={player_type}"
+        f"&filter=&min=1&selections={','.join(selections)}&csv=true"
+    )
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    return pd.read_csv(io.StringIO(resp.content.decode("utf-8")))
+
+
 def resolve_traded_player_current_teams(mlb_ids):
     """For players whose Baseball-Reference Tm is a comma-joined multi-team
     string (traded mid-season), resolve their TRUE current team via the MLB
@@ -324,6 +342,18 @@ def fetch_batting(season=CURRENT_SEASON):
     contact = statcast_batter_percentile_ranks(season)[["player_id", "whiff_percent"]]
     contact = contact.rename(columns={"whiff_percent": "contact_pctile"})
 
+    print(f"Fetching {season} Statcast raw contact rate (batters)...")
+    # The literal rate this time (e.g. Arraez ~94.7%), not a percentile —
+    # see fetch_savant_custom_leaderboard's docstring for how this differs
+    # from contact_pctile above. Both are kept: contact_pctile answers "how
+    # does this compare to the league," contact_pct answers "what's the
+    # actual number."
+    contact_raw = fetch_savant_custom_leaderboard(season, "batter", ["whiff_percent"])[
+        ["player_id", "whiff_percent"]
+    ]
+    contact_raw["contact_pct"] = 100 - contact_raw["whiff_percent"]
+    contact_raw = contact_raw.drop(columns="whiff_percent")
+
     print(f"Fetching {season} WAR (Baseball-Reference)...")
     war = fetch_war(is_pitcher=False, season=season)
 
@@ -348,7 +378,7 @@ def fetch_batting(season=CURRENT_SEASON):
         baserunning_value = pd.DataFrame({"player_id": pd.Series(dtype="float64"), "baserunning_runs": pd.Series(dtype="float64")})
 
     batting["mlbID"] = pd.to_numeric(batting["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, contact, sprint, baserunning_value, war):
+    for stats_df in (exitvelo, expected, contact, contact_raw, sprint, baserunning_value, war):
         batting = batting.merge(stats_df, left_on="mlbID", right_on="player_id", how="left")
         batting = batting.drop(columns="player_id")
 

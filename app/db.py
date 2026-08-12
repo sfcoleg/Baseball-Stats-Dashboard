@@ -67,7 +67,7 @@ BATTING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "PA", "AB", "R", "H", "2B", "3B", "HR",
     "RBI", "BB", "SO", "SB", "CS", "BA", "OBP", "SLG", "OPS", "mlbID",
     "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "avg_exit_velo", "max_exit_velo",
-    "hard_hit_pct", "barrel_pct", "contact_pctile", "xwOBA", "xBA", "xSLG",
+    "hard_hit_pct", "barrel_pct", "contact_pctile", "contact_pct", "xwOBA", "xBA", "xSLG",
     "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR",
     "sprint_speed", "hp_to_1b", "baserunning_runs", "season",
 ]
