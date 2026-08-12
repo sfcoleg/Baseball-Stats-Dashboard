@@ -169,12 +169,18 @@ def render_game_center():
         # per-game CSV export), which is confirmed empty until the game is
         # final. So fastest pitch can show live; hardest hit ball can't.
         replay_for_highs = db.load_game_replay(game_pk)
-        fastest_pitch = max((p["speed"] for p in replay_for_highs if p.get("speed")), default=None)
+        fastest_pitch_step = max(
+            (p for p in replay_for_highs if p.get("speed")), key=lambda p: p["speed"], default=None,
+        )
         hardest_hit = None
+        hardest_hit_batter = None
         if status in db.FINAL_STATUSES:
             batted_for_highs = db.load_game_batted_balls(game_pk)
-            hardest_hit = batted_for_highs["launch_speed"].max() if not batted_for_highs.empty else None
-        if pd.notna(hardest_hit) or fastest_pitch:
+            if not batted_for_highs.empty:
+                top_row = batted_for_highs.loc[batted_for_highs["launch_speed"].idxmax()]
+                hardest_hit = top_row["launch_speed"]
+                hardest_hit_batter = top_row.get("batter_name")
+        if pd.notna(hardest_hit) or fastest_pitch_step:
             style.colored_header("Game Highs", "batting")
             hi_col1, hi_col2 = st.columns(2)
             with hi_col1:
@@ -184,9 +190,15 @@ def render_game_center():
                     hardest_label = "Final only"
                 else:
                     hardest_label = "Processing…"
-                st.metric("Hardest Hit Ball", hardest_label)
+                st.metric("Hardest Hit Ball", hardest_label, hardest_hit_batter or None, delta_color="off")
             with hi_col2:
-                st.metric("Fastest Pitch", f"{fastest_pitch:.1f} mph" if fastest_pitch else "—")
+                if fastest_pitch_step:
+                    st.metric(
+                        "Fastest Pitch", f"{fastest_pitch_step['speed']:.1f} mph",
+                        fastest_pitch_step.get("pitcher"), delta_color="off",
+                    )
+                else:
+                    st.metric("Fastest Pitch", "—")
 
         style.colored_header("Spray Chart", "batting")
         if status not in db.FINAL_STATUSES:
