@@ -1330,7 +1330,15 @@ def quality_of_contact_score(mlbID: int, season: int) -> dict | None:
     }
 
 
-_HTS_WEIGHTS = {"hard_contact": 0.30, "power": 0.25, "bat_to_ball": 0.30, "plate_eye": 0.15}
+# Hard Contact's three Statcast inputs are strongly correlated with ISO
+# (0.56-0.78 in real data) and contact_pct is negatively correlated with
+# both (-0.34 to -0.43) — a genuine baseball tradeoff (harder swings whiff
+# more), not a stat artifact. That means Hard Contact + Power aren't
+# independent signals; nominal weights on them compound rather than just
+# add, systematically underrating contact hitters relative to what the
+# raw percentages suggest. Weighted down from an initial 30/25/30/15 split
+# after confirming real leaderboard results skewed toward power hitters.
+_HTS_WEIGHTS = {"hard_contact": 0.20, "power": 0.20, "bat_to_ball": 0.35, "plate_eye": 0.25}
 # Sub-weights within the Hard Contact category only — same split
 # quality_of_contact_score above already uses for its three Statcast
 # inputs, reused here rather than re-deriving a second opinion.
