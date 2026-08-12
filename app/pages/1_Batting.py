@@ -20,10 +20,10 @@ seasons = db.get_seasons("batting")
 season = st.selectbox("Season", seasons, index=0)
 batting = db.load_batting(season, db.db_mtime())
 # Computed on the FULL season table, before any team/PA filtering below —
-# HTS is scaled against the whole season's qualified-player distribution,
+# HVS is scaled against the whole season's qualified-player distribution,
 # so its meaning shouldn't shift depending on what subset of rows the
 # user currently has the page filtered down to.
-batting["HTS"] = db.hit_tool_score(batting)
+batting["HVS"] = db.hitting_value_score(batting)
 
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -71,23 +71,24 @@ with advanced_tab:
     st.caption(
         "ISO = isolated power. BABIP = batting avg on balls in play. wOBA = weighted on-base average. "
         "WAR = wins above replacement (Baseball-Reference). OPS+/wRC+ = 100 is league average, higher is "
-        "better (park-factor-free approximation). HTS (Hit Tool Score) = our own 1-100 composite of hard "
-        "contact, power, bat-to-ball skill, and plate discipline — not an official MLB/Statcast stat."
+        "better (park-factor-free approximation). HVS (Hitting Value Score) = our own 1-100 composite of "
+        "hard contact, power, bat-to-ball skill, plate discipline, and plate-appearance volume (producing "
+        "at a high level over more PA is more valuable) — not an official MLB/Statcast stat."
     )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
-         "WAR", "OPS_plus", "wRC_plus", "HTS"]
+         "WAR", "OPS_plus", "wRC_plus", "HVS"]
     ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HTS"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HVS"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
                 "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "Contact%": "{:.1f}",
-                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HTS": "{:.0f}",
+                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HVS": "{:.0f}",
             },
         ),
         use_container_width=True,
