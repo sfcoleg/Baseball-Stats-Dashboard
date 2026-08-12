@@ -1267,6 +1267,69 @@ def player_batted_ball_events(mlbID: int, season: int) -> pd.DataFrame:
     return bb[["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle", "hit_distance_sc"]].reset_index(drop=True)
 
 
+_QOC_HARD_HIT_MPH = 95.0
+# Fixed MLB league-average reference points, NOT computed live from a
+# full-league Statcast pull — doing that would mean fetching every
+# qualified batter's season data just to build the scale, the same
+# "thousands of API calls" cost a season-wide Clutch stat was ruled out
+# for. Approximate recent-season MLB averages; stable enough year to
+# year that a fixed reference point keeps the score meaningful without
+# needing to be recomputed.
+_QOC_LEAGUE_AVG = {"hard_hit_pct": 35.0, "barrel_pct": 7.0, "avg_ev": 88.5}
+_QOC_LEAGUE_STD = {"hard_hit_pct": 8.0, "barrel_pct": 4.0, "avg_ev": 2.5}
+_QOC_WEIGHTS = {"hard_hit_pct": 0.35, "barrel_pct": 0.40, "avg_ev": 0.25}
+
+
+def _is_barrel(ev, la) -> bool:
+    """Approximation of MLB's official "Barrel" classification (the exact
+    formula is proprietary) — batted balls whose exit-velocity/launch-
+    angle combination historically produces roughly .500 AVG/1.500 SLG.
+    Uses the widely-cited open approximation: EV >=98 mph required, with
+    the qualifying launch-angle window widening from 26-30 degrees right
+    at 98 mph out to 8-50 degrees by 116+ mph."""
+    if pd.isna(ev) or pd.isna(la) or ev < 98:
+        return False
+    if ev >= 116:
+        return 8 <= la <= 50
+    frac = (ev - 98) / (116 - 98)
+    lower = 26 - frac * (26 - 8)
+    upper = 30 + frac * (50 - 30)
+    return lower <= la <= upper
+
+
+def quality_of_contact_score(mlbID: int, season: int) -> dict | None:
+    """Our own single 1-100 "Quality of Contact" number, blending hard-hit
+    rate, barrel rate, and average exit velocity — not a stat MLB/Statcast
+    publishes directly, an in-house composite. Built entirely from
+    player_batted_ball_events (the same Statcast pull the spray chart
+    already fetches) rather than a new call. Scaled against the FIXED
+    _QOC_LEAGUE_AVG/_QOC_LEAGUE_STD constants above rather than a live
+    league-wide pool — see that comment for why. Returns None if the
+    player has no batted-ball data that season."""
+    bb = player_batted_ball_events(mlbID, season)
+    bb = bb.dropna(subset=["launch_speed"])
+    if bb.empty:
+        return None
+
+    hard_hit_pct = (bb["launch_speed"] >= _QOC_HARD_HIT_MPH).mean() * 100
+    barrel_pct = bb.apply(lambda r: _is_barrel(r["launch_speed"], r.get("launch_angle")), axis=1).mean() * 100
+    avg_ev = bb["launch_speed"].mean()
+
+    components = {"hard_hit_pct": hard_hit_pct, "barrel_pct": barrel_pct, "avg_ev": avg_ev}
+    z = sum(
+        _QOC_WEIGHTS[k] * (components[k] - _QOC_LEAGUE_AVG[k]) / _QOC_LEAGUE_STD[k]
+        for k in components
+    )
+    score = int(round(min(100, max(1, 50 + 15 * z))))
+    return {
+        "score": score,
+        "hard_hit_pct": round(hard_hit_pct, 1),
+        "barrel_pct": round(barrel_pct, 1),
+        "avg_ev": round(avg_ev, 1),
+        "n": len(bb),
+    }
+
+
 @st.cache_data(show_spinner=False, ttl=600, max_entries=30)
 def load_game_batted_balls(game_pk) -> pd.DataFrame:
     """Every ball put in play by EITHER team in one specific game, for

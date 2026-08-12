@@ -726,6 +726,20 @@ if batting is not None or pitching is not None:
 if batting is not None and is_batter_role:
     spray = db.player_batted_ball_events(mlbID, season)
     if not spray.empty:
+        qoc = db.quality_of_contact_score(mlbID, season)
+        if qoc:
+            style.colored_header("Quality of Contact", "chart")
+            st.caption(
+                "Our own 1-100 composite of hard-hit rate, barrel rate, and average exit "
+                "velocity — not an official MLB/Statcast stat, scaled against fixed league-"
+                "average reference points rather than the current league pool."
+            )
+            qc1, qc2, qc3, qc4 = st.columns(4)
+            qc1.metric("Score", qoc["score"])
+            qc2.metric("Hard-Hit%", f"{qoc['hard_hit_pct']:.1f}%")
+            qc3.metric("Barrel%", f"{qoc['barrel_pct']:.1f}%")
+            qc4.metric("Avg Exit Velo", f"{qoc['avg_ev']:.1f} mph")
+
         stadium_outline = db.team_stadium_outline(abbr)
         style.colored_header("Spray Chart", "chart")
         st.caption(f"{teams.franchise_display_name(abbr, season)}'s actual home park outline." if stadium_outline else "Generic field outline (no digitized park shape available for this team).")
