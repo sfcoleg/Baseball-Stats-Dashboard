@@ -537,11 +537,18 @@ def load_game_replay(game_pk) -> list[dict]:
 @st.cache_data(show_spinner=False, ttl=15, max_entries=10)
 def load_win_probability(game_pk) -> pd.DataFrame:
     """Home-team win probability after every completed plate appearance, for
-    the Game Center page's live win-probability chart. MLB's main live-feed
-    endpoint doesn't carry this — it's only on this separate dedicated
-    endpoint. Returns an empty DataFrame (not an error) if the fetch fails
-    or the game hasn't completed any plate appearances yet."""
-    cols = ["atBatIndex", "inning", "half_inning", "home_win_pct", "away_score", "home_score"]
+    the Game Center page's live win-probability chart AND its "Play of the
+    Game" callout (the play description/batter are carried along here too
+    since this endpoint already returns them alongside the probability —
+    no reason for a second fetch just to label the biggest swing). MLB's
+    main live-feed endpoint doesn't carry win probability — it's only on
+    this separate dedicated endpoint. Returns an empty DataFrame (not an
+    error) if the fetch fails or the game hasn't completed any plate
+    appearances yet."""
+    cols = [
+        "atBatIndex", "inning", "half_inning", "home_win_pct", "away_score", "home_score",
+        "description", "batter",
+    ]
     try:
         resp = requests.get(
             f"https://statsapi.mlb.com/api/v1/game/{game_pk}/winProbability", timeout=10,
@@ -564,6 +571,8 @@ def load_win_probability(game_pk) -> pd.DataFrame:
             "home_win_pct": play["homeTeamWinProbability"],
             "away_score": result.get("awayScore"),
             "home_score": result.get("homeScore"),
+            "description": result.get("description"),
+            "batter": ((play.get("matchup") or {}).get("batter") or {}).get("fullName"),
         })
     return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
 

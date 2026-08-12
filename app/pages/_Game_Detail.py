@@ -121,6 +121,19 @@ def render_game_center():
             style.win_probability_chart(wp_df, away_abbr, home_abbr, away_color, home_color),
             use_container_width=True, key="game_center_wp",
         )
+        if len(wp_df) > 1:
+            swings = wp_df["home_win_pct"].diff().abs()
+            top_idx = swings.idxmax()
+            swing_pct = swings.loc[top_idx] if pd.notna(swings.loc[top_idx]) else 0
+            play = wp_df.loc[top_idx]
+            if swing_pct > 0 and isinstance(play.get("description"), str):
+                st.markdown(
+                    f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
+                    f"border-radius:6px;margin:4px 0'><span style='color:#9AA3B5;font-size:0.85rem'>"
+                    f"Play of the Game — {swing_pct:.0f}% win-probability swing</span>"
+                    f"<div style='color:#DCE1EA'>{play['description']}</div></div>",
+                    unsafe_allow_html=True,
+                )
 
     if status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed"):
         style.colored_header("Box Score", "fielding")
@@ -149,6 +162,21 @@ def render_game_center():
                     if not pitchers.empty:
                         st.caption(f"{abbr} Pitching")
                         st.dataframe(pitchers, hide_index=True, use_container_width=True)
+
+        if status in db.FINAL_STATUSES:
+            replay_for_highs = db.load_game_replay(game_pk)
+            batted_for_highs = db.load_game_batted_balls(game_pk)
+            hardest_hit = batted_for_highs["launch_speed"].max() if not batted_for_highs.empty else None
+            fastest_pitch = max(
+                (p["speed"] for p in replay_for_highs if p.get("speed")), default=None,
+            )
+            if pd.notna(hardest_hit) or fastest_pitch:
+                style.colored_header("Game Highs", "batting")
+                hi_col1, hi_col2 = st.columns(2)
+                with hi_col1:
+                    st.metric("Hardest Hit Ball", f"{hardest_hit:.1f} mph" if pd.notna(hardest_hit) else "—")
+                with hi_col2:
+                    st.metric("Fastest Pitch", f"{fastest_pitch:.1f} mph" if fastest_pitch else "—")
 
         style.colored_header("Spray Chart", "batting")
         if status not in db.FINAL_STATUSES:
@@ -224,6 +252,30 @@ def render_game_center():
                 with sz_col:
                     st.plotly_chart(
                         style.strike_zone_chart([step]), use_container_width=True, key="game_center_replay_sz",
+                    )
+
+        style.colored_header("Pitcher Breakdown", "pitching")
+        if status not in db.FINAL_STATUSES:
+            st.caption("Pitcher breakdown available once the game is final.")
+        else:
+            all_pitches = db.load_game_replay(game_pk)
+            pitchers = sorted({p["pitcher"] for p in all_pitches if p.get("pitcher")})
+            if not pitchers:
+                st.caption("No pitch data available for this game.")
+            else:
+                selected_pitcher = st.selectbox("Pitcher", pitchers, key="game_center_pitcher_breakdown")
+                pitcher_pitches = [p for p in all_pitches if p["pitcher"] == selected_pitcher]
+                st.caption(f"{len(pitcher_pitches)} pitches")
+                mix_col, heat_col = st.columns(2)
+                with mix_col:
+                    st.plotly_chart(
+                        style.pitch_mix_chart(pitcher_pitches), use_container_width=True,
+                        key="game_center_pitch_mix",
+                    )
+                with heat_col:
+                    st.plotly_chart(
+                        style.zone_heatmap_chart(pitcher_pitches), use_container_width=True,
+                        key="game_center_zone_heatmap",
                     )
 
 
