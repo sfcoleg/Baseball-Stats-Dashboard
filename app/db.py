@@ -708,7 +708,7 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
     return fallback_url
 
 
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=100)
 def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> str | None:
     """Best-effort highlight clip for one of get_milestones' entries — see
     _find_tagged_player_clip for how the match works, _HIGHLIGHT_CATEGORY_TAGS
@@ -716,14 +716,19 @@ def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> 
     get_milestones itself, which promises "no extra network calls" — video
     lookup is a nice-to-have the Daily Digest can afford to wait on, not
     something every milestone consumer (e.g. the Home page's alert banner)
-    needs to pay for."""
+    needs to pay for. Ttl is 30min, not the hours-long cache a genuinely
+    static past-date lookup could otherwise justify — a running app
+    instance whose code changes underneath it (a redeploy that doesn't
+    fully restart the process) would otherwise keep serving a stale
+    None/wrong result from before the fix for however long the ttl is;
+    confirmed this actually happened once already at the old 24h ttl."""
     tags = _HIGHLIGHT_CATEGORY_TAGS.get(category)
     if not tags:
         return None
     return _find_tagged_player_clip(mlbID, abbr, date_str, tags)
 
 
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=100)
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=100)
 def find_statcast_highlight(mlbID, abbr: str, date_str: str, kind: str) -> str | None:
     """Best-effort highlight clip for one of load_statcast_daily_leaderboard's
     entries ("hardest_hit", "longest_hr", "fastest_pitch") — see
