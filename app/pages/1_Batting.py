@@ -75,18 +75,19 @@ with advanced_tab:
         "contact, power, bat-to-ball skill, and plate discipline — not an official MLB/Statcast stat."
     )
     display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA", "WAR", "OPS_plus", "wRC_plus", "HTS"]
-    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
+        ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
+         "WAR", "OPS_plus", "wRC_plus", "HTS"]
+    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "WAR", "OPS+", "wRC+", "HTS"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HTS"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "wOBA": "{:.3f}",
-                "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HTS": "{:.0f}",
+                "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "Contact%": "{:.1f}",
+                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HTS": "{:.0f}",
             },
         ),
         use_container_width=True,
