@@ -340,33 +340,41 @@ def fetch_batting(season=CURRENT_SEASON):
     # Confirmed (unlike baserunning-run-value below) that this endpoint
     # actually varies by the `season` argument rather than silently always
     # returning the current season.
-    # chase_percent and bat_speed ride along on the same call as
-    # whiff_percent — one fetch, three percentile columns, not three
+    # chase_percent, bat_speed, xiso, xobp all ride along on the same call
+    # as whiff_percent — one fetch, five percentile columns, not five
     # separate requests.
     contact = statcast_batter_percentile_ranks(season)[
-        ["player_id", "whiff_percent", "chase_percent", "bat_speed"]
+        ["player_id", "whiff_percent", "chase_percent", "bat_speed", "xiso", "xobp"]
     ]
     contact = contact.rename(columns={
         "whiff_percent": "contact_pctile",
         "chase_percent": "chase_pctile",
         "bat_speed": "bat_speed_pctile",
+        "xiso": "xISO_pctile",
+        "xobp": "xOBP_pctile",
     })
 
-    print(f"Fetching {season} Statcast raw contact/chase/bat-speed rate (batters)...")
+    print(f"Fetching {season} Statcast raw contact/chase/bat-speed/xISO/xOBP rate (batters)...")
     # Literal numbers this time, not percentiles — see
     # fetch_savant_custom_leaderboard's docstring for how this differs from
     # the _pctile columns above. Both kept: the _pctile columns answer "how
     # does this compare to the league," these answer "what's the actual
     # number." oz_swing_percent (not "chase_percent") is this endpoint's
     # actual selection name for raw chase rate — confirmed by testing
-    # several candidate names directly against the live endpoint.
+    # several candidate names directly against the live endpoint. xiso/xobp
+    # (lowercase, unlike est_ba/est_slg/est_woba used for xBA/xSLG/xwOBA
+    # above) are this endpoint's actual raw-rate selection names —
+    # confirmed real values (e.g. Judge .409 xISO, Arraez .076) against the
+    # est_iso/est_obp names, which return empty.
     contact_raw = fetch_savant_custom_leaderboard(
-        season, "batter", ["whiff_percent", "oz_swing_percent", "avg_swing_speed"]
-    )[["player_id", "whiff_percent", "oz_swing_percent", "avg_swing_speed"]]
+        season, "batter", ["whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp"]
+    )[["player_id", "whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp"]]
     contact_raw["contact_pct"] = 100 - contact_raw["whiff_percent"]
     contact_raw = contact_raw.drop(columns="whiff_percent").rename(columns={
         "oz_swing_percent": "chase_pct",
         "avg_swing_speed": "bat_speed",
+        "xiso": "xISO",
+        "xobp": "xOBP",
     })
 
     print(f"Fetching {season} WAR (Baseball-Reference)...")

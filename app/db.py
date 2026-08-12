@@ -69,6 +69,7 @@ BATTING_COLS = [
     "ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "avg_exit_velo", "max_exit_velo",
     "hard_hit_pct", "barrel_pct", "contact_pctile", "contact_pct",
     "chase_pctile", "chase_pct", "bat_speed_pctile", "bat_speed",
+    "xISO_pctile", "xISO", "xOBP_pctile", "xOBP",
     "xwOBA", "xBA", "xSLG",
     "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR",
     "sprint_speed", "hp_to_1b", "baserunning_runs", "season",
