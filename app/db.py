@@ -450,10 +450,10 @@ def load_live_pitch_tracker(game_pk) -> dict:
 def load_game_replay(game_pk) -> list[dict]:
     """Every pitch of a game so far, in order, each carrying the game
     state AS OF that pitch — inning/half, count, outs, score, and
-    baserunners — for Game Center's pitch-by-pitch Replay scrubber, Game
-    Highs, and Pitcher Breakdown. Hits the same live-feed endpoint as
-    load_live_pitch_tracker, but walks every completed play instead of
-    only the current one — unlike load_game_batted_balls (which hits
+    baserunners — for Game Center's Play of the Game / Game Highs (its
+    fastest-pitch-so-far number specifically). Hits the same live-feed
+    endpoint as load_live_pitch_tracker, but walks every completed play
+    instead of only the current one — unlike load_game_batted_balls (which hits
     Baseball Savant's separate per-game CSV export, confirmed empty until
     a game is final), this endpoint updates in real time, so the list
     keeps growing pitch by pitch while a game is in progress. Short ttl

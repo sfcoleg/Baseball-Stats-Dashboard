@@ -231,26 +231,4 @@ def render_game_center():
                         width=800, height=490, key="game_center_spray_2d",
                     )
 
-        style.colored_header("Pitcher Breakdown", "pitching")
-        all_pitches = replay_for_highs
-        pitchers = sorted({p["pitcher"] for p in all_pitches if p.get("pitcher")})
-        if not pitchers:
-            st.caption("No pitch data available for this game yet.")
-        else:
-            selected_pitcher = st.selectbox("Pitcher", pitchers, key="game_center_pitcher_breakdown")
-            pitcher_pitches = [p for p in all_pitches if p["pitcher"] == selected_pitcher]
-            st.caption(f"{len(pitcher_pitches)} pitches")
-            mix_col, heat_col = st.columns(2)
-            with mix_col:
-                st.plotly_chart(
-                    style.pitch_mix_chart(pitcher_pitches), use_container_width=True,
-                    key="game_center_pitch_mix",
-                )
-            with heat_col:
-                st.plotly_chart(
-                    style.zone_heatmap_chart(pitcher_pitches), use_container_width=True,
-                    key="game_center_zone_heatmap",
-                )
-
-
 render_game_center()

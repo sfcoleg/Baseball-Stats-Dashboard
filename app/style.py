@@ -965,61 +965,6 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     return fig
 
 
-def pitch_mix_chart(pitches: list[dict]) -> "go.Figure":
-    """How often a pitcher threw each pitch type, as a horizontal bar
-    ranked most- to least-thrown — `pitches` is any list of the pitch
-    dicts db.load_game_replay/load_live_pitch_tracker already produce
-    (pre-filtered to one pitcher by the caller), so this is pure
-    aggregation over data already fetched, not a new data source."""
-    counts = {}
-    for p in pitches:
-        kind = p.get("pitch_type") or "Pitch"
-        counts[kind] = counts.get(kind, 0) + 1
-    ranked = sorted(counts.items(), key=lambda kv: kv[1])
-    fig = go.Figure(go.Bar(
-        x=[c for _, c in ranked], y=[k for k, _ in ranked], orientation="h",
-        marker=dict(color="#3B82F6"),
-        text=[f"{c} ({c / len(pitches):.0%})" for _, c in ranked], textposition="outside",
-        hoverinfo="skip",
-    ))
-    fig.update_xaxes(visible=False)
-    fig.update_yaxes(color="#FAFAFA")
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
-        height=80 + 40 * len(ranked), margin=dict(l=10, r=60, t=10, b=10),
-    )
-    return fig
-
-
-def zone_heatmap_chart(pitches: list[dict]) -> "go.Figure":
-    """Density of where a pitcher's pitches actually landed across an
-    outing, over the same catcher's-eye strike-zone box strike_zone_chart
-    draws — same px/pz plate-location data, just aggregated into a
-    heatmap instead of plotted pitch-by-pitch, since a full outing's worth
-    of individually-numbered dots (strike_zone_chart's format) gets
-    unreadable past a handful of pitches."""
-    fig = go.Figure()
-    sz_top = pitches[-1]["sz_top"] if pitches else 3.5
-    sz_bottom = pitches[-1]["sz_bottom"] if pitches else 1.5
-    fig.add_trace(go.Histogram2dContour(
-        x=[p["px"] for p in pitches], y=[p["pz"] for p in pitches],
-        colorscale=[[0, "rgba(59,130,246,0)"], [0.5, "rgba(59,130,246,0.5)"], [1, "#D32F2F"]],
-        showscale=False, ncontours=12, line=dict(width=0),
-        hoverinfo="skip",
-    ))
-    fig.add_shape(
-        type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
-        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(0,0,0,0)",
-    )
-    fig.update_xaxes(range=[-2.5, 2.5], visible=False, fixedrange=True)
-    fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
-    fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        height=450, margin=dict(l=10, r=10, t=10, b=10),
-    )
-    return fig
-
-
 def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> "go.Figure":
     """Home-team win probability across the game so far (see
     db.load_win_probability) — the filled area is colored by the home
