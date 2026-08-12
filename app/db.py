@@ -446,13 +446,20 @@ def load_live_pitch_tracker(game_pk) -> dict:
     }
 
 
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=50)
+@st.cache_data(show_spinner=False, ttl=15, max_entries=50)
 def load_game_replay(game_pk) -> list[dict]:
-    """Every pitch of a finished game, in order, each carrying the game
+    """Every pitch of a game so far, in order, each carrying the game
     state AS OF that pitch — inning/half, count, outs, score, and
-    baserunners — for Game Center's pitch-by-pitch Replay scrubber. Hits
-    the same live-feed endpoint as load_live_pitch_tracker, but walks
-    every completed play instead of only the current one.
+    baserunners — for Game Center's pitch-by-pitch Replay scrubber, Game
+    Highs, and Pitcher Breakdown. Hits the same live-feed endpoint as
+    load_live_pitch_tracker, but walks every completed play instead of
+    only the current one — unlike load_game_batted_balls (which hits
+    Baseball Savant's separate per-game CSV export, confirmed empty until
+    a game is final), this endpoint updates in real time, so the list
+    keeps growing pitch by pitch while a game is in progress. Short ttl
+    (matching load_win_probability) rather than the long ttl a
+    finished-game-only fetch would warrant, since this is now called for
+    live games too.
     Each play's own `runners` list (start base -> end base, or an out)
     is applied to a running bases dict after that play's pitches are
     recorded, so a step's `bases` reflects who was on base ENTERING that

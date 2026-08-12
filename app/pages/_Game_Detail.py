@@ -163,20 +163,27 @@ def render_game_center():
                         st.caption(f"{abbr} Pitching")
                         st.dataframe(pitchers, hide_index=True, use_container_width=True)
 
+        # load_game_replay hits MLB's own live-feed API (same source as the
+        # Live Pitch Tracker above) — it updates in real time as the game
+        # progresses, unlike load_game_batted_balls (Baseball Savant's
+        # per-game CSV export), which is confirmed empty until the game is
+        # final. So fastest pitch can show live; hardest hit ball can't.
+        replay_for_highs = db.load_game_replay(game_pk)
+        fastest_pitch = max((p["speed"] for p in replay_for_highs if p.get("speed")), default=None)
+        hardest_hit = None
         if status in db.FINAL_STATUSES:
-            replay_for_highs = db.load_game_replay(game_pk)
             batted_for_highs = db.load_game_batted_balls(game_pk)
             hardest_hit = batted_for_highs["launch_speed"].max() if not batted_for_highs.empty else None
-            fastest_pitch = max(
-                (p["speed"] for p in replay_for_highs if p.get("speed")), default=None,
-            )
-            if pd.notna(hardest_hit) or fastest_pitch:
-                style.colored_header("Game Highs", "batting")
-                hi_col1, hi_col2 = st.columns(2)
-                with hi_col1:
-                    st.metric("Hardest Hit Ball", f"{hardest_hit:.1f} mph" if pd.notna(hardest_hit) else "—")
-                with hi_col2:
-                    st.metric("Fastest Pitch", f"{fastest_pitch:.1f} mph" if fastest_pitch else "—")
+        if pd.notna(hardest_hit) or fastest_pitch:
+            style.colored_header("Game Highs", "batting")
+            hi_col1, hi_col2 = st.columns(2)
+            with hi_col1:
+                hardest_label = f"{hardest_hit:.1f} mph" if pd.notna(hardest_hit) else (
+                    "Final only" if status not in db.FINAL_STATUSES else "—"
+                )
+                st.metric("Hardest Hit Ball", hardest_label)
+            with hi_col2:
+                st.metric("Fastest Pitch", f"{fastest_pitch:.1f} mph" if fastest_pitch else "—")
 
         style.colored_header("Spray Chart", "batting")
         if status not in db.FINAL_STATUSES:
@@ -219,50 +226,44 @@ def render_game_center():
                     )
 
         style.colored_header("Replay", "pitching")
-        if status not in db.FINAL_STATUSES:
-            st.caption("Replay available once the game is final.")
+        replay_steps = replay_for_highs
+        if not replay_steps:
+            st.caption("No pitch-by-pitch replay data available for this game yet.")
         else:
-            replay_steps = db.load_game_replay(game_pk)
-            if not replay_steps:
-                st.caption("No pitch-by-pitch replay data available for this game.")
-            else:
-                idx = st.slider(
-                    "Pitch", 0, len(replay_steps) - 1, 0, key="game_center_replay_slider",
+            idx = st.slider(
+                "Pitch", 0, len(replay_steps) - 1, len(replay_steps) - 1, key="game_center_replay_slider",
+            )
+            step = replay_steps[idx]
+            half_label = "Top" if step["half_inning"] == "top" else "Bottom"
+            st.caption(
+                f"{step['pitcher']} to {step['batter']} — "
+                f"{step['balls']}-{step['strikes']}, {step['outs']} out(s)"
+            )
+            score_col, sz_col = st.columns([1, 1])
+            with score_col:
+                st.markdown(
+                    f"<div style='font-size:2rem;font-weight:700'>"
+                    f"{away_abbr} {step['away_score']} - {step['home_score']} {home_abbr}</div>",
+                    unsafe_allow_html=True,
                 )
-                step = replay_steps[idx]
-                half_label = "Top" if step["half_inning"] == "top" else "Bottom"
-                st.caption(
-                    f"{step['pitcher']} to {step['batter']} — "
-                    f"{step['balls']}-{step['strikes']}, {step['outs']} out(s)"
+                st.markdown(
+                    style.game_state_html(f"{half_label} {step['inning']}", step["bases"], step["outs"], scale=1.6),
+                    unsafe_allow_html=True,
                 )
-                score_col, sz_col = st.columns([1, 1])
-                with score_col:
-                    st.markdown(
-                        f"<div style='font-size:2rem;font-weight:700'>"
-                        f"{away_abbr} {step['away_score']} - {step['home_score']} {home_abbr}</div>",
-                        unsafe_allow_html=True,
-                    )
-                    st.markdown(
-                        style.game_state_html(f"{half_label} {step['inning']}", step["bases"], step["outs"], scale=1.6),
-                        unsafe_allow_html=True,
-                    )
-                    if step.get("description"):
-                        speed_bit = f"{step['speed']:.1f} mph " if step.get("speed") else ""
-                        st.caption(f"{speed_bit}{step['pitch_type']} — {step['description']}")
-                with sz_col:
-                    st.plotly_chart(
-                        style.strike_zone_chart([step]), use_container_width=True, key="game_center_replay_sz",
-                    )
+                if step.get("description"):
+                    speed_bit = f"{step['speed']:.1f} mph " if step.get("speed") else ""
+                    st.caption(f"{speed_bit}{step['pitch_type']} — {step['description']}")
+            with sz_col:
+                st.plotly_chart(
+                    style.strike_zone_chart([step]), use_container_width=True, key="game_center_replay_sz",
+                )
 
         style.colored_header("Pitcher Breakdown", "pitching")
-        if status not in db.FINAL_STATUSES:
-            st.caption("Pitcher breakdown available once the game is final.")
+        all_pitches = replay_for_highs
+        pitchers = sorted({p["pitcher"] for p in all_pitches if p.get("pitcher")})
+        if not pitchers:
+            st.caption("No pitch data available for this game yet.")
         else:
-            all_pitches = db.load_game_replay(game_pk)
-            pitchers = sorted({p["pitcher"] for p in all_pitches if p.get("pitcher")})
-            if not pitchers:
-                st.caption("No pitch data available for this game.")
-            else:
                 selected_pitcher = st.selectbox("Pitcher", pitchers, key="game_center_pitcher_breakdown")
                 pitcher_pitches = [p for p in all_pitches if p["pitcher"] == selected_pitcher]
                 st.caption(f"{len(pitcher_pitches)} pitches")
