@@ -91,11 +91,14 @@ with statcast_tab:
     st.caption(
         "Contact quality allowed, from Statcast. xERA/xBA/xSLG against = expected stats based on quality of "
         "contact allowed. \"diff\" is actual ERA minus expected ERA — positive means outperforming the "
-        "underlying contact quality, negative means getting unlucky relative to it."
+        "underlying contact quality, negative means getting unlucky relative to it. Fastball Velo = average "
+        "four-seam velocity. Induced Chase% = how often opposing batters swing at this pitcher's pitches "
+        "outside the strike zone."
     )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "xBA_against", "xSLG_against",
-         "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]
+         "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
+         "fastball_velo", "induced_chase_pct"]
     ].rename(columns={
         "avg_exit_velo_against": "Avg EV Against",
         "hard_hit_pct_against": "Hard-Hit% Against",
@@ -103,18 +106,20 @@ with statcast_tab:
         "xBA_against": "xBA Against",
         "xSLG_against": "xSLG Against",
         "xERA_diff": "ERA diff",
+        "fastball_velo": "Fastball Velo",
+        "induced_chase_pct": "Induced Chase%",
     })
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ERA diff"],
+            higher_better=["ERA diff", "Fastball Velo", "Induced Chase%"],
             lower_better=["ERA", "xERA", "xBA Against", "xSLG Against", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
                 "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}", "xBA Against": "{:.3f}",
                 "xSLG Against": "{:.3f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}",
-                "Barrel% Against": "{:.1f}",
+                "Barrel% Against": "{:.1f}", "Fastball Velo": "{:.1f}", "Induced Chase%": "{:.1f}",
             },
         ),
         use_container_width=True,
@@ -140,6 +145,7 @@ with explore_tab:
     axis_options = [
         "ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB",
         "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
+        "fastball_velo", "induced_chase_pct",
     ]
     ecol1, ecol2 = st.columns(2)
     with ecol1:

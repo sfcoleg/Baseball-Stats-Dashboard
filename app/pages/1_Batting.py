@@ -47,8 +47,8 @@ filtered = filtered.sort_values(sort_by, ascending=False).reset_index(drop=True)
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Chart Explorer"]
+standard_tab, advanced_tab, statcast_tab, discipline_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced", "Statcast", "Plate Discipline", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -140,11 +140,37 @@ with statcast_tab:
     )
     st.plotly_chart(fig, use_container_width=True)
 
+with discipline_tab:
+    st.caption(
+        "Chase% = swings at pitches outside the strike zone (lower is more disciplined). Bat Speed = "
+        "average swing speed (mph); real bat-tracking data only exists from 2023 onward, earlier seasons "
+        "will show blank. xISO/xOBP = expected isolated power / on-base %, based on contact quality rather "
+        "than actual outcomes."
+    )
+    display = teams.add_team_abbr(table_rows)[
+        ["Name", "Age", "Tm", "PA", "chase_pct", "bat_speed", "xISO", "xOBP"]
+    ].rename(columns={"chase_pct": "Chase%", "bat_speed": "Bat Speed"})
+    st.dataframe(
+        style.style_stats_table(
+            display,
+            higher_better=["Bat Speed", "xISO", "xOBP"],
+            lower_better=["Chase%"],
+            team_col="Tm",
+            team_color_fn=teams.color_for_abbr,
+            precision={
+                "Chase%": "{:.1f}", "Bat Speed": "{:.1f}", "xISO": "{:.3f}", "xOBP": "{:.3f}",
+            },
+        ),
+        use_container_width=True,
+        height=600,
+    )
+
 with explore_tab:
     st.caption("Pick any two stats to plot against each other, sized by PA and colored by OPS.")
     axis_options = [
         "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS", "ISO", "BABIP", "K_PCT", "BB_PCT",
         "wOBA", "xwOBA", "avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct", "xBA", "xSLG",
+        "contact_pct", "chase_pct", "bat_speed", "xISO", "xOBP",
     ]
     ecol1, ecol2 = st.columns(2)
     with ecol1:
