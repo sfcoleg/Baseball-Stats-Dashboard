@@ -1027,6 +1027,8 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
         score_changed = (wp_df["away_score"].diff() != 0) | (wp_df["home_score"].diff() != 0)
         scoring_rows = wp_df[score_changed.fillna(False)]
         if not scoring_rows.empty:
+            for x in scoring_rows["atBatIndex"]:
+                fig.add_vline(x=x, line=dict(color="#FAFAFA", width=1))
             has_desc = "description" in scoring_rows.columns
             fig.add_trace(go.Scatter(
                 x=scoring_rows["atBatIndex"], y=scoring_rows["home_win_pct"], mode="markers",
