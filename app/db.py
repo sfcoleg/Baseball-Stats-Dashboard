@@ -1980,7 +1980,7 @@ def team_recent_form(team_abbr: str, db_mtime_val: float) -> dict | None:
     """Last-10 record and current win/loss streak for one team, from
     team_schedule's played games — for Today's Games' streak ticker, a
     lightweight view of how a team's been trending lately, beyond the
-    season-long win% predict_game/log5_win_prob already use for the odds
+    season-long record the trained win model already uses for the odds
     themselves. Returns None if the team has no played games yet."""
     played = team_schedule(team_abbr, db_mtime_val)
     played = played[played["result"].notna()]
@@ -1999,12 +1999,6 @@ def team_recent_form(team_abbr: str, db_mtime_val: float) -> dict | None:
     return {"last10": f"{wins}-{losses}", "streak": f"{streak_result}{streak_len}"}
 
 
-# Pythagenport exponent — how strongly a team's run differential (rather
-# than its raw W-L record, which is noisier over a partial season) predicts
-# its "true" winning percentage. 1.83 is the commonly-used refinement of
-# Bill James' original Pythagorean exponent of 2.
-PYTHAG_EXPONENT = 1.83
-
 # Number of remaining-season simulations run for playoff odds. High enough
 # for stable percentages (~1-2% simulation noise), cheap enough (a few
 # hundred ms, vectorized with numpy) to run on every cache miss.
@@ -2013,38 +2007,6 @@ PLAYOFF_SIM_COUNT = 4000
 # Current (2022+) postseason format: 3 division winners + 3 wild cards per
 # league = 6 teams/league, 12 total.
 WILD_CARDS_PER_LEAGUE = 3
-
-
-def _pythag_pct(runs_scored: pd.Series, runs_allowed: pd.Series) -> pd.Series:
-    rs = runs_scored.clip(lower=1) ** PYTHAG_EXPONENT
-    ra = runs_allowed.clip(lower=1) ** PYTHAG_EXPONENT
-    return rs / (rs + ra)
-
-
-def _team_ops_era(db_mtime_val: float) -> tuple[pd.Series, pd.Series]:
-    """PA-weighted team OPS and IP-weighted team ERA for the current
-    season, indexed by team_abbr — a second, independent read on team
-    strength (peripheral rate stats) alongside the season's actual runs
-    scored/allowed, for compute_playoff_odds's blended team rating.
-    Pitching has no raw earned-runs column, only ERA — recovered via
-    ER = ERA * IP / 9 per pitcher before summing, so the team total isn't
-    just an unweighted average of individual ERAs."""
-    current_season = get_seasons("batting")[0]
-    batting = teams.add_team_abbr(load_batting(current_season, db_mtime_val))
-    pitching = teams.add_team_abbr(load_pitching(current_season, db_mtime_val))
-
-    bat_valid = batting.dropna(subset=["OPS", "PA"])
-    team_ops = bat_valid.groupby("Tm").apply(
-        lambda g: (g["OPS"] * g["PA"]).sum() / g["PA"].sum() if g["PA"].sum() > 0 else np.nan,
-        include_groups=False,
-    )
-
-    pit_valid = pitching.dropna(subset=["ERA", "IP"]).assign(_ER=lambda d: d["ERA"] * d["IP"] / 9)
-    team_era = pit_valid.groupby("Tm").apply(
-        lambda g: 9 * g["_ER"].sum() / g["IP"].sum() if g["IP"].sum() > 0 else np.nan,
-        include_groups=False,
-    )
-    return team_ops, team_era
 
 
 def team_strength_profile(team_abbr: str, season: int, db_mtime_val: float) -> dict | None:
@@ -2121,18 +2083,24 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     Series best-of-7, real 2022+ reseeding rules) on top of each of those
     simulated regular seasons for a championship probability.
 
-    Each game's win probability comes from Log5 (see log5_win_prob)
-    applied to a blended team-strength rating — 65% each team's
-    Pythagorean winning percentage (season-to-date runs scored/allowed,
-    a better predictor of true team strength than raw W-L over a partial
-    season) and 35% a z-scored composite of team OPS and team ERA (see
-    _team_ops_era) — plus a fixed home-field edge for regular-season games
-    (skipped for postseason series, which roughly balance out venue
-    anyway). Blending in OPS/ERA means a team that's over/underperforming
-    its peripherals (winning close games it "shouldn't," etc.) gets pulled
-    back toward its underlying quality, not just its actual run
-    differential. Returns one row per team, keyed by team_abbr, with
-    `playoff_pct` and `ws_pct` columns (0-100 each)."""
+    Each game's win probability comes from the trained win-probability
+    model's team-only variant (see ingest/train_win_model.py) — the same
+    walk-forward-backtested logistic regression behind Today's Games'
+    odds, minus its starter feature (games simulated weeks/months ahead
+    have unknown starters). Its features are frozen at today's state for
+    the whole simulated remainder, exactly as the old blended rating was:
+    shrunk record, shrunk run differential, prior-season strength, and a
+    LEARNED home-field intercept for regular-season games (dropped for
+    postseason series, which the bracket treats as venue-neutral — the
+    same simplification the old Log5 path made, except "neutral" is now
+    a principled zeroing of the model's home term rather than omitting a
+    bolt-on constant). The old hand-blended 65/35 Pythagorean + OPS/ERA
+    composite rating is retired with this: run-differential signal is
+    now carried by a fitted, backtested coefficient instead of a hand-
+    set blend weight, at the cost of the peripheral OPS/ERA read (team
+    OPS/ERA as-of-date isn't reconstructable historically, so it
+    couldn't be trained on honestly). Returns one row per team, keyed by
+    team_abbr, with `playoff_pct` and `ws_pct` columns (0-100 each)."""
     standings = load_standings(db_mtime_val)
     schedule = load_schedule(db_mtime_val)
     columns = ["team_abbr", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]
@@ -2145,25 +2113,45 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     team_idx = {abbr: i for i, abbr in enumerate(team_list)}
 
     current_wins = standings["wins"].to_numpy(dtype=float)
-    pyth_pct = _pythag_pct(
-        standings["runs_scored"].fillna(0), standings["runs_allowed"].fillna(0),
-    ).to_numpy()
-    # A team with no runs logged yet (shouldn't happen mid-season, but keeps
-    # this from ever dividing into a 0/0 pythag pct) falls back to its
-    # actual winning percentage instead.
-    fallback_pct = (standings["wins"] / (standings["wins"] + standings["losses"]).replace(0, 1)).to_numpy()
-    pyth_pct = np.where(standings["runs_scored"].fillna(0).to_numpy() > 0, pyth_pct, fallback_pct)
 
-    team_ops_by_abbr, team_era_by_abbr = _team_ops_era(db_mtime_val)
-    team_ops = standings["team_abbr"].map(team_ops_by_abbr).to_numpy(dtype=float)
-    team_era = standings["team_abbr"].map(team_era_by_abbr).to_numpy(dtype=float)
-    # A team with no qualifying OPS/ERA yet falls back to the league mean
-    # (composite z-score of 0 -> no effect on that team's blended rating).
-    team_ops = np.where(np.isnan(team_ops), np.nanmean(team_ops), team_ops)
-    team_era = np.where(np.isnan(team_era), np.nanmean(team_era), team_era)
-    composite_z = 0.5 * _zscore(pd.Series(team_ops)) - 0.5 * _zscore(pd.Series(team_era))
-    composite_pct = (1 / (1 + np.exp(-composite_z.to_numpy())))
-    team_strength = np.clip(0.65 * pyth_pct + 0.35 * composite_pct, 0.05, 0.95)
+    params = load_win_model_params()
+    team_model = (params or {}).get("team_only")
+    if not team_model:
+        # The committed model artifact is required — same graceful-empty
+        # convention as the missing-standings/schedule cases above.
+        return pd.DataFrame(columns=columns)
+
+    # Per-team model features, frozen at today's state for the whole
+    # simulated remainder (the old blended-strength rating was equally
+    # static) — the exact features the team-only variant was trained on.
+    k = params["k_shrink"]
+    games_played = current_wins + standings["losses"].to_numpy(dtype=float)
+    runs_scored = standings["runs_scored"].fillna(0).to_numpy(dtype=float)
+    runs_allowed = standings["runs_allowed"].fillna(0).to_numpy(dtype=float)
+    shrunk_win = (current_wins + 0.5 * k) / (games_played + k)
+    shrunk_rd = (runs_scored - runs_allowed) / (games_played + k)
+    prior_map = params["prior_winpct_by_team_id"]
+    prior = np.array([
+        prior_map.get(str(teams.team_id_for_abbr(teams.normalize_mlb_abbr(a)) or ""), 0.5)
+        for a in team_list
+    ])
+
+    def _model_p_home(home_cols, away_cols, neutral: bool = False):
+        """Team-only model probability for a matchup; works on scalar or
+        vector column indices. neutral=True drops the intercept — the
+        intercept IS the learned home-field edge, so zeroing it gives a
+        true neutral-field probability for postseason series."""
+        feats = {
+            "d_win": shrunk_win[home_cols] - shrunk_win[away_cols],
+            "d_rundiff": shrunk_rd[home_cols] - shrunk_rd[away_cols],
+            "d_prior": prior[home_cols] - prior[away_cols],
+        }
+        z = 0.0 if neutral else team_model["intercept"]
+        for name, coef, mean, std in zip(
+            team_model["features"], team_model["coef"], team_model["mean"], team_model["std"],
+        ):
+            z = z + coef * ((feats[name] - mean) / (std or 1.0))
+        return 1.0 / (1.0 + np.exp(-z))
 
     remaining = schedule[
         (schedule["status"] != "Final")
@@ -2176,10 +2164,7 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     rng = np.random.default_rng()
     total_wins = np.tile(current_wins, (PLAYOFF_SIM_COUNT, 1))
     if n_games > 0:
-        home_str, away_str = team_strength[home_idx], team_strength[away_idx]
-        denom = home_str + away_str - 2 * home_str * away_str
-        p_home = np.where(denom > 0, (home_str - home_str * away_str) / np.where(denom > 0, denom, 1), 0.5)
-        p_home = np.clip(p_home + HOME_FIELD_ADVANTAGE, 0.01, 0.99)
+        p_home = np.clip(_model_p_home(home_idx, away_idx), 0.01, 0.99)
 
         draws = rng.random((PLAYOFF_SIM_COUNT, n_games))
         home_wins = draws < p_home[None, :]
@@ -2246,7 +2231,7 @@ def compute_playoff_odds(db_mtime_val: float) -> pd.DataFrame:
     ws_wins = np.zeros(n_teams)
 
     def _series_winner(col_a: int, col_b: int, n_games: int) -> int:
-        p_a = log5_win_prob(team_strength[col_a], team_strength[col_b])
+        p_a = float(_model_p_home(col_a, col_b, neutral=True))
         return col_a if rng.random() < _series_win_prob(p_a, n_games) else col_b
 
     for i in range(PLAYOFF_SIM_COUNT):
@@ -2415,24 +2400,6 @@ def clinch_elimination_status(db_mtime_val: float) -> list[dict]:
                     "kind": "eliminated", "division": row["division"],
                 })
     return results
-
-
-# Home teams win ~54% of MLB games historically — the playoff-odds
-# simulator (compute_playoff_odds) folds this flat edge into its per-game
-# Log5 probabilities. Today's Games' predict_game no longer uses it: its
-# trained model learns home-field advantage as the regression intercept
-# instead (see ingest/train_win_model.py).
-HOME_FIELD_ADVANTAGE = 0.04
-
-
-def log5_win_prob(pct_a: float, pct_b: float) -> float:
-    """Bill James' Log5 formula: probability team A beats team B, given each
-    team's overall winning percentage. Doesn't account for home field,
-    starters, injuries, etc. — see predict_game() for those adjustments."""
-    denom = pct_a + pct_b - 2 * pct_a * pct_b
-    if denom <= 0:
-        return 0.5
-    return (pct_a - pct_a * pct_b) / denom
 
 
 def moneyline_odds(prob: float) -> str:

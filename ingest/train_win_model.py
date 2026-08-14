@@ -75,6 +75,11 @@ ERA_IP_MIN = 30
 ERA_CLIP = (2.5, 6.5)
 
 FEATURES = ["d_win", "d_rundiff", "d_prior", "d_starter_era"]
+# The playoff-odds simulator's variant: no starter feature, because the
+# simulator plays out games weeks/months ahead, whose starters are
+# unknown. Trained and backtested identically so the artifact carries
+# honest metrics for BOTH the Today's Games model and the simulator's.
+TEAM_FEATURES = ["d_win", "d_rundiff", "d_prior"]
 
 L2_LAMBDA = 1e-4
 LEARNING_RATE = 0.5
@@ -205,8 +210,8 @@ def build_season_rows(games: list[dict], prior_pct: dict, prior_season: int,
     return rows
 
 
-def to_matrix(rows: list[dict]) -> tuple[np.ndarray, np.ndarray]:
-    X = np.array([[r[f] for f in FEATURES] for r in rows], dtype=float)
+def to_matrix(rows: list[dict], features: list[str] = FEATURES) -> tuple[np.ndarray, np.ndarray]:
+    X = np.array([[r[f] for f in features] for r in rows], dtype=float)
     y = np.array([r["y"] for r in rows], dtype=float)
     return X, y
 
@@ -303,16 +308,22 @@ def main():
         eval_rows = rows_by_season.get(eval_season, [])
         if not eval_rows:
             continue
-        Xt, yt = to_matrix(gather(tr_lo, tr_hi))
+        train_rows = gather(tr_lo, tr_hi)
+        Xt, yt = to_matrix(train_rows)
         w, b, mean, std = train_logistic(Xt, yt)
         Xe, ye = to_matrix(eval_rows)
         pe = predict(Xe, w, b, mean, std)
+        Xt2, _ = to_matrix(train_rows, TEAM_FEATURES)
+        w2, b2, mean2, std2 = train_logistic(Xt2, yt)
+        Xe2, _ = to_matrix(eval_rows, TEAM_FEATURES)
+        pe2 = predict(Xe2, w2, b2, mean2, std2)
         mask, y5, p5 = log5_replay(eval_rows)
         report[label] = {
             "season": eval_season,
             "trained_on": f"{tr_lo}-{tr_hi} (ex {sorted(EXCLUDED_SEASONS)})",
             "model": metrics(ye, pe),
             "model_on_log5_subset": metrics(ye[mask], pe[mask]),
+            "team_only_model": metrics(ye, pe2),
             "log5_plus_hfa": metrics(y5, p5),
             "always_home": metrics(ye, np.full(len(ye), 0.54)),
         }
@@ -320,19 +331,27 @@ def main():
         print(f"\n=== {label}: {eval_season} (trained {m['trained_on']}) ===")
         print(f"  model:          acc {m['model']['accuracy']:.4f}  logloss {m['model']['log_loss']:.4f}  brier {m['model']['brier']:.4f}  (n={m['model']['n']})")
         print(f"  model (subset): acc {m['model_on_log5_subset']['accuracy']:.4f}  logloss {m['model_on_log5_subset']['log_loss']:.4f}")
+        print(f"  team-only:      acc {m['team_only_model']['accuracy']:.4f}  logloss {m['team_only_model']['log_loss']:.4f}  brier {m['team_only_model']['brier']:.4f}")
         print(f"  log5 + 0.04:    acc {m['log5_plus_hfa']['accuracy']:.4f}  logloss {m['log5_plus_hfa']['log_loss']:.4f}  brier {m['log5_plus_hfa']['brier']:.4f}  (n={m['log5_plus_hfa']['n']})")
         print(f"  always-home:    acc {m['always_home']['accuracy']:.4f}  logloss {m['always_home']['log_loss']:.4f}")
 
     # Final artifact: fit through TEST_SEASON (never the current season —
     # it stays a pure holdout so the reported out-of-time metrics always
     # describe the shipped coefficients' genuinely unseen performance).
-    Xf, yf = to_matrix(gather(FIRST_TRAIN_SEASON, TEST_SEASON))
+    final_rows = gather(FIRST_TRAIN_SEASON, TEST_SEASON)
+    Xf, yf = to_matrix(final_rows)
     w, b, mean, std = train_logistic(Xf, yf)
+    Xf2, _ = to_matrix(final_rows, TEAM_FEATURES)
+    w2, b2, mean2, std2 = train_logistic(Xf2, yf)
     print(f"\nFinal fit on {FIRST_TRAIN_SEASON}-{TEST_SEASON} (ex {sorted(EXCLUDED_SEASONS)}): "
           f"{len(yf)} games")
     for f, wi in zip(FEATURES, w):
         print(f"  {f}: {wi:+.4f} (standardized)")
     print(f"  intercept: {b:+.4f}  -> baseline home win prob {1/(1+np.exp(-b)):.3f}")
+    print("  team-only variant:")
+    for f, wi in zip(TEAM_FEATURES, w2):
+        print(f"    {f}: {wi:+.4f} (standardized)")
+    print(f"    intercept: {b2:+.4f}")
 
     params = {
         "version": 1,
@@ -344,6 +363,13 @@ def main():
         "intercept": float(b),
         "mean": [float(v) for v in mean],
         "std": [float(v) for v in std],
+        "team_only": {
+            "features": TEAM_FEATURES,
+            "coef": [float(v) for v in w2],
+            "intercept": float(b2),
+            "mean": [float(v) for v in mean2],
+            "std": [float(v) for v in std2],
+        },
         "k_shrink": K_SHRINK,
         "k_prior": K_PRIOR,
         "era_ip_min": ERA_IP_MIN,
