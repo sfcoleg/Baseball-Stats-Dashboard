@@ -1,6 +1,7 @@
 """Shared helpers for reading the cached stats database."""
 import json
 import math
+import re
 import sqlite3
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor
@@ -571,6 +572,51 @@ _STATCAST_HIGHLIGHT_TAGS = {
 _NON_HIGHLIGHT_TAGS = {"abs", "challenge"}
 
 
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=32)
+def _game_highlight_items(abbr: str, date_str: str) -> list:
+    """All of MLB's highlight-clip items for the game `abbr` played on
+    `date_str` (schedule lookup -> game_pk -> content feed), shared by
+    every clip-matching path below so one game's items are fetched once
+    per half hour, not once per lookup. Returns [] on any failure."""
+    schedule = load_schedule_for_date(date_str)
+    if schedule.empty:
+        return []
+    match = schedule[(schedule["away_abbr"] == abbr) | (schedule["home_abbr"] == abbr)]
+    if match.empty:
+        return []
+    game_pk = int(match.iloc[0]["game_pk"])
+    try:
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{game_pk}/content", timeout=10)
+        resp.raise_for_status()
+        return ((resp.json().get("highlights") or {}).get("highlights") or {}).get("items", []) or []
+    except Exception:
+        return []
+
+
+def _clip_mp4_url(item: dict) -> str | None:
+    for pb in item.get("playbacks", []):
+        pb_url = pb.get("url") or ""
+        if pb.get("name") == "mp4Avc" or pb_url.endswith(".mp4"):
+            return pb_url
+    return None
+
+
+def _stat_number_pattern(detail: str):
+    """Compiled regex matching this stat line's own number in clip text —
+    a clip whose headline/description literally contains "114.4" (mph) or
+    "460-foot" IS the play the number came from, far more precisely than
+    any taxonomy tag. Decimals are distinctive enough to match bare; a
+    whole number (HR distance) must be followed by a feet-unit so "460"
+    can't collide with some other number in unrelated text."""
+    m = re.search(r"(\d+(?:\.\d+)?)", detail or "")
+    if not m:
+        return None
+    num = m.group(1)
+    if "." in num:
+        return re.compile(rf"\b{re.escape(num)}\b")
+    return re.compile(rf"\b{num}[-\s]?(?:ft|foot|feet)\b", re.IGNORECASE)
+
+
 def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str | None:
     """Shared lookup behind find_milestone_highlight/find_statcast_highlight
     — finds the player's game on `date_str` via the schedule, then searches
@@ -592,20 +638,7 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
     Returns None (never raises) if there's no schedule match, no content,
     or nothing tagged for both the player and the given tags — callers
     should render without a video rather than error out."""
-    schedule = load_schedule_for_date(date_str)
-    if schedule.empty:
-        return None
-    match = schedule[(schedule["away_abbr"] == abbr) | (schedule["home_abbr"] == abbr)]
-    if match.empty:
-        return None
-    game_pk = int(match.iloc[0]["game_pk"])
-    try:
-        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{game_pk}/content", timeout=10)
-        resp.raise_for_status()
-        items = ((resp.json().get("highlights") or {}).get("highlights") or {}).get("items", [])
-    except Exception:
-        return None
-
+    items = _game_highlight_items(abbr, date_str)
     fallback_url = None
     for item in items:
         keywords = item.get("keywordsAll", [])
@@ -617,12 +650,7 @@ def _find_tagged_player_clip(mlbID, abbr: str, date_str: str, tags: set) -> str 
             continue
         if not (item_tags & tags):
             continue
-        url = None
-        for pb in item.get("playbacks", []):
-            pb_url = pb.get("url") or ""
-            if pb.get("name") == "mp4Avc" or pb_url.endswith(".mp4"):
-                url = pb_url
-                break
+        url = _clip_mp4_url(item)
         if not url:
             continue
         if len(player_ids) == 1:
@@ -653,12 +681,36 @@ def find_milestone_highlight(mlbID, abbr: str, date_str: str, category: str) -> 
 
 
 @st.cache_data(show_spinner=False, ttl=1800, max_entries=100)
-def find_statcast_highlight(mlbID, abbr: str, date_str: str, kind: str) -> str | None:
+def find_statcast_highlight(mlbID, abbr: str, date_str: str, kind: str, detail: str | None = None) -> str | None:
     """Best-effort highlight clip for one of load_statcast_daily_leaderboard's
-    entries ("hardest_hit", "longest_hr", "fastest_pitch") — see
-    _find_tagged_player_clip for how the match works, _STATCAST_HIGHLIGHT_TAGS
-    for the kind->tag mapping (looser than milestones' — see that dict's
-    comment for why "hardest hit"/"fastest pitch" can't be matched exactly)."""
+    entries ("hardest_hit", "longest_hr", "fastest_pitch"). Two passes:
+
+    1. Exact stat-number match: if `detail` (the leaderboard's own display
+       line, e.g. "114.4 mph exit velo (Single)" or "460 ft home run")
+       carries a number that appears verbatim in a clip's headline or
+       description, that clip IS the play the number came from — more
+       precise than any taxonomy tag, and it can find correctly-described
+       clips the tag pass misses (MLB's tagging is inconsistent for
+       non-HR plays). ABS-challenge clips stay excluded here too.
+    2. Fallback: the shared player-id + taxonomy-tag match — see
+       _find_tagged_player_clip and _STATCAST_HIGHLIGHT_TAGS' comment for
+       why "hardest hit"/"fastest pitch" tags are inherently loose.
+
+    Neither pass can conjure a clip MLB never produced (confirmed real
+    case: a hardest-hit single with zero clips referencing the batter at
+    all) — those still correctly show no video."""
+    pattern = _stat_number_pattern(detail) if detail else None
+    if pattern:
+        for item in _game_highlight_items(abbr, date_str):
+            keywords = item.get("keywordsAll", [])
+            item_tags = {k["value"] for k in keywords if k.get("type") == "taxonomy"}
+            if item_tags & _NON_HIGHLIGHT_TAGS:
+                continue
+            text = " ".join(filter(None, [item.get("headline"), item.get("description"), item.get("blurb")]))
+            if pattern.search(text):
+                url = _clip_mp4_url(item)
+                if url:
+                    return url
     tags = _STATCAST_HIGHLIGHT_TAGS.get(kind)
     if not tags:
         return None
@@ -1135,8 +1187,79 @@ _SPRAY_EVENT_LABELS = {
 }
 SPRAY_EVENT_COLORS = {
     "Single": "#7CFC9A", "Double": "#3B82F6", "Triple": "#C084FC", "Home Run": "#F5B942",
-    "Error": "#F87171", "Out": "#6B7280",
+    "Error": "#F87171", "Out": "#6B7280", "In Play": "#FAFAFA",
 }
+
+
+@st.cache_data(show_spinner=False, ttl=30, max_entries=30)
+def load_game_batted_balls(game_pk) -> pd.DataFrame:
+    """Every ball put in play by EITHER team in one game — LIVE, from
+    MLB's own play-by-play feed (the same endpoint behind the Live Pitch
+    Tracker), for Game Center's 2D/3D batted-ball charts. An earlier
+    version of this fed from Baseball Savant's per-game export
+    (pybaseball's statcast_single_game) and had to be gated to finished
+    games, because that export is confirmed EMPTY until well after a game
+    ends; the live feed's per-play hitData has no such lag — it's what
+    MLB's own Gameday spray chart renders from. Verified against a
+    finished game that the feed's hitData is the same data in the same
+    coordinate space: exactly 53 balls in play in both sources, with
+    coordX/coordY numerically equal to Savant's hc_x/hc_y (within
+    rounding), so the existing _HC_X0/_HC_Y0/_HC_SCALE calibration
+    applies unchanged. Only events flagged isInPlay are counted (fouls
+    aren't charted); a ball in play whose plate appearance hasn't
+    resolved yet (mid-play, live) is labeled "In Play" until the feed
+    assigns the outcome — at most one point, corrected within a refresh.
+    Short ttl so the chart grows pitch-by-pitch during live games.
+    Returns empty (never raises) on fetch failure or before first pitch."""
+    cols = ["x_ft", "y_ft", "outcome", "launch_speed", "launch_angle",
+            "hit_distance_sc", "batter_name", "team_abbr"]
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{int(game_pk)}/feed/live", timeout=15,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return pd.DataFrame(columns=cols)
+
+    gd_teams = (raw.get("gameData") or {}).get("teams", {})
+    # "Top" of an inning = away team batting, "bottom" = home team.
+    batting_abbr = {
+        "top": (gd_teams.get("away") or {}).get("abbreviation"),
+        "bottom": (gd_teams.get("home") or {}).get("abbreviation"),
+    }
+    hit_labels = {"Single", "Double", "Triple", "Home Run"}
+    rows = []
+    for play in (raw.get("liveData") or {}).get("plays", {}).get("allPlays", []) or []:
+        event = (play.get("result") or {}).get("event")
+        batter = ((play.get("matchup") or {}).get("batter") or {}).get("fullName")
+        half = (play.get("about") or {}).get("halfInning")
+        for ev in play.get("playEvents", []):
+            if not (ev.get("details") or {}).get("isInPlay"):
+                continue
+            hd = ev.get("hitData") or {}
+            coords = hd.get("coordinates") or {}
+            if coords.get("coordX") is None or coords.get("coordY") is None:
+                continue
+            if event in hit_labels:
+                outcome = event
+            elif event == "Field Error":
+                outcome = "Error"
+            elif event:
+                outcome = "Out"
+            else:
+                outcome = "In Play"
+            rows.append({
+                "x_ft": (coords["coordX"] - _HC_X0) * _HC_SCALE,
+                "y_ft": (_HC_Y0 - coords["coordY"]) * _HC_SCALE,
+                "outcome": outcome,
+                "launch_speed": hd.get("launchSpeed"),
+                "launch_angle": hd.get("launchAngle"),
+                "hit_distance_sc": hd.get("totalDistance"),
+                "batter_name": batter,
+                "team_abbr": batting_abbr.get(half),
+            })
+    return pd.DataFrame(rows, columns=cols)
 
 
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=30)

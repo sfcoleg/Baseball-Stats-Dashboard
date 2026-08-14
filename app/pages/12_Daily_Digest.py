@@ -126,7 +126,7 @@ with st.spinner("Loading Statcast highlights..."):
         clip_urls = list(pool.map(
             lambda args: db.find_statcast_highlight(*args),
             [
-                (entry["mlbID"], teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))[0], yesterday.isoformat(), key)
+                (entry["mlbID"], teams.team_meta_from_city(player_row["Tm"], player_row.get("Lev"))[0], yesterday.isoformat(), key, entry["detail"])
                 for key, label, entry, player_row in matched
             ],
         ))
