@@ -757,8 +757,16 @@ if batting is not None and is_batter_role:
         field_lines = style.field_wall_lines(stadium_outline)
 
         if view_mode == "3D Trajectory":
-            fig3d = style.trajectory_3d_chart(spray, field_lines, db.SPRAY_EVENT_COLORS)
-            st.caption("Flight paths are an approximation — real Statcast trajectories account for drag, which isn't part of the public API; the start/end points are real, the arc connecting them is a plain projectile-motion curve.")
+            fig3d = style.trajectory_3d_chart(
+                spray, field_lines, db.SPRAY_EVENT_COLORS, wall_height=db.wall_height_ft(abbr),
+            )
+            st.caption(
+                "Flight paths are an approximation — real Statcast trajectories account for drag, which "
+                "isn't part of the public API; the start/end points are real, the arc connecting them is a "
+                "plain projectile-motion curve. The outfield wall is extruded to a representative height for "
+                f"this park ({db.wall_height_ft(abbr):.0f} ft) — real walls vary in height around the "
+                "outfield, this uses one typical figure rather than a full survey."
+            )
             st.plotly_chart(fig3d, use_container_width=True)
         else:
             fig = style.spray_chart_2d(spray, field_lines, db.SPRAY_EVENT_COLORS)

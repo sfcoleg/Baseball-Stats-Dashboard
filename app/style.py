@@ -1150,7 +1150,37 @@ _MPH_TO_FT_PER_S = 1.46667
 _GRAVITY_FT_S2 = 32.174
 
 
-def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: dict) -> go.Figure:
+def _wall_mesh_3d(wall_segment: tuple, height: float, color: str = "#2E7D32") -> "go.Mesh3d":
+    """Extrudes a ground-level (x_list, y_list) wall outline upward into a
+    ribbon surface at `height` — turns the outfield wall from a flat line
+    on the ground (trajectory_3d_chart's prior treatment of every field
+    line, walls included) into an actual standing fence, so the 3D scene
+    reads as a real park you could walk around rather than a field
+    diagrammed flat. See db.wall_height_ft for what `height` represents
+    (one representative height per park, not a true per-point survey)."""
+    xs, ys = wall_segment
+    n = len(xs)
+    if n < 2:
+        return go.Mesh3d(x=[], y=[], z=[])
+    x = list(xs) + list(xs)
+    y = list(ys) + list(ys)
+    z = [0.0] * n + [height] * n
+    tri_i, tri_j, tri_k = [], [], []
+    for idx in range(n - 1):
+        b0, b1, t0, t1 = idx, idx + 1, idx + n, idx + 1 + n
+        tri_i += [b0, b0]
+        tri_j += [b1, t1]
+        tri_k += [t1, t0]
+    return go.Mesh3d(
+        x=x, y=y, z=z, i=tri_i, j=tri_j, k=tri_k,
+        color=color, opacity=0.55, flatshading=True,
+        hoverinfo="skip", showlegend=False,
+    )
+
+
+def trajectory_3d_chart(
+    batted_balls: pd.DataFrame, field_lines: list, colors: dict, wall_height: float | None = None,
+) -> go.Figure:
     """A 3D fly-path view of the same batted balls the 2D spray chart plots
     — one line per ball from home plate to its real landing spot (the same
     hc_x/hc_y-derived x_ft/y_ft the 2D chart uses), arced using basic
@@ -1167,7 +1197,12 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
     segments the 2D chart draws (see pages/_Player.py) — redrawn here at
     z=0 as a ground reference so the arcs read as "over a field" instead
     of floating in space, rather than this function re-deriving the park
-    shape itself."""
+    shape itself. When `wall_height` is given, the FIRST segment (always
+    the outfield wall itself — see db.field_wall_lines/style.field_wall_lines
+    segment ordering) is extruded upward into a standing fence (see
+    _wall_mesh_3d) instead of drawn flat, for a real "walkthrough"-feeling
+    park; every other segment (infield lines, foul lines) stays a flat
+    ground reference either way."""
     fig = go.Figure()
     # Bounds tracked from the actual data (field wall + every ball's
     # landing spot and computed arc peak) rather than a fixed guess at a
@@ -1179,11 +1214,15 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
     # in sync with whatever the axis ranges happen to be, and it wasn't.
     max_x_abs, min_y, max_y, max_z = 0.0, 0.0, 0.0, 20.0
 
-    for xs, ys in field_lines:
-        fig.add_trace(go.Scatter3d(
-            x=xs, y=ys, z=[0] * len(xs), mode="lines",
-            line=dict(color="#111318", width=3), showlegend=False, hoverinfo="skip",
-        ))
+    for idx, (xs, ys) in enumerate(field_lines):
+        if idx == 0 and wall_height:
+            fig.add_trace(_wall_mesh_3d((xs, ys), wall_height))
+            max_z = max(max_z, wall_height)
+        else:
+            fig.add_trace(go.Scatter3d(
+                x=xs, y=ys, z=[0] * len(xs), mode="lines",
+                line=dict(color="#111318", width=3), showlegend=False, hoverinfo="skip",
+            ))
         if xs:
             max_x_abs = max(max_x_abs, max(abs(v) for v in xs))
         if ys:

@@ -1404,6 +1404,24 @@ STADIUM_CF_FEET = {
     "SEA": 401, "STL": 400, "TB": 404, "TEX": 407, "TOR": 400, "WSH": 402,
 }
 
+# Outfield wall height (feet) for the 3D trajectory chart's extruded wall
+# — MLB doesn't publish per-point wall height along the whole fence (it
+# varies around the outfield at real parks), so this is ONE representative
+# height per team applied uniformly around the whole wall, not a fully
+# accurate 3D scan. Only Fenway's real, extremely well-known "Green
+# Monster" (37 ft in left field) is called out specifically; every other
+# team uses the generic ~8ft MLB-standard outfield wall height rather than
+# guessed-at numbers for walls with no single well-established figure.
+DEFAULT_WALL_HEIGHT_FT = 8.0
+WALL_HEIGHT_FT_OVERRIDES = {"BOS": 37.0}
+
+
+def wall_height_ft(team_abbr: str) -> float:
+    """See WALL_HEIGHT_FT_OVERRIDES/DEFAULT_WALL_HEIGHT_FT above for what
+    this is and isn't (one representative height per park, not a real
+    per-point wall survey)."""
+    return WALL_HEIGHT_FT_OVERRIDES.get(team_abbr, DEFAULT_WALL_HEIGHT_FT)
+
 
 @st.cache_data(show_spinner=False)
 def team_stadium_outline(team_abbr: str) -> dict[str, list[tuple[float, float]]]:
