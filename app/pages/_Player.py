@@ -222,28 +222,6 @@ with header_col:
         height=0,
     )
 
-awards = db.load_player_awards(mlbID)
-if awards and awards["marquee"]:
-    style.colored_header("Awards", "headliners", color)
-    by_season = {}
-    for a in awards["marquee"]:
-        by_season.setdefault(a["season"], []).append(a)
-    season_html = []
-    for yr, entries in by_season.items():
-        badges = "".join(
-            f"<span style='background-color:{e['color']}33;color:{e['color']};padding:3px 10px;"
-            f"border-radius:8px;font-weight:600;font-size:0.85rem;margin-right:6px;"
-            f"display:inline-block;margin-bottom:4px'>{e['label']}</span>"
-            for e in entries
-        )
-        season_html.append(
-            f"<div style='margin-bottom:6px'>"
-            f"<span style='color:#9AA3B5;font-weight:600;margin-right:10px'>{yr}</span>{badges}</div>"
-        )
-    st.markdown("".join(season_html), unsafe_allow_html=True)
-    if awards["other_count"]:
-        st.caption(f"+{awards['other_count']} other honor{'s' if awards['other_count'] != 1 else ''}")
-
 history = db.load_player_history(mlbID, season, mtime)
 streak_badges = []
 if batting is not None and is_batter_role:
@@ -831,6 +809,28 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
                     st.session_state["selected_name"] = row["Name"]
                     st.session_state["selected_season"] = season
                     st.switch_page("pages/_Player.py")
+
+awards = db.load_player_awards(mlbID)
+if awards and awards["marquee"]:
+    style.colored_header("Awards", "headliners", color)
+    by_season = {}
+    for a in awards["marquee"]:
+        by_season.setdefault(a["season"], []).append(a)
+    season_html = []
+    for yr, entries in by_season.items():
+        badges = "".join(
+            f"<span style='background-color:{e['color']}33;color:{e['color']};padding:3px 10px;"
+            f"border-radius:8px;font-weight:600;font-size:0.85rem;margin-right:6px;"
+            f"display:inline-block;margin-bottom:4px'>{e['label']}</span>"
+            for e in entries
+        )
+        season_html.append(
+            f"<div style='margin-bottom:6px'>"
+            f"<span style='color:#9AA3B5;font-weight:600;margin-right:10px'>{yr}</span>{badges}</div>"
+        )
+    st.markdown("".join(season_html), unsafe_allow_html=True)
+    if awards["other_count"]:
+        st.caption(f"+{awards['other_count']} other honor{'s' if awards['other_count'] != 1 else ''}")
 
 if batting is None and pitching is None and fielding.empty:
     st.info("No stats found for this player in the selected season.")
