@@ -942,25 +942,120 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     fig = go.Figure()
     sz_top = pitches[-1]["sz_top"] if pitches else 3.5
     sz_bottom = pitches[-1]["sz_bottom"] if pitches else 1.5
+    # Zone box with a whisper of fill so it reads as a region, not a wire.
     fig.add_shape(
         type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
-        line=dict(color="#9AA3B5", width=2), fillcolor="rgba(0,0,0,0)",
+        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(250,250,250,0.05)",
     )
-    for p in pitches:
+    # Rule-of-thirds gridlines — the mental grid every broadcast zone uses.
+    third_w, third_h = 1.416 / 3, (sz_top - sz_bottom) / 3
+    for i in (1, 2):
+        fig.add_shape(
+            type="line", x0=-0.708 + i * third_w, x1=-0.708 + i * third_w,
+            y0=sz_bottom, y1=sz_top, line=dict(color="rgba(250,250,250,0.18)", width=1),
+        )
+        fig.add_shape(
+            type="line", x0=-0.708, x1=0.708,
+            y0=sz_bottom + i * third_h, y1=sz_bottom + i * third_h,
+            line=dict(color="rgba(250,250,250,0.18)", width=1),
+        )
+    # Home plate (catcher's view, wide edge up) grounds the whole picture.
+    fig.add_shape(
+        type="path",
+        path="M -0.708 0.62 L 0.708 0.62 L 0.708 0.44 L 0 0.25 L -0.708 0.44 Z",
+        line=dict(color="#9AA3B5", width=1.5), fillcolor="rgba(154,163,181,0.18)",
+    )
+    for i, p in enumerate(pitches):
         kind = "in_play" if p["is_in_play"] else ("strike" if p["is_strike"] else "ball")
         speed_bit = f"{p['speed']:.1f} mph " if p.get("speed") else ""
+        latest = i == len(pitches) - 1
         fig.add_trace(go.Scatter(
             x=[p["px"]], y=[p["pz"]], mode="markers+text",
-            marker=dict(size=36, color=_PITCH_RESULT_COLORS[kind], line=dict(color="#12141C", width=1.5)),
+            marker=dict(
+                size=40 if latest else 34, color=_PITCH_RESULT_COLORS[kind],
+                line=dict(color="#FAFAFA" if latest else "#12141C", width=3 if latest else 1.5),
+            ),
             text=[str(p["number"])], textfont=dict(color="#12141C", size=15, family="Arial Black"),
             hovertext=f"{speed_bit}{p['pitch_type']} — {p['description']}", hoverinfo="text",
             showlegend=False,
         ))
-    fig.update_xaxes(range=[-2.5, 2.5], visible=False, fixedrange=True)
-    fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
+    fig.update_xaxes(range=[-2.2, 2.2], visible=False, fixedrange=True)
+    fig.update_yaxes(range=[0, 4.6], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         height=650, margin=dict(l=10, r=10, t=10, b=10),
+    )
+    return fig
+
+
+_UMP_REF_BOT, _UMP_REF_TOP = 1.6, 3.4
+
+
+def ump_zone_plot(pitches: list[dict]) -> "go.Figure":
+    """Every called pitch of one game on one zone box — correct calls as
+    muted dots, misses as full-strength diamonds with a white ring, so a
+    scorecard's story is readable at a glance. Each pitch's height is
+    NORMALIZED to a reference zone (its own batter's measured zone bottom/
+    top mapped to the reference box's bottom/top) — without this, a
+    correctly-called low strike to a short batter would plot inside the
+    box while a taller batter's identical-height ball plots outside, and
+    the picture would lie. The dashed outer boundary is the ball-radius
+    allowance (a call is judged by whether ANY part of the ball clipped
+    the zone); dot colors always reflect the true judgment even where
+    normalization makes a borderline dot visually ambiguous."""
+    fig = go.Figure()
+    fig.add_shape(
+        type="rect", x0=-0.708, x1=0.708, y0=_UMP_REF_BOT, y1=_UMP_REF_TOP,
+        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(250,250,250,0.04)",
+    )
+    fig.add_shape(
+        type="rect", x0=-0.829, x1=0.829, y0=_UMP_REF_BOT - 0.121, y1=_UMP_REF_TOP + 0.121,
+        line=dict(color="rgba(250,250,250,0.35)", width=1, dash="dot"), fillcolor="rgba(0,0,0,0)",
+    )
+    fig.add_shape(
+        type="path",
+        path="M -0.708 0.95 L 0.708 0.95 L 0.708 0.78 L 0 0.6 L -0.708 0.78 Z",
+        line=dict(color="#9AA3B5", width=1.5), fillcolor="rgba(154,163,181,0.18)",
+    )
+
+    def norm_z(p):
+        span = p["sz_top"] - p["sz_bottom"]
+        if span <= 0:
+            return p["pz"]
+        return _UMP_REF_BOT + (p["pz"] - p["sz_bottom"]) / span * (_UMP_REF_TOP - _UMP_REF_BOT)
+
+    groups = [
+        ("strike", True, "Called strike (correct)", "#F87171", 0.35, "circle", 8),
+        ("ball", True, "Called ball (correct)", "#7CFC9A", 0.35, "circle", 8),
+        ("strike", False, "Missed strike call", "#F87171", 1.0, "diamond", 13),
+        ("ball", False, "Missed ball call", "#7CFC9A", 1.0, "diamond", 13),
+    ]
+    for call, ok, label, color, opacity, symbol, size in groups:
+        pts = [p for p in pitches if p["call"] == call and p["correct"] == ok]
+        if not pts:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[p["px"] for p in pts], y=[norm_z(p) for p in pts],
+            mode="markers", name=label,
+            marker=dict(
+                size=size, color=color, opacity=opacity, symbol=symbol,
+                line=dict(color="#FAFAFA", width=1.5 if not ok else 0),
+            ),
+            hovertext=[
+                (f"Called {p['call']} — "
+                 + ("correct" if p["correct"] else
+                    (f"{abs(p['d_in']):.1f}\" outside the zone" if p["call"] == "strike"
+                     else f"{abs(p['d_in']):.1f}\" inside the zone")))
+                for p in pts
+            ],
+            hoverinfo="text",
+        ))
+    fig.update_xaxes(range=[-2.0, 2.0], visible=False, fixedrange=True)
+    fig.update_yaxes(range=[0.4, 4.5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        height=480, margin=dict(l=10, r=10, t=10, b=10),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
     )
     return fig
 

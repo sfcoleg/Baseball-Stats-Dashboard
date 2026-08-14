@@ -286,6 +286,7 @@ PAGES = [
     st.Page("pages/8_Todays_Games.py", title="Today's Games"),
     st.Page("pages/9_Standings.py", title="Standings"),
     st.Page("pages/17_Playoffs.py", title="Playoffs"),
+    st.Page("pages/23_Umpires.py", title="Umpires"),
     st.Page("pages/10_Injury_Report.py", title="Injury Report"),
     st.Page("pages/11_Transactions.py", title="Transactions"),
     st.Page("pages/16_Awards_Race.py", title="Awards Race"),

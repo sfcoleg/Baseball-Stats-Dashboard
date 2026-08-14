@@ -2649,6 +2649,137 @@ def predict_game(row: pd.Series, db_mtime_val: float) -> dict | None:
     }
 
 
+# ---------------------------------------------------------------------------
+# Umpire scorecards. Zone-judgment constants and the signed-distance math
+# are an exact MIRROR of ingest/ump_scorecards.py (see its docstring for
+# the full methodology) — the ingest side grades finished games from
+# Savant bulk data into the ump_games table; this side grades live/on-
+# demand games straight from the play-by-play feed for the Umpires page's
+# live scorecards and per-game zone plots. Keep the two in lockstep.
+_UMP_BALL_RADIUS_FT = 0.1208
+_UMP_HALF_PLATE_FT = 17 / 2 / 12
+_UMP_ZONE_HALF_X = _UMP_HALF_PLATE_FT + _UMP_BALL_RADIUS_FT
+UMP_CLEAR_MISS_IN = 1.0
+
+
+def _ump_signed_distance_in(px: float, pz: float, sz_top: float, sz_bot: float) -> float:
+    """Signed inches from the ball-radius-expanded strike region: negative
+    = inside (depth to nearest boundary), positive = outside (euclidean
+    distance to the region). Mirror of ingest/ump_scorecards.py."""
+    lo_z, hi_z = sz_bot - _UMP_BALL_RADIUS_FT, sz_top + _UMP_BALL_RADIUS_FT
+    dx = abs(px) - _UMP_ZONE_HALF_X
+    dz = max(lo_z - pz, pz - hi_z)
+    if dx <= 0 and dz <= 0:
+        return 12.0 * max(dx, dz)
+    return 12.0 * ((max(dx, 0.0) ** 2 + max(dz, 0.0) ** 2) ** 0.5)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_ump_games(db_mtime_val: float) -> pd.DataFrame:
+    """Every graded game summary from the ump_games table (see
+    ingest/ump_scorecards.py). Empty DataFrame before the backfill has
+    ever run, same convention as every other optional table here."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM ump_games", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+def ump_leaderboard(games: pd.DataFrame, season: int, min_games: int = 5) -> pd.DataFrame:
+    """Season leaderboard with the difficulty adjustment: `vs Expected` is
+    each ump's actual accuracy minus what a league-average ump would have
+    scored on the SAME pitches — league accuracy per signed-distance
+    bucket (that season), weighted by this ump's own bucket mix. Corrects
+    for one ump catching more borderline pitches than another; a plain
+    accuracy%% comparison would punish the harder schedule."""
+    season_games = games[games["season"] == season]
+    if season_games.empty:
+        return pd.DataFrame()
+    bucket_n = [f"b{i}_n" for i in range(6)]
+    bucket_c = [f"b{i}_c" for i in range(6)]
+    league_acc = [
+        (season_games[c].sum() / season_games[n].sum()) if season_games[n].sum() else 1.0
+        for n, c in zip(bucket_n, bucket_c)
+    ]
+    rows = []
+    for (ump_id, ump_name), g in season_games.groupby(["ump_id", "ump_name"]):
+        n_games = len(g)
+        if n_games < min_games:
+            continue
+        called = int(g["called"].sum())
+        correct = int(g["correct"].sum())
+        expected = sum(g[n].sum() * acc for n, acc in zip(bucket_n, league_acc))
+        rows.append({
+            "Umpire": ump_name, "G": n_games, "Called": called,
+            "Accuracy": 100 * correct / called,
+            "vs Expected": 100 * (correct - expected) / called,
+            "Wrong K": int(g["wrong_strikes"].sum()),
+            "Wrong BB": int(g["wrong_balls"].sum()),
+            "Clear Misses/G": g["clear_misses"].sum() / n_games,
+        })
+    out = pd.DataFrame(rows)
+    return out.sort_values("Accuracy", ascending=False).reset_index(drop=True) if not out.empty else out
+
+
+@st.cache_data(show_spinner=False, ttl=120, max_entries=30)
+def load_ump_game_detail(game_pk) -> dict | None:
+    """One game's full called-pitch detail, graded live from the play-by-
+    play feed — powers both in-progress scorecards (nothing is in the DB
+    yet mid-game) and the zone plot for any historical game (per-pitch
+    locations aren't stored in ump_games; one cached feed fetch on demand
+    beats permanently storing ~140 rows per game). Only human judgment
+    calls count: codes C/B/*B (called strike / ball / ball in dirt),
+    excluding automatic pitch-clock balls/strikes. Returns None when the
+    feed is unavailable or has no called pitches yet."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{int(game_pk)}/feed/live", timeout=15,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return None
+    officials = (raw.get("liveData") or {}).get("boxscore", {}).get("officials", [])
+    hp = next((o for o in officials if o.get("officialType") == "Home Plate"), None)
+    ump_name = ((hp or {}).get("official") or {}).get("fullName")
+
+    pitches = []
+    for play in (raw.get("liveData") or {}).get("plays", {}).get("allPlays", []) or []:
+        for ev in play.get("playEvents", []):
+            details = ev.get("details") or {}
+            if details.get("code") not in ("C", "B", "*B"):
+                continue
+            if "utomatic" in (details.get("description") or ""):
+                continue
+            pdata = ev.get("pitchData") or {}
+            coords = pdata.get("coordinates") or {}
+            px, pz = coords.get("pX"), coords.get("pZ")
+            sz_top, sz_bot = pdata.get("strikeZoneTop"), pdata.get("strikeZoneBottom")
+            if px is None or pz is None or not sz_top or not sz_bot:
+                continue
+            d = _ump_signed_distance_in(px, pz, sz_top, sz_bot)
+            is_strike_call = details["code"] == "C"
+            pitches.append({
+                "px": px, "pz": pz, "sz_top": sz_top, "sz_bottom": sz_bot,
+                "call": "strike" if is_strike_call else "ball",
+                "correct": (d <= 0) == is_strike_call,
+                "d_in": round(d, 2),
+            })
+    if not pitches:
+        return None
+    correct = sum(1 for p in pitches if p["correct"])
+    return {
+        "ump_name": ump_name,
+        "called": len(pitches),
+        "correct": correct,
+        "accuracy": 100 * correct / len(pitches),
+        "wrong_strikes": sum(1 for p in pitches if not p["correct"] and p["call"] == "strike"),
+        "wrong_balls": sum(1 for p in pitches if not p["correct"] and p["call"] == "ball"),
+        "pitches": pitches,
+    }
+
+
 # Shohei Ohtani is the only player whose search/profile "roles" description
 # shows both — everyone else shows a single primary role (see
 # player_roles_label below). Without this, a position player who mopped up

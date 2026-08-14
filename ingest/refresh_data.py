@@ -1313,6 +1313,15 @@ def fetch_and_store():
         f"{new_achievements} new milestone achievements to {DB_PATH}"
     )
 
+    # Umpire scorecards for yesterday's games (see ump_scorecards.py) —
+    # guarded so a hiccup in this add-on can never take down the rest of
+    # the nightly refresh that the whole site depends on.
+    try:
+        from ump_scorecards import update_day
+        update_day((date.today() - timedelta(days=1)).isoformat())
+    except Exception as e:
+        print(f"ump scorecard update failed (non-fatal): {e}")
+
 
 def backfill_season(season):
     """One-time fetch of a single historical season's batting/pitching/fielding
