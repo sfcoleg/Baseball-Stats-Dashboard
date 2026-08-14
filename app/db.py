@@ -1659,6 +1659,84 @@ def is_player_active(mlbID) -> bool | None:
         return None
 
 
+# Curated marquee award IDs, keyed to a display label and color, for the
+# Player page's awards summary — real MLB Stats API award ids, confirmed
+# against actual recipients (Judge: ALMVP/ALSS/ALHAA/ALROY/ALAS; Skenes:
+# NLCY/NLROY/NLAS; Ohtani: NLMVP/NLCSMVP/DHOY/WSCHAMP; Arenado: NLGG).
+# {AL,NL} prefix covers both leagues for every award that has one.
+_MARQUEE_AWARDS = {
+    "ALMVP": ("AL MVP", "#F5B942"), "NLMVP": ("NL MVP", "#F5B942"),
+    "ALCY": ("AL Cy Young", "#F5B942"), "NLCY": ("NL Cy Young", "#F5B942"),
+    "ALROY": ("AL Rookie of the Year", "#7CFC9A"), "NLROY": ("NL Rookie of the Year", "#7CFC9A"),
+    "ALGG": ("AL Gold Glove", "#9AA3B5"), "NLGG": ("NL Gold Glove", "#9AA3B5"),
+    "ALSS": ("AL Silver Slugger", "#3B82F6"), "NLSS": ("NL Silver Slugger", "#3B82F6"),
+    "ALHAA": ("AL Hank Aaron Award", "#F87171"), "NLHAA": ("NL Hank Aaron Award", "#F87171"),
+    "ALAS": ("AL All-Star", "#C084FC"), "NLAS": ("NL All-Star", "#C084FC"),
+    "MLBAFIRST": ("All-MLB First Team", "#F5B942"), "MLBSECOND": ("All-MLB Second Team", "#9AA3B5"),
+    "WSCHAMP": ("World Series Champion", "#F5B942"), "WSMVP": ("World Series MVP", "#F5B942"),
+    "ALCSMVP": ("ALCS MVP", "#C084FC"), "NLCSMVP": ("NLCS MVP", "#C084FC"),
+    "DHOY": ("Outstanding DH", "#3B82F6"),
+    "MLBRC": ("Roberto Clemente Award", "#F87171"),
+    "WDPOY": ("Wilson Defensive Player of the Year", "#9AA3B5"),
+}
+# Real but too frequent/minor to headline a career trophy case (a good
+# player earns a dozen Player-of-the-Week/Month nods a year, and minor-
+# league honors stop being the point once someone has an MLB profile) —
+# folded into a single "+N other honors" count instead of hidden outright.
+_NOISY_AWARD_PREFIXES = ("POW", "POM", "ROM", "PITOM")
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=500)
+def load_player_awards(mlbID) -> dict | None:
+    """This player's full MLB award history, live from the Stats API's own
+    `awards` hydrate (confirmed real and current for real recipients —
+    Judge's 2022/2024 AL MVPs, Skenes' 2024 NL Cy Young + ROY, Ohtani's
+    2023 WSCHAMP, Arenado's Gold Gloves — all showed up correctly). NOT
+    pybaseball's awards_players()/awards_share_players(): those depend on
+    a bundled Lahman-database zip fetched from
+    chadwickbureau/baseballdatabank on GitHub, and that repository no
+    longer exists (confirmed: the repo page itself 404s, not just a
+    branch rename) — broken upstream, not something this app can fix.
+    This MLB-native route also has real advantages over that dead one:
+    always current (updates the moment a new award is announced, no
+    ingest/backfill needed) and it's a live per-player fetch, same
+    pattern as is_player_active.
+    Returns {"marquee": [{"season","label","color"}, ...] sorted newest
+    first, "other_count": int} or None if the player has no awards at
+    all or the lookup fails."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1/people/{int(mlbID)}",
+            params={"hydrate": "awards"}, timeout=10,
+        )
+        resp.raise_for_status()
+        people = resp.json().get("people", [])
+    except Exception:
+        return None
+    if not people:
+        return None
+    awards = people[0].get("awards") or []
+    if not awards:
+        return None
+
+    marquee, other_count = [], 0
+    for a in awards:
+        award_id = a.get("id") or ""
+        if award_id in _MARQUEE_AWARDS:
+            label, color = _MARQUEE_AWARDS[award_id]
+            marquee.append({"season": a.get("season"), "label": label, "color": color})
+        elif any(award_id.endswith(suffix) for suffix in _NOISY_AWARD_PREFIXES):
+            other_count += 1
+        elif "MiLB" in (a.get("name") or "") or award_id.startswith(("AFL", "MILB", "INT", "BAAA", "SAL")):
+            continue  # minor-league honors: not noise to count, just not relevant on an MLB profile
+        else:
+            other_count += 1
+    marquee.sort(key=lambda m: m["season"] or "", reverse=True)
+    if not marquee and not other_count:
+        return None
+    return {"marquee": marquee, "other_count": other_count}
+
+
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=3)
 def load_injury_report() -> pd.DataFrame:
     """Every player currently on a major-league injured list, across all 30
