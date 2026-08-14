@@ -14,7 +14,11 @@ import teams
 
 st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
-st.caption("Our own win probabilities/odds — not real sportsbook lines. Based on Log5 + starter/bullpen ERA, lineup wOBA, and platoon splits.")
+st.caption(
+    "Our own win probabilities/odds — not real sportsbook lines. From a logistic-regression model "
+    "trained on 2015-2025 games (56.7% accuracy on its 2025 holdout): team record, run differential, "
+    "prior-season strength, each probable starter's prior-season ERA, and home field."
+)
 
 # Normally seeded by predictions.bootstrap() in main.py, but Streamlit's
 # legacy pages/-folder auto-discovery can route a direct URL hit straight to
@@ -40,13 +44,6 @@ if games.empty:
 season = db.get_seasons("batting")[0]
 pitching_raw = db.load_pitching(season, mtime)
 pitching = teams.add_team_abbr(pitching_raw)
-batting = teams.add_team_abbr(db.load_batting(season, mtime))
-
-_pitcher_ids = tuple(sorted({
-    int(v) for col in ("away_pitcher_mlbID", "home_pitcher_mlbID")
-    for v in games[col].dropna().tolist()
-}))
-pitcher_hands = db.load_pitcher_handedness(_pitcher_ids)
 
 
 def team_color(abbr):
@@ -80,7 +77,7 @@ def render_games():
     my_picks = {p["game_pk"]: p["pick_abbr"] for p in predictions.get_picks()}
 
     for _, row in games.iterrows():
-        pred = db.predict_game(row, pitching, batting, pitcher_hands)
+        pred = db.predict_game(row, mtime)
         away_color, home_color = team_color(row["away_abbr"]), team_color(row["home_abbr"])
         away_logo, home_logo = team_logo(row["away_abbr"]), team_logo(row["home_abbr"])
         live = live_scores.get(row["game_pk"], {})

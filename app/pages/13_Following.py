@@ -117,13 +117,7 @@ else:
         st.caption("None of your followed teams play today.")
     else:
         pitching = teams.add_team_abbr(db.load_pitching(season, mtime))
-        batting = teams.add_team_abbr(db.load_batting(season, mtime))
         live_scores = db.load_live_scores(my_games.iloc[0]["date"])
-        pitcher_ids = tuple(sorted({
-            int(v) for col in ("away_pitcher_mlbID", "home_pitcher_mlbID")
-            for v in my_games[col].dropna().tolist()
-        }))
-        pitcher_hands = db.load_pitcher_handedness(pitcher_ids)
 
         def pitcher_era(mlbID):
             if mlbID is None or pd.isna(mlbID):
@@ -132,7 +126,7 @@ else:
             return None if match.empty else match.iloc[0]["ERA"]
 
         for _, row in my_games.iterrows():
-            pred = db.predict_game(row, pitching, batting, pitcher_hands)
+            pred = db.predict_game(row, mtime)
             away_color = teams.color_for_abbr(teams.normalize_mlb_abbr(row["away_abbr"]))
             home_color = teams.color_for_abbr(teams.normalize_mlb_abbr(row["home_abbr"]))
             live = live_scores.get(row["game_pk"], {})

@@ -1,4 +1,5 @@
 """Shared helpers for reading the cached stats database."""
+import json
 import math
 import sqlite3
 import unicodedata
@@ -1483,9 +1484,8 @@ def load_depth_chart(team_id: int) -> dict:
     ingest, since depth charts shift with trades/call-ups more often than
     once a day. Returns {position_code: {"name", "mlbID", "bats"}}, e.g.
     {"SS": {"name": "...", "mlbID": ..., "bats": "L"|"R"|"S"}}; a position
-    is simply absent if the API has no one listed there. "bats" (batting
-    side) doubles as the lineup-composition input for predict_game()'s
-    platoon-split adjustment."""
+    is simply absent if the API has no one listed there. "bats" is each
+    player's batting side."""
     try:
         resp = requests.get(
             f"https://statsapi.mlb.com/api/v1/teams/{int(team_id)}/roster",
@@ -1511,27 +1511,6 @@ def load_depth_chart(team_id: int) -> dict:
     if "CP" in starters:
         starters["RP"] = starters.pop("CP")
     return starters
-
-
-@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=10)
-def load_pitcher_handedness(mlbIDs: tuple) -> dict:
-    """Throwing hand for each mlbID, via a single batched MLB Stats API call
-    (handedness never changes, so this is cached for a full day). Returns
-    {mlbID: "L"|"R"}; an id the API doesn't recognize is simply absent."""
-    ids = [str(int(i)) for i in mlbIDs if i is not None and not pd.isna(i)]
-    if not ids:
-        return {}
-    try:
-        resp = requests.get(
-            "https://statsapi.mlb.com/api/v1/people",
-            params={"personIds": ",".join(ids)},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        people = resp.json().get("people", [])
-    except Exception:
-        return {}
-    return {p["id"]: p["pitchHand"]["code"] for p in people if p.get("pitchHand", {}).get("code")}
 
 
 _INJURY_STATUS_CODES = {"D7": "7-Day IL", "D10": "10-Day IL", "D15": "15-Day IL", "D60": "60-Day IL"}
@@ -2438,36 +2417,12 @@ def clinch_elimination_status(db_mtime_val: float) -> list[dict]:
     return results
 
 
-# Home teams win ~54% of MLB games historically — this constant folds that
-# edge directly into the Log5 probability.
+# Home teams win ~54% of MLB games historically — the playoff-odds
+# simulator (compute_playoff_odds) folds this flat edge into its per-game
+# Log5 probabilities. Today's Games' predict_game no longer uses it: its
+# trained model learns home-field advantage as the regression intercept
+# instead (see ingest/train_win_model.py).
 HOME_FIELD_ADVANTAGE = 0.04
-# How much a starter's ERA differs from qualified league-average ERA before
-# it can move the prediction, and by how much per full run of ERA. Capped so
-# a tiny-sample ERA (e.g. a starter's first outing) can't swing things wildly.
-STARTER_ERA_PROB_PER_RUN = 0.03
-STARTER_ERA_MAX_SHIFT = 0.10
-# Same idea, for each team's bullpen (relievers = GS==0, min 5 IP so a single
-# mop-up outing can't swing it). Weighted lower than the starter since one
-# pitcher (thrown well over half the game) still matters more than the pen.
-BULLPEN_ERA_PROB_PER_RUN = 0.02
-BULLPEN_ERA_MAX_SHIFT = 0.05
-BULLPEN_MIN_IP = 5
-# Team lineup strength, by PA-weighted team wOBA (min 20 PA so a September
-# call-up's 3-PA sample doesn't skew it). wOBA sits on a ~.300-.340 scale, so
-# a typical best-vs-worst-lineup gap (~.020-.030) yields a modest shift.
-LINEUP_WOBA_PROB_PER_POINT = 3.0
-LINEUP_WOBA_MAX_SHIFT = 0.05
-LINEUP_MIN_PA = 20
-# Platoon-split adjustment: rather than scraping per-player vs-LHP/vs-RHP
-# splits (hundreds of Baseball-Reference requests a day — not viable), this
-# uses each team's likely lineup handedness mix (from the depth chart's 9
-# position-player slots) against the opposing starter's throwing hand, and
-# the well-documented *league-average* same-handed platoon penalty. A lineup
-# that's entirely opposite-handed vs. the opposing starter gets the full
-# shift; an entirely same-handed lineup gets the full penalty; a 50/50 mix
-# is neutral. Switch hitters always bat opposite the pitcher, so they never
-# count as a same-handed matchup.
-PLATOON_MAX_SHIFT = 0.03
 
 
 def log5_win_prob(pct_a: float, pct_b: float) -> float:
@@ -2489,110 +2444,112 @@ def moneyline_odds(prob: float) -> str:
     return f"+{round(100 * (1 - prob) / prob):d}"
 
 
-def _clamp(value, max_abs):
-    return max(-max_abs, min(max_abs, value))
+WIN_MODEL_PARAMS_PATH = Path(__file__).resolve().parent / "win_model_params.json"
 
 
-def team_bullpen_era(pitching: pd.DataFrame, team_abbr: str) -> float | None:
-    """IP-weighted ERA of a team's relievers (GS==0). `pitching` must already
-    have team-abbreviated Tm (see teams.add_team_abbr)."""
-    bullpen = pitching[(pitching["Tm"] == team_abbr) & (pitching["GS"] == 0) & (pitching["IP"] >= BULLPEN_MIN_IP)]
-    total_ip = bullpen["IP"].sum()
-    if total_ip <= 0:
+@st.cache_data(show_spinner=False)
+def load_win_model_params() -> dict | None:
+    """The trained Today's Games win-probability model — coefficients,
+    standardization stats, and serve-time reference data (prior-season
+    team strength and league ERA), produced offline by
+    ingest/train_win_model.py (see its docstring for the training and
+    backtesting protocol; the artifact's own "metrics" block records how
+    it scored on held-out seasons). Returns None if the artifact is
+    missing, in which case predict_game shows no odds rather than
+    crashing the page."""
+    try:
+        return json.loads(WIN_MODEL_PARAMS_PATH.read_text())
+    except Exception:
         return None
-    return (bullpen["ERA"] * bullpen["IP"]).sum() / total_ip
 
 
-def team_lineup_woba(batting: pd.DataFrame, team_abbr: str) -> float | None:
-    """PA-weighted wOBA of a team's batters. `batting` must already have
-    team-abbreviated Tm (see teams.add_team_abbr)."""
-    lineup = batting[(batting["Tm"] == team_abbr) & (batting["PA"] >= LINEUP_MIN_PA)]
-    total_pa = lineup["PA"].sum()
-    if total_pa <= 0 or lineup["wOBA"].isna().all():
+@st.cache_data(show_spinner=False, max_entries=2)
+def _team_entering_stats(db_mtime_val: float) -> dict:
+    """Per-team [games, wins, runs_for, runs_against] across the current
+    season's completed games, from the ingested schedule table — the
+    serve-time twin of the running per-season state
+    ingest/train_win_model.py reconstructs during training, so the
+    model's in-season features come from the same kind of inputs it was
+    trained on."""
+    schedule = load_schedule(db_mtime_val)
+    stats: dict = {}
+    if schedule.empty:
+        return stats
+    played = schedule[
+        (schedule["status"] == "Final")
+        & schedule["home_score"].notna() & schedule["away_score"].notna()
+        & (schedule["home_score"] != schedule["away_score"])
+    ]
+    for _, g in played.iterrows():
+        for abbr, scored, allowed in (
+            (g["home_abbr"], g["home_score"], g["away_score"]),
+            (g["away_abbr"], g["away_score"], g["home_score"]),
+        ):
+            s = stats.setdefault(abbr, [0, 0, 0.0, 0.0])
+            s[0] += 1
+            s[1] += 1 if scored > allowed else 0
+            s[2] += float(scored)
+            s[3] += float(allowed)
+    return stats
+
+
+def _starter_prior_era(mlbID, params: dict, db_mtime_val: float) -> float:
+    """The probable starter's PRIOR-season ERA, clipped — mirroring the
+    training feature exactly (see ingest/train_win_model.py's leakage
+    notes for why prior-season rather than current-season ERA). An
+    unknown or unqualified (< era_ip_min prior IP) starter gets the prior
+    season's qualified league-average ERA, same as in training."""
+    lo, hi = params["era_clip"]
+    era = params["prior_league_era"]
+    if mlbID is not None and not pd.isna(mlbID):
+        prior = load_pitching(params["prior_season"], db_mtime_val)
+        if not prior.empty:
+            match = prior[(prior["mlbID"] == int(mlbID)) & (prior["IP"] >= params["era_ip_min"])]
+            if not match.empty:
+                best = match.sort_values("IP", ascending=False).iloc[0]
+                if pd.notna(best["ERA"]):
+                    era = float(best["ERA"])
+    return min(max(era, lo), hi)
+
+
+def predict_game(row: pd.Series, db_mtime_val: float) -> dict | None:
+    """Home/away win probability for one row of todays_games, from a
+    logistic-regression model trained and walk-forward backtested on
+    2015-2025 games (see ingest/train_win_model.py) — replacing the old
+    hand-tuned Log5-plus-adjustments formula, whose replayed
+    probabilities scored worse than a coin flip on log-loss in every
+    backtest season (systematically overconfident). Features, mirrored
+    exactly from training: shrunk in-season record and run-differential
+    diffs, shrunk prior-season record diff, the probable starters'
+    prior-season ERA diff, and a learned home-field intercept. Still our
+    own estimate — no injuries, park factors, weather, or external odds
+    provider. Returns None only if the trained artifact
+    (app/win_model_params.json) is missing."""
+    params = load_win_model_params()
+    if not params:
         return None
-    weighted = lineup.dropna(subset=["wOBA"])
-    total_pa = weighted["PA"].sum()
-    if total_pa <= 0:
-        return None
-    return (weighted["wOBA"] * weighted["PA"]).sum() / total_pa
-
-
-def _platoon_shift(lineup_starters: dict, opposing_pitcher_hand: str | None) -> float:
-    if not lineup_starters or opposing_pitcher_hand not in ("L", "R"):
-        return 0.0
-    bats = [p.get("bats") for p in lineup_starters.values() if p.get("bats") in ("L", "R", "S")]
-    if not bats:
-        return 0.0
-    share_same_handed = sum(1 for b in bats if b == opposing_pitcher_hand) / len(bats)
-    return (0.5 - share_same_handed) * 2 * PLATOON_MAX_SHIFT
-
-
-def predict_game(
-    row: pd.Series,
-    pitching: pd.DataFrame,
-    batting: pd.DataFrame | None = None,
-    pitcher_hands: dict | None = None,
-) -> dict | None:
-    """Predicts a home/away win probability for one row of todays_games,
-    using Log5 (team win%) + home-field advantage, then layering on:
-      - starting-pitcher ERA vs. qualified league-average ERA
-      - bullpen ERA vs. league-average bullpen ERA (team_bullpen_era)
-      - lineup wOBA vs. league-average lineup wOBA (team_lineup_woba)
-      - a platoon-split estimate from each lineup's handedness mix vs. the
-        opposing starter's throwing hand (see PLATOON_MAX_SHIFT)
-    `pitching` must be season pitching stats; pass team-abbreviated
-    `pitching`/`batting` (teams.add_team_abbr) to get the bullpen/lineup/
-    platoon factors — they're skipped (Log5 + home field + starter only) if
-    omitted. `pitcher_hands` is {mlbID: "L"|"R"} (see load_pitcher_handedness).
-    This is our own sabermetric estimate, not a real betting line, and still
-    has no park factors, injuries, or weather — no external odds provider
-    involved."""
-    away_g, home_g = row["away_wins"] + row["away_losses"], row["home_wins"] + row["home_losses"]
-    if not away_g or not home_g:
-        return None
-    away_pct = row["away_wins"] / away_g
-    home_pct = row["home_wins"] / home_g
-
-    home_prob = log5_win_prob(home_pct, away_pct) + HOME_FIELD_ADVANTAGE
-
-    qualified = pitching[pitching["IP"] >= 20]
-    league_era = qualified["ERA"].mean() if not qualified.empty else None
-    if league_era is not None:
-        for side, mlbID_col, sign in [("home", "home_pitcher_mlbID", 1), ("away", "away_pitcher_mlbID", -1)]:
-            mlbID = row.get(mlbID_col)
-            if mlbID is None or pd.isna(mlbID):
-                continue
-            match = pitching[pitching["mlbID"] == int(mlbID)]
-            if match.empty:
-                continue
-            era = match.iloc[0]["ERA"]
-            if pd.isna(era):
-                continue
-            shift = _clamp((league_era - era) * STARTER_ERA_PROB_PER_RUN, STARTER_ERA_MAX_SHIFT)
-            home_prob += sign * shift
-
+    k = params["k_shrink"]
+    stats = _team_entering_stats(db_mtime_val)
     home_abbr = teams.normalize_mlb_abbr(row.get("home_abbr", ""))
     away_abbr = teams.normalize_mlb_abbr(row.get("away_abbr", ""))
+    h = stats.get(home_abbr, [0, 0, 0.0, 0.0])
+    a = stats.get(away_abbr, [0, 0, 0.0, 0.0])
 
-    if batting is not None and "Tm" in pitching.columns:
-        home_bullpen, away_bullpen = team_bullpen_era(pitching, home_abbr), team_bullpen_era(pitching, away_abbr)
-        if home_bullpen is not None and away_bullpen is not None:
-            home_prob += _clamp((away_bullpen - home_bullpen) * BULLPEN_ERA_PROB_PER_RUN, BULLPEN_ERA_MAX_SHIFT)
-
-    if batting is not None and "Tm" in batting.columns:
-        home_woba, away_woba = team_lineup_woba(batting, home_abbr), team_lineup_woba(batting, away_abbr)
-        if home_woba is not None and away_woba is not None:
-            home_prob += _clamp((home_woba - away_woba) * LINEUP_WOBA_PROB_PER_POINT, LINEUP_WOBA_MAX_SHIFT)
-
-    if pitcher_hands is not None:
-        home_team_id, away_team_id = teams.team_id_for_abbr(home_abbr), teams.team_id_for_abbr(away_abbr)
-        home_starters = load_depth_chart(home_team_id) if home_team_id else {}
-        away_starters = load_depth_chart(away_team_id) if away_team_id else {}
-        away_pitcher_hand = pitcher_hands.get(int(row["away_pitcher_mlbID"])) if pd.notna(row.get("away_pitcher_mlbID")) else None
-        home_pitcher_hand = pitcher_hands.get(int(row["home_pitcher_mlbID"])) if pd.notna(row.get("home_pitcher_mlbID")) else None
-        home_prob += _platoon_shift(home_starters, away_pitcher_hand)
-        home_prob -= _platoon_shift(away_starters, home_pitcher_hand)
-
+    priors = params["prior_winpct_by_team_id"]
+    h_id, a_id = teams.team_id_for_abbr(home_abbr), teams.team_id_for_abbr(away_abbr)
+    h_era = _starter_prior_era(row.get("home_pitcher_mlbID"), params, db_mtime_val)
+    a_era = _starter_prior_era(row.get("away_pitcher_mlbID"), params, db_mtime_val)
+    feats = {
+        "d_win": (h[1] + 0.5 * k) / (h[0] + k) - (a[1] + 0.5 * k) / (a[0] + k),
+        "d_rundiff": (h[2] - h[3]) / (h[0] + k) - (a[2] - a[3]) / (a[0] + k),
+        "d_prior": priors.get(str(h_id), 0.5) - priors.get(str(a_id), 0.5),
+        "d_starter_era": a_era - h_era,
+    }
+    z = params["intercept"]
+    for name, coef, mean, std in zip(params["features"], params["coef"], params["mean"], params["std"]):
+        z += coef * ((feats[name] - mean) / (std or 1.0))
+    home_prob = 1.0 / (1.0 + math.exp(-z))
+    # Same display clamp the old formula used — the UI never claims a lock.
     home_prob = min(max(home_prob, 0.05), 0.95)
     return {
         "home_prob": home_prob,
