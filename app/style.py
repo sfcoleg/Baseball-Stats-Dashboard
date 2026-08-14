@@ -1119,8 +1119,16 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
         hovertemplate=f"{home_abbr} %{{y:.0f}}%<extra></extra>",
     ))
     if "away_score" in wp_df.columns and "home_score" in wp_df.columns and len(wp_df) > 1:
-        score_changed = (wp_df["away_score"].diff() != 0) | (wp_df["home_score"].diff() != 0)
-        scoring_rows = wp_df[score_changed.fillna(False)]
+        # .diff()'s first row is NaN, and "NaN != 0" evaluates to True (not
+        # NaN) in pandas — the comparison itself never produces a NaN to
+        # catch, so the since-removed .fillna(False) here was a no-op and
+        # the game's first play always got flagged as a false-positive
+        # "scoring play" regardless of the real score. .fillna(0) BEFORE
+        # comparing fixes it: the first row now diffs against a real 0.
+        score_changed = (
+            (wp_df["away_score"].diff().fillna(0) != 0) | (wp_df["home_score"].diff().fillna(0) != 0)
+        )
+        scoring_rows = wp_df[score_changed]
         if not scoring_rows.empty:
             for x in scoring_rows["atBatIndex"]:
                 fig.add_vline(x=x, line=dict(color="#FAFAFA", width=1))
