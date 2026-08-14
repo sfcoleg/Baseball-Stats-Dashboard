@@ -292,6 +292,7 @@ PAGES = [
     st.Page("pages/16_Awards_Race.py", title="Awards Race"),
     st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/22_Box_Score_Search.py", title="Box Score Search"),
+    st.Page("pages/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
     st.Page("pages/_Game_Detail.py", title="Game Center"),  # same — reached only via Today's Games' button
 ]
@@ -301,7 +302,25 @@ if SHOW_FREE_AGENCY:
 pg = st.navigation(PAGES, position="hidden")
 
 for p in PAGES:
-    if p.title not in ("Player", "Game Center"):
+    if p.title not in ("Player", "Game Center", "Glossary"):
         st.sidebar.page_link(p, label=p.title)
+
+# Small, deliberately understated link to the stat glossary — sits below the
+# main nav (not mixed into the loop above), shrunk/muted via a href-matching
+# CSS selector (page_link renders as a sibling element, not a child of any
+# preceding markdown div, so it has to be targeted this way rather than
+# wrapped) so it reads as a quiet reference link, not another top-level
+# section.
+st.sidebar.markdown(
+    "<style>"
+    "[data-testid='stSidebar'] a[href*='Glossary'] {"
+    "  font-size: 0.8rem !important; opacity: 0.6;"
+    "}"
+    "[data-testid='stSidebar'] a[href*='Glossary']:hover { opacity: 1; }"
+    "</style>",
+    unsafe_allow_html=True,
+)
+glossary_page = next(p for p in PAGES if p.title == "Glossary")
+st.sidebar.page_link(glossary_page, label="ℹ️ Glossary", use_container_width=False)
 
 pg.run()
