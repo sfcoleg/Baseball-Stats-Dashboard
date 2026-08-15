@@ -287,7 +287,6 @@ PAGES = [
     st.Page("pages/13_Following.py", title="Following"),
     st.Page("pages/1_Batting.py", title="Batting"),
     st.Page("pages/2_Pitching.py", title="Pitching"),
-    st.Page("pages/27_Pitch_Lab.py", title="Pitch Lab"),
     st.Page("pages/3_Fielding.py", title="Fielding"),
     st.Page("pages/6_Baserunning.py", title="Baserunning"),
     st.Page("pages/4_Team.py", title="Team"),

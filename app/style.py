@@ -96,6 +96,17 @@ def diamond_logo(size=64):
 # All section headers share one accent color now (see colored_header) rather
 # than a different hue per category — kept as a dict (not a bare constant)
 # so existing colored_header(..., category) call sites don't need to change.
+# One stable color per pitch type, used by the player page's arsenal
+# movement/trend charts so a slider is always the same green regardless of
+# which pitcher or season is on screen.
+PITCH_COLORS = {
+    "4-Seam Fastball": "#D32F2F", "Sinker": "#F57C00", "Cutter": "#FBC02D",
+    "Slider": "#7CB342", "Sweeper": "#26A69A", "Slurve": "#4DB6AC",
+    "Curveball": "#3B82F6", "Knuckle Curve": "#5C6BC0", "Changeup": "#AB47BC",
+    "Splitter": "#EC407A", "Split-Finger": "#EC407A", "Knuckleball": "#8D6E63",
+    "Screwball": "#78909C", "Forkball": "#EC407A", "Eephus": "#9AA3B5",
+}
+
 CATEGORY_COLORS = {
     "batting": ACCENT,
     "pitching": ACCENT,

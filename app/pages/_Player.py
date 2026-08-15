@@ -440,24 +440,102 @@ if pitching is not None and is_pitcher_role:
             if arsenal.empty:
                 st.caption("No pitch-level Statcast data for this season.")
             else:
-                arsenal_display = arsenal[[
-                    "pitch_name", "usage_pct", "velocity", "spin_rate", "whiff_pct",
-                    "vert_break", "horz_break", "run_value",
-                ]].rename(columns={
-                    "pitch_name": "Pitch", "usage_pct": "Usage %", "velocity": "Velo (mph)",
-                    "spin_rate": "Active Spin %", "whiff_pct": "Whiff %", "vert_break": "Vert Break (in)",
-                    "horz_break": "Horz Break (in)", "run_value": "Run Value",
-                })
+                arsenal_cols = {
+                    "pitch_name": "Pitch", "usage_pct": "Usage %", "velocity": "Velo",
+                    "spin_rate": "Active Spin %", "vert_break": "IVB", "horz_break": "HB",
+                    "whiff_pct": "Whiff %", "ba": "BA", "slg": "SLG", "woba": "wOBA",
+                    "hard_hit_percent": "Hard-Hit %", "run_value_per_100": "RV/100",
+                }
+                # Results-against columns only exist on rows ingested with the
+                # extended schema (2017+) — show whichever are present.
+                arsenal_cols = {k: v for k, v in arsenal_cols.items() if k in arsenal.columns}
+                arsenal_display = arsenal[list(arsenal_cols)].rename(columns=arsenal_cols)
                 st.dataframe(
                     style.style_stats_table(
                         arsenal_display,
-                        precision={"Usage %": "{:.1f}", "Velo (mph)": "{:.1f}", "Active Spin %": "{:.1f}",
-                                   "Whiff %": "{:.1f}", "Vert Break (in)": "{:.1f}", "Horz Break (in)": "{:.1f}"},
+                        higher_better=[c for c in ["Whiff %", "RV/100"] if c in arsenal_display.columns],
+                        lower_better=[c for c in ["BA", "SLG", "wOBA", "Hard-Hit %"] if c in arsenal_display.columns],
+                        precision={"Usage %": "{:.1f}", "Velo": "{:.1f}", "Active Spin %": "{:.1f}",
+                                   "IVB": "{:.1f}", "HB": "{:.1f}", "Whiff %": "{:.1f}",
+                                   "BA": "{:.3f}", "SLG": "{:.3f}", "wOBA": "{:.3f}",
+                                   "Hard-Hit %": "{:.1f}", "RV/100": "{:+.1f}"},
                     ),
                     use_container_width=True,
                     hide_index=True,
                 )
-                st.caption("Active Spin % — 2020+ only; blank for older seasons or pitch types Statcast doesn't track it for.")
+                st.caption(
+                    "IVB/HB = induced vertical / horizontal break (inches). BA/SLG/wOBA = what hitters "
+                    "produce against that pitch. RV/100 = run value per 100 pitches, pitcher's "
+                    "perspective — positive is good. Active Spin % is 2020+ only."
+                )
+
+                # Movement cloud: this pitcher's pitches vs. the whole league.
+                league_arsenal = db.load_pitch_arsenal(season, mtime)
+                if not league_arsenal.empty and "vert_break" in arsenal.columns:
+                    st.markdown("**Movement vs. the League**")
+                    st.caption(
+                        "Every dot is one pitcher's version of a pitch, from the whole league. "
+                        "The labeled dots are this pitcher's — far from the pack means movement "
+                        "hitters rarely see."
+                    )
+                    fig = go.Figure()
+                    cloud = league_arsenal.dropna(subset=["vert_break", "horz_break"])
+                    for pname, seg in cloud.groupby("pitch_name"):
+                        fig.add_trace(go.Scatter(
+                            x=seg["horz_break"], y=seg["vert_break"], mode="markers",
+                            marker=dict(size=5, color=style.PITCH_COLORS.get(pname, "#9AA3B5"), opacity=0.15),
+                            hoverinfo="skip", showlegend=False,
+                        ))
+                    mine_mv = arsenal.dropna(subset=["vert_break", "horz_break"])
+                    for _, prow in mine_mv.iterrows():
+                        fig.add_trace(go.Scatter(
+                            x=[prow["horz_break"]], y=[prow["vert_break"]], mode="markers+text",
+                            name=prow["pitch_name"], text=[prow["pitch_name"]], textposition="top center",
+                            textfont=dict(size=11, color="#FAFAFA"),
+                            marker=dict(size=14, color=style.PITCH_COLORS.get(prow["pitch_name"], "#FAFAFA"),
+                                        line=dict(width=2, color="#FAFAFA")),
+                            showlegend=False,
+                        ))
+                    fig.add_hline(y=0, line_color="rgba(154,163,181,0.4)", line_width=1)
+                    fig.add_vline(x=0, line_color="rgba(154,163,181,0.4)", line_width=1)
+                    fig.update_xaxes(title="Horizontal Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                    fig.update_yaxes(title="Induced Vertical Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                    fig.update_layout(
+                        height=440, margin=dict(l=10, r=10, t=10, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
+
+                # Year-over-year arsenal changes for this pitcher.
+                history_arsenal = db.load_pitch_arsenal_all_seasons(mtime)
+                mine_hist = history_arsenal[history_arsenal["mlbID"] == mlbID] if not history_arsenal.empty else history_arsenal
+                if not mine_hist.empty and mine_hist["season"].nunique() > 1:
+                    st.markdown("**Arsenal Over the Years**")
+                    st.caption("Usage and velocity by season — new pitches appearing, old ones shelved, velocity trends.")
+                    metric_pick = st.radio(
+                        "Arsenal trend metric", ["Usage %", "Velocity"], horizontal=True,
+                        key=f"arsenal_trend_{mlbID}", label_visibility="collapsed",
+                    )
+                    metric_col = "usage_pct" if metric_pick == "Usage %" else "velocity"
+                    fig = go.Figure()
+                    for pname, seg in mine_hist.dropna(subset=[metric_col]).groupby("pitch_name"):
+                        seg = seg.sort_values("season")
+                        fig.add_trace(go.Scatter(
+                            x=seg["season"], y=seg[metric_col], mode="lines+markers", name=pname,
+                            line=dict(color=style.PITCH_COLORS.get(pname, "#9AA3B5"), width=2.5),
+                            marker=dict(size=7),
+                        ))
+                    fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                    fig.update_yaxes(
+                        title="Usage %" if metric_col == "usage_pct" else "Velo (mph)",
+                        gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5",
+                    )
+                    fig.update_layout(
+                        height=380, margin=dict(l=10, r=10, t=10, b=10),
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+                    )
+                    st.plotly_chart(fig, use_container_width=True)
 
                 st.markdown("**Pitch Locations**")
                 with st.spinner("Loading pitch-by-pitch data — first load can take 20-30s..."):

@@ -625,6 +625,9 @@ def fetch_spin_rate(season=CURRENT_SEASON):
         if col not in df.columns:
             continue
         sub = df[["entity_id", col]].rename(columns={"entity_id": "mlbID", col: "spin_rate"})
+        # The CSV serves these as strings — coerce so the stored column is
+        # numeric (a text spin_rate breaks float formatting in the UI).
+        sub["spin_rate"] = pd.to_numeric(sub["spin_rate"], errors="coerce")
         sub["pitch_type"] = pitch_type
         frames.append(sub.dropna(subset=["spin_rate"]))
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=["mlbID", "pitch_type", "spin_rate"])

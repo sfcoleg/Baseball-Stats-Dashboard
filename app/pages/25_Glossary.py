@@ -67,7 +67,7 @@ _entry("ERA+", "ERA adjusted for park and league, where 100 is league average (h
 _entry("Fastball Velo", "Average fastball velocity, in mph.")
 _entry("Induced Chase%", "Share of the pitcher's out-of-zone pitches that batters chase — a pitcher-side view of the same chase-rate idea from the batting section.")
 
-style.colored_header("Pitch Lab", "pitching")
+style.colored_header("Pitch Arsenal (player pages)", "pitching")
 _entry("IVB (Induced Vertical Break)", "How much a pitch rises relative to a gravity-only ball, in inches — high-IVB fastballs \"carry\" and get swings under them.")
 _entry("HB (Horizontal Break)", "Sideways movement in inches, from the catcher's view.")
 _entry("Active Spin %", "Share of a pitch's spin that actually contributes to movement (vs. gyro spin, which doesn't).")
