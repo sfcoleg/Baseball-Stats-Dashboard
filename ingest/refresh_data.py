@@ -549,6 +549,7 @@ def fetch_pitch_arsenal(season=CURRENT_SEASON):
     stats = stats.rename(columns={
         "last_name, first_name": "Name", "player_id": "mlbID",
         "pitch_usage": "usage_pct", "whiff_percent": "whiff_pct",
+        "team_name_alt": "team",
     })
 
     print(f"Fetching {season} Statcast pitch movement (velocity/break)...")
@@ -570,9 +571,11 @@ def fetch_pitch_arsenal(season=CURRENT_SEASON):
         movement_frames.append(df.rename(columns={
             "pitcher_id": "mlbID", "avg_speed": "velocity",
             "pitcher_break_z_induced": "vert_break", "pitcher_break_x": "horz_break",
-        })[["mlbID", "pitch_type", "velocity", "vert_break", "horz_break"]])
+        })[["mlbID", "pitch_type", "pitch_hand", "velocity", "vert_break", "horz_break",
+            "league_break_z", "league_break_x"]])
     movement = pd.concat(movement_frames, ignore_index=True) if movement_frames else pd.DataFrame(
-        columns=["mlbID", "pitch_type", "velocity", "vert_break", "horz_break"]
+        columns=["mlbID", "pitch_type", "pitch_hand", "velocity", "vert_break", "horz_break",
+                 "league_break_z", "league_break_x"]
     )
 
     spin = fetch_spin_rate(season)
@@ -580,8 +583,10 @@ def fetch_pitch_arsenal(season=CURRENT_SEASON):
     arsenal = arsenal.merge(spin, on=["mlbID", "pitch_type"], how="left")
     arsenal["season"] = season
     return arsenal[[
-        "mlbID", "Name", "pitch_type", "pitch_name", "usage_pct", "whiff_pct",
-        "run_value", "run_value_per_100", "velocity", "vert_break", "horz_break", "spin_rate", "season",
+        "mlbID", "Name", "team", "pitch_hand", "pitch_type", "pitch_name", "usage_pct", "whiff_pct",
+        "run_value", "run_value_per_100", "velocity", "vert_break", "horz_break",
+        "league_break_z", "league_break_x", "spin_rate",
+        "pa", "ba", "slg", "woba", "est_woba", "k_percent", "put_away", "hard_hit_percent", "season",
     ]]
 
 
@@ -687,9 +692,9 @@ def fetch_catcher_framing(season=CURRENT_SEASON):
     except Exception as e:
         print(f"  skipped catcher framing ({e})")
         return pd.DataFrame(columns=["mlbID", "season"])
-    df = df.rename(columns={"id": "mlbID", "rv_tot": "framing_runs", "pct_tot": "framing_pct"})
+    df = df.rename(columns={"id": "mlbID", "rv_tot": "framing_runs", "pct_tot": "framing_pct", "name": "Name"})
     df["season"] = season
-    return df[["mlbID", "framing_runs", "framing_pct", "season"]]
+    return df[["mlbID", "Name", "pitches", "framing_runs", "framing_pct", "season"]]
 
 
 def fetch_catcher_poptime(season=CURRENT_SEASON):
@@ -707,11 +712,14 @@ def fetch_catcher_poptime(season=CURRENT_SEASON):
     except Exception as e:
         print(f"  skipped catcher pop time ({e})")
         return pd.DataFrame(columns=["mlbID", "season"])
-    df = df.rename(columns={"entity_id": "mlbID", "pop_2b_sba": "pop_2b", "pop_3b_sba": "pop_3b"})
+    df = df.rename(columns={
+        "entity_id": "mlbID", "entity_name": "Name", "pop_2b_sba": "pop_2b", "pop_3b_sba": "pop_3b",
+        "pop_2b_sba_count": "pop_2b_count", "pop_3b_sba_count": "pop_3b_count",
+        "maxeff_arm_2b_3b_sba": "arm", "exchange_2b_3b_sba": "exchange_time",
+    })
     df["season"] = season
-    return df[["mlbID", "pop_2b", "pop_3b", "exchange_2b_3b_sba", "season"]].rename(
-        columns={"exchange_2b_3b_sba": "exchange_time"}
-    )
+    return df[["mlbID", "Name", "age", "arm", "exchange_time",
+               "pop_2b", "pop_2b_count", "pop_3b", "pop_3b_count", "season"]]
 
 
 def fetch_outfielder_jump(season=CURRENT_SEASON):

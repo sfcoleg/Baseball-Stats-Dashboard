@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
@@ -49,8 +50,19 @@ filtered = filtered.sort_values("OAA", ascending=False).reset_index(drop=True)
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 display = teams.add_team_abbr_from_nickname(table_rows)[
-    ["Name", "Tm", "Pos", "OAA", "FRP", "success_rate", "arm_strength"]
-].rename(columns={"success_rate": "Success Rate", "arm_strength": "Arm Strength"})
+    ["Name", "Tm", "Pos", "OAA", "FRP", "success_rate",
+     "adj_estimated_success_rate_formatted", "diff_success_rate_formatted", "arm_strength"]
+].rename(columns={
+    "success_rate": "Success Rate",
+    "adj_estimated_success_rate_formatted": "Est. Success Rate",
+    "diff_success_rate_formatted": "Success Rate +/-",
+    "arm_strength": "Arm Strength",
+})
+st.caption(
+    "Est. Success Rate = how often an average fielder converts the same opportunities "
+    "(difficulty-adjusted). Success Rate +/- = actual minus estimated — positive means beating "
+    "the plays they were dealt."
+)
 st.dataframe(
     style.style_stats_table(
         display,
@@ -62,3 +74,91 @@ st.dataframe(
     use_container_width=True,
     height=600,
 )
+
+# --- Catcher defense --------------------------------------------------------
+# The two catcher skills the table above misses entirely — framing and
+# controlling the running game. Data from catcher_framing/catcher_poptime
+# (ingest/pitch_lab.py backfill + nightly refresh).
+framing = db.load_catcher_framing(season, db.db_mtime())
+poptime = db.load_catcher_poptime(season, db.db_mtime())
+
+if not framing.empty:
+    style.colored_header("Catcher Framing", "pitching")
+    st.caption(
+        "Framing Runs = runs added or cost purely by converting borderline pitches into called "
+        "strikes (and not losing real strikes), vs. an average catcher. Strike Rate = share of "
+        "shadow-zone pitches (the borderline ring around the zone's edges) called strikes."
+    )
+    fr = framing.sort_values("framing_runs", ascending=False).copy()
+    # framing_pct is stored as a 0-1 shadow-zone strike rate — show as a percentage.
+    if fr["framing_pct"].max() <= 1:
+        fr["framing_pct"] = fr["framing_pct"] * 100
+    fr_disp = fr[["Name", "pitches", "framing_runs", "framing_pct"]].rename(columns={
+        "Name": "Catcher", "pitches": "Pitches", "framing_runs": "Framing Runs",
+        "framing_pct": "Strike Rate %",
+    })
+    st.dataframe(
+        style.style_stats_table(
+            fr_disp,
+            higher_better=["Framing Runs", "Strike Rate %"],
+            precision={"Framing Runs": "{:+.1f}", "Strike Rate %": "{:.1f}"},
+        ),
+        use_container_width=True, height=420, hide_index=True,
+    )
+
+if not poptime.empty:
+    style.colored_header("Catcher Throwing", "fielding")
+    st.caption(
+        "Pop Time = glove-to-glove seconds on a steal attempt of 2nd (league average ≈ 2.00s). "
+        "Exchange = glove-to-release seconds. Arm = max-effort throw velocity (mph)."
+    )
+    pt = poptime.sort_values("pop_2b").copy()
+    pt_disp = pt[["Name", "age", "pop_2b", "pop_2b_count", "pop_3b", "exchange_time", "arm"]].rename(columns={
+        "Name": "Catcher", "age": "Age", "pop_2b": "Pop 2B (s)", "pop_2b_count": "2B Attempts",
+        "pop_3b": "Pop 3B (s)", "exchange_time": "Exchange (s)", "arm": "Arm (mph)",
+    })
+    st.dataframe(
+        style.style_stats_table(
+            pt_disp,
+            higher_better=["Arm (mph)"],
+            lower_better=["Pop 2B (s)", "Pop 3B (s)", "Exchange (s)"],
+            precision={"Pop 2B (s)": "{:.2f}", "Pop 3B (s)": "{:.2f}", "Exchange (s)": "{:.2f}",
+                       "Arm (mph)": "{:.1f}"},
+        ),
+        use_container_width=True, height=420, hide_index=True,
+    )
+
+if not framing.empty and not poptime.empty:
+    style.colored_header("Framing vs. Throwing", "chart")
+    combo = framing.merge(poptime[["mlbID", "pop_2b"]], on="mlbID", how="inner").dropna(
+        subset=["framing_runs", "pop_2b"]
+    )
+    if not combo.empty:
+        st.caption(
+            "Top-left = complete defensive catchers (elite framing AND a fast pop time). "
+            "Bubble size = pitches caught."
+        )
+        fig = go.Figure(go.Scatter(
+            x=combo["pop_2b"], y=combo["framing_runs"], mode="markers",
+            marker=dict(
+                size=(combo["pitches"] / combo["pitches"].max() * 22) + 6,
+                color=combo["framing_runs"], colorscale="RdYlGn",
+                line=dict(width=1, color="rgba(250,250,250,0.35)"), opacity=0.9,
+            ),
+            hovertext=[
+                f"{r['Name']}: {r['framing_runs']:+.1f} framing runs, {r['pop_2b']:.2f}s pop"
+                for _, r in combo.iterrows()
+            ],
+            hoverinfo="text",
+        ))
+        fig.add_hline(y=0, line_color="rgba(154,163,181,0.5)", line_width=1, line_dash="dash")
+        fig.add_vline(x=2.0, line_color="rgba(154,163,181,0.5)", line_width=1, line_dash="dash",
+                      annotation_text="league avg pop", annotation_font_color="#9AA3B5")
+        fig.update_xaxes(title="Pop Time to 2B (s) — lower is better", autorange="reversed",
+                         gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+        fig.update_yaxes(title="Framing Runs", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+        fig.update_layout(
+            height=520, margin=dict(l=10, r=10, t=10, b=10),
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        )
+        st.plotly_chart(fig, use_container_width=True)

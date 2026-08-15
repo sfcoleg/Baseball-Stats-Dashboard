@@ -67,11 +67,29 @@ _entry("ERA+", "ERA adjusted for park and league, where 100 is league average (h
 _entry("Fastball Velo", "Average fastball velocity, in mph.")
 _entry("Induced Chase%", "Share of the pitcher's out-of-zone pitches that batters chase — a pitcher-side view of the same chase-rate idea from the batting section.")
 
+style.colored_header("Pitch Lab", "pitching")
+_entry("IVB (Induced Vertical Break)", "How much a pitch rises relative to a gravity-only ball, in inches — high-IVB fastballs \"carry\" and get swings under them.")
+_entry("HB (Horizontal Break)", "Sideways movement in inches, from the catcher's view.")
+_entry("Active Spin %", "Share of a pitch's spin that actually contributes to movement (vs. gyro spin, which doesn't).")
+_entry("Usage %", "How often the pitcher throws that pitch.")
+_entry("Whiff %", "Swings and misses per swing against that pitch.")
+_entry("Put Away %", "How often a two-strike pitch of this type finishes the strikeout.")
+_entry("RV/100 (Run Value per 100)", "Total run impact of a pitch per 100 thrown, from the pitcher's perspective — positive means the pitch saves runs.")
+
 style.colored_header("Fielding", "fielding")
 _entry("OAA", "Outs above average — total defensive plays made above what an average fielder at that position would be expected to make.")
 _entry("FRP", "Fielding runs prevented — OAA translated into an estimated run value.")
 _entry("Success Rate", "Share of fielding opportunities converted into outs.")
+_entry("Est. Success Rate", "How often an average fielder would convert the same opportunities, adjusted for their difficulty.")
+_entry("Success Rate +/-", "Actual success rate minus estimated — positive means outperforming the difficulty of the plays faced.")
 _entry("Arm Strength", "Average recorded throw velocity, in mph.")
+
+style.colored_header("Catcher Defense", "fielding")
+_entry("Framing Runs", "Runs added or cost purely by getting borderline pitches called strikes (and keeping real strikes called), versus an average catcher.")
+_entry("Strike Rate (shadow zone)", "Share of borderline pitches — the ring around the zone's edges — that end up called strikes.")
+_entry("Pop Time", "Glove-to-glove seconds on a steal attempt (to 2B, league average is about 2.00s — lower is better).")
+_entry("Exchange", "Glove-to-release time in seconds on a throw down.")
+_entry("Arm (catcher)", "Max-effort throw velocity on steal attempts, in mph.")
 
 style.colored_header("Model-Based Projections", "headliners")
 _entry(

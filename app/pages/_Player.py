@@ -600,7 +600,9 @@ if not fielding.empty:
                 if not framing.empty:
                     st.dataframe(
                         framing[["framing_runs", "framing_pct"]].rename(
-                            columns={"framing_runs": "Framing Runs", "framing_pct": "Framing Pctile"}
+                            # framing_pct is Savant's shadow-zone strike RATE (0-1),
+                            # not a percentile — previously mislabeled here.
+                            columns={"framing_runs": "Framing Runs", "framing_pct": "Strike Rate"}
                         ),
                         use_container_width=True, hide_index=True,
                     )
