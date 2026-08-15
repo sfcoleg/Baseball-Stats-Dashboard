@@ -1,4 +1,3 @@
-import math
 import sys
 from pathlib import Path
 
@@ -65,33 +64,36 @@ with st.expander("🔍 More filters — league, age, or any stat"):
         age_lo, age_hi = int(batting["Age"].min()), int(batting["Age"].max())
         age_range = st.slider("Age", age_lo, age_hi, (age_lo, age_hi))
     filter_stats = st.multiselect(
-        "Filter by any stat",
+        "Add a stat condition",
         [c for c in numeric_stats if c != "Age"],
         format_func=_stat_label,
-        help="Each stat you pick gets its own min/max range slider. While a range is "
-             "narrowed, players missing that stat are excluded.",
+        help='Each stat you pick becomes a condition — e.g. pick OPS, choose "At least", '
+             "type 0.800 to keep only .800+ OPS hitters. Players missing that stat are excluded.",
     )
-    stat_ranges = {}
-    range_cols = st.columns(2)
-    for i, c in enumerate(filter_stats):
-        col_vals = batting[c].dropna()
-        if col_vals.empty or float(col_vals.min()) == float(col_vals.max()):
+    conditions = []
+    for c in filter_stats:
+        # Ratio stats can be legitimately infinite (e.g. K/BB with zero
+        # walks) — strip inf as well as NaN so the median default is finite.
+        col_vals = batting[c].replace([float("inf"), float("-inf")], None).dropna()
+        if col_vals.empty:
             continue
-        with range_cols[i % 2]:
+        ccol1, ccol2 = st.columns([1, 1])
+        with ccol1:
+            op = st.selectbox(
+                _stat_label(c), ["At least (≥)", "At most (≤)"], key=f"bat_cond_op_{c}",
+            )
+        with ccol2:
+            # Defaults to the pool median so adding a condition visibly does
+            # something right away, before the exact threshold is typed in.
             if pd.api.types.is_integer_dtype(batting[c]):
-                lo, hi = int(col_vals.min()), int(col_vals.max())
-                picked = st.slider(_stat_label(c), lo, hi, (lo, hi), key=f"bat_filter_{c}")
+                default = int(col_vals.median())
+                value = st.number_input("Value", value=default, step=1, key=f"bat_cond_val_{c}")
             else:
-                lo = math.floor(float(col_vals.min()) * 1000) / 1000
-                hi = math.ceil(float(col_vals.max()) * 1000) / 1000
-                picked = st.slider(
-                    _stat_label(c), lo, hi, (lo, hi),
-                    step=max((hi - lo) / 200, 0.001), key=f"bat_filter_{c}",
+                default = float(round(col_vals.median(), 3))
+                value = st.number_input(
+                    "Value", value=default, step=0.001, format="%.3f", key=f"bat_cond_val_{c}",
                 )
-        # Only applied when actually narrowed — an untouched full-range
-        # slider shouldn't silently drop players who are missing the stat.
-        if picked != (lo, hi):
-            stat_ranges[c] = picked
+        conditions.append((c, op, value))
 
 filtered = batting[batting["PA"] >= min_pa]
 if team != "All":
@@ -99,8 +101,11 @@ if team != "All":
 if league != "All":
     filtered = filtered[filtered["Lev"].str.contains(league, na=False)]
 filtered = filtered[filtered["Age"].between(age_range[0], age_range[1])]
-for c, (lo, hi) in stat_ranges.items():
-    filtered = filtered[filtered[c].between(lo, hi)]
+for c, op, value in conditions:
+    if op.startswith("At least"):
+        filtered = filtered[filtered[c] >= value]
+    else:
+        filtered = filtered[filtered[c] <= value]
 filtered = filtered.sort_values(sort_by, ascending=False).reset_index(drop=True)
 
 table_rows = filtered
