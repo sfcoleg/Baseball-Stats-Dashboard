@@ -13,7 +13,6 @@ import teams
 st.set_page_config(page_title="Fielding | Diamond Metrics", layout="wide")
 st.title("Fielding Stats")
 style.glossary_link()
-st.caption("OAA = outs above average. FRP = fielding runs prevented. Arm Strength = average recorded throw velocity (mph).")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -58,11 +57,6 @@ display = teams.add_team_abbr_from_nickname(table_rows)[
     "diff_success_rate_formatted": "Success Rate +/-",
     "arm_strength": "Arm Strength",
 })
-st.caption(
-    "Est. Success Rate = how often an average fielder converts the same opportunities "
-    "(difficulty-adjusted). Success Rate +/- = actual minus estimated — positive means beating "
-    "the plays they were dealt."
-)
 st.dataframe(
     style.style_stats_table(
         display,
@@ -84,11 +78,6 @@ poptime = db.load_catcher_poptime(season, db.db_mtime())
 
 if not framing.empty:
     style.colored_header("Catcher Framing", "pitching")
-    st.caption(
-        "Framing Runs = runs added or cost purely by converting borderline pitches into called "
-        "strikes (and not losing real strikes), vs. an average catcher. Strike Rate = share of "
-        "shadow-zone pitches (the borderline ring around the zone's edges) called strikes."
-    )
     fr = framing.sort_values("framing_runs", ascending=False).copy()
     # framing_pct is stored as a 0-1 shadow-zone strike rate — show as a percentage.
     if fr["framing_pct"].max() <= 1:
@@ -108,10 +97,6 @@ if not framing.empty:
 
 if not poptime.empty:
     style.colored_header("Catcher Throwing", "fielding")
-    st.caption(
-        "Pop Time = glove-to-glove seconds on a steal attempt of 2nd (league average ≈ 2.00s). "
-        "Exchange = glove-to-release seconds. Arm = max-effort throw velocity (mph)."
-    )
     pt = poptime.sort_values("pop_2b").copy()
     pt_disp = pt[["Name", "age", "pop_2b", "pop_2b_count", "pop_3b", "exchange_time", "arm"]].rename(columns={
         "Name": "Catcher", "age": "Age", "pop_2b": "Pop 2B (s)", "pop_2b_count": "2B Attempts",

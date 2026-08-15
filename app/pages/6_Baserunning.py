@@ -14,7 +14,6 @@ import teams
 st.set_page_config(page_title="Baserunning | Diamond Metrics", layout="wide")
 st.title("Baserunning Stats")
 style.glossary_link()
-st.caption("BsR = baserunning runs above average. Sprint Speed/BsR are current-season only.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

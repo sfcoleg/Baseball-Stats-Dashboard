@@ -132,13 +132,6 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption(
-        "ISO = isolated power. BABIP = batting avg on balls in play. wOBA = weighted on-base average. "
-        "WAR = wins above replacement (Baseball-Reference). OPS+/wRC+ = 100 is league average, higher is "
-        "better (park-factor-free approximation). HVS (Hitting Value Score) = our own 1-100 composite of "
-        "hard contact, power, bat-to-ball skill, plate discipline, and plate-appearance volume (producing "
-        "at a high level over more PA is more valuable) — not an official MLB/Statcast stat."
-    )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
          "WAR", "OPS_plus", "wRC_plus", "HVS"]
@@ -160,11 +153,6 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    st.caption(
-        "Exit velocity and barrel rate from Statcast. xBA/xSLG = expected stats based on contact quality. "
-        "The \"diff\" columns are actual minus expected — positive means outperforming contact quality, "
-        "negative means better luck than the underlying batted-ball data supports."
-    )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct",
          "xBA", "xSLG", "xwOBA_diff"]
@@ -205,12 +193,6 @@ with statcast_tab:
     st.plotly_chart(fig, use_container_width=True)
 
 with discipline_tab:
-    st.caption(
-        "Chase% = swings at pitches outside the strike zone (lower is more disciplined). Bat Speed = "
-        "average swing speed (mph); real bat-tracking data only exists from 2023 onward, earlier seasons "
-        "will show blank. xISO/xOBP = expected isolated power / on-base %, based on contact quality rather "
-        "than actual outcomes."
-    )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "PA", "chase_pct", "bat_speed", "xISO", "xOBP"]
     ].rename(columns={"chase_pct": "Chase%", "bat_speed": "Bat Speed"})

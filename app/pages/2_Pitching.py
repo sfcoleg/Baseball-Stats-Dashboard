@@ -127,11 +127,6 @@ with standard_tab:
     )
 
 with advanced_tab:
-    st.caption(
-        "FIP = fielding-independent pitching. BAbip = opponent BABIP. GB/FB = groundball/flyball ratio. "
-        "WAR = wins above replacement (Baseball-Reference). ERA+ = 100 is league average, higher is better "
-        "(park-factor-free approximation)."
-    )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WAR", "ERA_plus"]
     ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB", "ERA_plus": "ERA+"})
@@ -152,13 +147,6 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    st.caption(
-        "Contact quality allowed, from Statcast. xERA/xBA/xSLG against = expected stats based on quality of "
-        "contact allowed. \"diff\" is actual ERA minus expected ERA — positive means outperforming the "
-        "underlying contact quality, negative means getting unlucky relative to it. Fastball Velo = average "
-        "four-seam velocity. Induced Chase% = how often opposing batters swing at this pitcher's pitches "
-        "outside the strike zone."
-    )
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "xBA_against", "xSLG_against",
          "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
