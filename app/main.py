@@ -308,29 +308,9 @@ if SHOW_FREE_AGENCY:
 
 pg = st.navigation(PAGES, position="hidden")
 
-# Grouped nav: the flat 18-link list outgrew the sidebar, so everything
-# beyond the daily-use trio lives in collapsible sections. The section
-# containing the CURRENT page starts expanded (pg is already resolved
-# above, so its title tells us where the visitor is); the rest start
-# collapsed. Titles not listed anywhere here (Player, Game Center,
-# Glossary, Settings) intentionally get no nav link at all.
-_TOP_LEVEL = ["Home", "Daily Digest", "Following"]
-_NAV_GROUPS = {
-    "Player Stats": ["Batting", "Pitching", "Fielding", "Baserunning", "Compare"],
-    "Teams & Games": ["Team", "Today's Games", "Standings", "Playoffs", "Umpires"],
-    # Injury Report / Transactions / Awards Race are tabs WITHIN the
-    # "Around the League" page now, not separate nav pages.
-    "More": ["Around the League", "Free Agency", "Minor Leagues", "Box Score Search"],
-}
-_page_by_title = {p.title: p for p in PAGES}
-
-for title in _TOP_LEVEL:
-    st.sidebar.page_link(_page_by_title[title], label=title)
-for group, titles in _NAV_GROUPS.items():
-    titles = [t for t in titles if t in _page_by_title]  # Free Agency is seasonal
-    with st.sidebar.expander(group, expanded=pg.title in titles):
-        for title in titles:
-            st.page_link(_page_by_title[title], label=title)
+for p in PAGES:
+    if p.title not in ("Player", "Game Center", "Glossary", "Settings"):
+        st.sidebar.page_link(p, label=p.title)
 
 # Small, deliberately understated link to Settings — sits below the main
 # nav (not mixed into the loop above), shrunk/muted via a href-matching CSS
