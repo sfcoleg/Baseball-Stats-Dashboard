@@ -26,6 +26,7 @@ import db
 import following
 import localstorage_bridge
 import predictions
+import prefs
 import sidebar
 import style
 
@@ -49,6 +50,13 @@ localstorage_bridge.register("following", following.STORAGE_KEY)
 # predictions.py) — must also run before Today's Games can read them.
 predictions.bootstrap()
 localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
+# Same pattern again for site-wide preferences (default season, favorite
+# team — see prefs.py). Unlike following/predictions, prefs are read by
+# nearly every page, so the actual redirect() fires from Home.py (the
+# default landing page) as well as the Settings page itself, rather than
+# just one dedicated page.
+prefs.bootstrap()
+localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 # The bracket predictor's picks (see bracket_picks.py) are URL-based, not
 # localStorage-based, so unlike following.py/predictions.py that module's
 # bootstrap() only needs to run on the Playoffs page itself, not globally here.
@@ -293,6 +301,7 @@ PAGES = [
     st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/22_Box_Score_Search.py", title="Box Score Search"),
     st.Page("pages/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
+    st.Page("pages/26_Settings.py", title="Settings"),  # same — its own small button, not in the main nav loop
     st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
     st.Page("pages/_Game_Detail.py", title="Game Center"),  # same — reached only via Today's Games' button
 ]
@@ -302,25 +311,27 @@ if SHOW_FREE_AGENCY:
 pg = st.navigation(PAGES, position="hidden")
 
 for p in PAGES:
-    if p.title not in ("Player", "Game Center", "Glossary"):
+    if p.title not in ("Player", "Game Center", "Glossary", "Settings"):
         st.sidebar.page_link(p, label=p.title)
 
-# Small, deliberately understated link to the stat glossary — sits below the
-# main nav (not mixed into the loop above), shrunk/muted via a href-matching
-# CSS selector (page_link renders as a sibling element, not a child of any
+# Small, deliberately understated link to Settings — sits below the main
+# nav (not mixed into the loop above), shrunk/muted via a href-matching CSS
+# selector (page_link renders as a sibling element, not a child of any
 # preceding markdown div, so it has to be targeted this way rather than
-# wrapped) so it reads as a quiet reference link, not another top-level
-# section.
+# wrapped) so it reads as a quiet utility link, available everywhere, not
+# another top-level nav section. The Glossary link is intentionally NOT
+# here — it's contextual instead, as a small button on the stat pages
+# themselves (Batting/Pitching/Baserunning/Fielding — see style.glossary_link).
 st.sidebar.markdown(
     "<style>"
-    "[data-testid='stSidebar'] a[href*='Glossary'] {"
+    "[data-testid='stSidebar'] a[href*='Settings'] {"
     "  font-size: 0.8rem !important; opacity: 0.6;"
     "}"
-    "[data-testid='stSidebar'] a[href*='Glossary']:hover { opacity: 1; }"
+    "[data-testid='stSidebar'] a[href*='Settings']:hover { opacity: 1; }"
     "</style>",
     unsafe_allow_html=True,
 )
-glossary_page = next(p for p in PAGES if p.title == "Glossary")
-st.sidebar.page_link(glossary_page, label="ℹ️ Glossary", use_container_width=False)
+settings_page = next(p for p in PAGES if p.title == "Settings")
+st.sidebar.page_link(settings_page, label="⚙️ Settings", use_container_width=False)
 
 pg.run()

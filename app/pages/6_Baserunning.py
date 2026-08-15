@@ -7,11 +7,13 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
 st.set_page_config(page_title="Baserunning | Diamond Metrics", layout="wide")
 st.title("Baserunning Stats")
+style.glossary_link()
 st.caption("BsR = baserunning runs above average. Sprint Speed/BsR are current-season only.")
 
 if not db.DB_PATH.exists():
@@ -19,7 +21,7 @@ if not db.DB_PATH.exists():
     st.stop()
 
 seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 batting = teams.add_team_abbr(db.load_batting(season, db.db_mtime()))
 
 attempts = batting["SB"] + batting["CS"]

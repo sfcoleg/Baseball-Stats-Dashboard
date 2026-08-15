@@ -128,8 +128,15 @@ def franchise_display_name(abbr: str, season: int | None) -> str:
 
 
 def all_teams() -> list[tuple[str, str]]:
-    """All 30 teams as (abbreviation, nickname) pairs, sorted by abbreviation."""
-    return sorted(((info[0], info[1]) for info in _BY_CITY_LEAGUE.values()), key=lambda t: t[0])
+    """All 30 teams as (abbreviation, nickname) pairs, sorted by abbreviation.
+    Deduped by abbreviation — _BY_CITY_LEAGUE deliberately has multiple city
+    keys mapping to the same team (e.g. "Athletics"/"Oakland" both -> ATH),
+    which would otherwise list that team twice in any dropdown built from
+    this."""
+    seen = {}
+    for info in _BY_CITY_LEAGUE.values():
+        seen.setdefault(info[0], info[1])
+    return sorted(seen.items(), key=lambda t: t[0])
 
 
 def add_team_abbr(df, tm_col="Tm", lev_col="Lev", out_col="Tm"):

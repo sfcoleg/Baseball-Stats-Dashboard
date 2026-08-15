@@ -6,6 +6,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
@@ -18,7 +19,7 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 
 
 def pick_player(label, key_prefix):

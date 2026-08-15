@@ -6,18 +6,20 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
 st.set_page_config(page_title="Batting | Diamond Metrics", layout="wide")
 st.title("Batting Stats")
+style.glossary_link()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
 
 seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 batting = db.load_batting(season, db.db_mtime())
 # Computed on the FULL season table, before any team/PA filtering below —
 # HVS is scaled against the whole season's qualified-player distribution,

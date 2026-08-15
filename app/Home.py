@@ -6,10 +6,22 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent))
 import db
+import localstorage_bridge
+import prefs
 import style
 import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
+
+# The actual localStorage->query-param redirect for site-wide prefs (default
+# season, favorite team — see prefs.py) has to fire from within a routed
+# page's own script, not main.py (see localstorage_bridge.py's docstring).
+# Fired here since Home is where most sessions land first, so the saved
+# default season is already in session_state by the time someone reaches
+# another page. register() was already called once in main.py — calling it
+# again here is a harmless no-op (plain dict assignment, not a render).
+localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
+localstorage_bridge.redirect()
 
 # db.today_pacific() is the one source of truth for "what day is it"
 # anywhere on this page — see its docstring for why plain date.today()
@@ -186,7 +198,7 @@ _milestone_banners()
 _todays_games_strip()
 
 seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 
 mtime = db.db_mtime()
 batting = db.load_batting(season, mtime)

@@ -7,6 +7,7 @@ import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
@@ -19,7 +20,7 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 available_seasons = db.get_seasons("batting")
-season = st.selectbox("Season", available_seasons, index=0)
+season = st.selectbox("Season", available_seasons, index=prefs.default_season_index(available_seasons))
 current_season = available_seasons[0]  # most recent season = the one recent_batting/recent_pitching cover
 
 _COMPOSITE_COLORS = {"all": "#3B82F6", "month": "#93C5FD"}
@@ -70,8 +71,16 @@ if default_abbr:
 if st.session_state.get(TEAM_CHOICE_KEY) not in labels:
     # First visit, or the previously selected option isn't valid for this
     # season anymore (e.g. a composite scope gated to certain seasons) —
-    # fall back to the first team instead of Streamlit raising on a stale value.
-    st.session_state[TEAM_CHOICE_KEY] = labels[0]
+    # fall back to the saved favorite team (Settings page), else the first
+    # team, instead of Streamlit raising on a stale value.
+    fallback_label = labels[0]
+    favorite_abbr = prefs.get_favorite_team()
+    if favorite_abbr:
+        for label in labels:
+            if label.startswith(f"{favorite_abbr} —"):
+                fallback_label = label
+                break
+    st.session_state[TEAM_CHOICE_KEY] = fallback_label
 
 choice = st.selectbox("Team", labels, key=TEAM_CHOICE_KEY)
 

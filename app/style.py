@@ -117,6 +117,24 @@ def colored_header(text, category, color=None):
     )
 
 
+def glossary_link():
+    """Small, muted "What do these mean?" link to the stat glossary —
+    call near the top of a stat-heavy page (Batting/Pitching/Baserunning/
+    Fielding), not globally in the sidebar, so it only shows up where
+    there's actually a wall of stat abbreviations to explain. Styled via a
+    href-matching CSS selector rather than a wrapping container — page_link
+    renders as a sibling element in the DOM, not a child of any preceding
+    markdown div, so a wrapper wouldn't actually contain it."""
+    st.markdown(
+        "<style>"
+        "[data-testid='stMain'] a[href*='Glossary'] { font-size: 0.8rem !important; opacity: 0.6; }"
+        "[data-testid='stMain'] a[href*='Glossary']:hover { opacity: 1; }"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+    st.page_link("pages/25_Glossary.py", label="ℹ️ What do these stats mean?", use_container_width=False)
+
+
 def batting_day_stat_line(row) -> str:
     """One-game batting stat line for the Home page's "Hot Yesterday" card
     and the Daily Digest's Top Batting Performances — H/HR/RBI always

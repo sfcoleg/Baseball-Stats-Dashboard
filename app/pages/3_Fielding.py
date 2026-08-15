@@ -5,11 +5,13 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
 st.set_page_config(page_title="Fielding | Diamond Metrics", layout="wide")
 st.title("Fielding Stats")
+style.glossary_link()
 st.caption("OAA = outs above average. FRP = fielding runs prevented. Arm Strength = average recorded throw velocity (mph).")
 
 if not db.DB_PATH.exists():
@@ -17,7 +19,7 @@ if not db.DB_PATH.exists():
     st.stop()
 
 seasons = db.get_seasons("fielding")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 fielding = db.load_fielding(season, db.db_mtime())
 
 col1, col2 = st.columns(2)

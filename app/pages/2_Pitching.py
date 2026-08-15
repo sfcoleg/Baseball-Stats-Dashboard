@@ -6,18 +6,20 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import prefs
 import style
 import teams
 
 st.set_page_config(page_title="Pitching | Diamond Metrics", layout="wide")
 st.title("Pitching Stats")
+style.glossary_link()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
 
 seasons = db.get_seasons("pitching")
-season = st.selectbox("Season", seasons, index=0)
+season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 pitching = db.load_pitching(season, db.db_mtime())
 
 col1, col2, col3 = st.columns(3)
