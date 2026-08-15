@@ -34,9 +34,22 @@ with col3:
         format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
+col4, col5 = st.columns(2)
+with col4:
+    # Lev is "Maj-AL"/"Maj-NL"/"Maj-AL,Maj-NL" (the last for a pitcher
+    # traded across leagues mid-season) — a plain substring check on the
+    # raw column, no team-abbreviation lookup needed.
+    league = st.selectbox("League", ["All", "AL", "NL"])
+with col5:
+    age_lo, age_hi = int(pitching["Age"].min()), int(pitching["Age"].max())
+    age_range = st.slider("Age", age_lo, age_hi, (age_lo, age_hi))
+
 filtered = pitching[pitching["IP"] >= min_ip]
 if team != "All":
     filtered = filtered[filtered["Tm"] == team]
+if league != "All":
+    filtered = filtered[filtered["Lev"].str.contains(league, na=False)]
+filtered = filtered[filtered["Age"].between(age_range[0], age_range[1])]
 ascending = sort_by in ("ERA", "FIP", "xERA", "WHIP")
 filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
 

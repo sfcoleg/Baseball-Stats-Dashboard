@@ -42,9 +42,22 @@ with col3:
         }.get(c, c),
     )
 
+col4, col5 = st.columns(2)
+with col4:
+    # Lev is "Maj-AL"/"Maj-NL"/"Maj-AL,Maj-NL" (the last for a player
+    # traded across leagues mid-season) — a plain substring check on the
+    # raw column, no team-abbreviation lookup needed.
+    league = st.selectbox("League", ["All", "AL", "NL"])
+with col5:
+    age_lo, age_hi = int(batting["Age"].min()), int(batting["Age"].max())
+    age_range = st.slider("Age", age_lo, age_hi, (age_lo, age_hi))
+
 filtered = batting[batting["PA"] >= min_pa]
 if team != "All":
     filtered = filtered[filtered["Tm"] == team]
+if league != "All":
+    filtered = filtered[filtered["Lev"].str.contains(league, na=False)]
+filtered = filtered[filtered["Age"].between(age_range[0], age_range[1])]
 ascending = sort_by == "hp_to_1b"
 filtered = filtered.sort_values(sort_by, ascending=ascending, na_position="last").reset_index(drop=True)
 
