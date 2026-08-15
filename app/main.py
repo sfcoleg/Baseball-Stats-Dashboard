@@ -295,9 +295,7 @@ PAGES = [
     st.Page("pages/9_Standings.py", title="Standings"),
     st.Page("pages/17_Playoffs.py", title="Playoffs"),
     st.Page("pages/23_Umpires.py", title="Umpires"),
-    st.Page("pages/10_Injury_Report.py", title="Injury Report"),
-    st.Page("pages/11_Transactions.py", title="Transactions"),
-    st.Page("pages/16_Awards_Race.py", title="Awards Race"),
+    st.Page("pages/29_Around_the_League.py", title="Around the League"),
     st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("pages/22_Box_Score_Search.py", title="Box Score Search"),
     st.Page("pages/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
@@ -320,8 +318,9 @@ _TOP_LEVEL = ["Home", "Daily Digest", "Following"]
 _NAV_GROUPS = {
     "Player Stats": ["Batting", "Pitching", "Fielding", "Baserunning", "Compare"],
     "Teams & Games": ["Team", "Today's Games", "Standings", "Playoffs", "Umpires"],
-    "Around the League": ["Injury Report", "Transactions", "Awards Race", "Free Agency",
-                          "Minor Leagues", "Box Score Search"],
+    # Injury Report / Transactions / Awards Race are tabs WITHIN the
+    # "Around the League" page now, not separate nav pages.
+    "More": ["Around the League", "Free Agency", "Minor Leagues", "Box Score Search"],
 }
 _page_by_title = {p.title: p for p in PAGES}
 
