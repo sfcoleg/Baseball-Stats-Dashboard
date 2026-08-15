@@ -1,6 +1,8 @@
+import math
 import sys
 from pathlib import Path
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -34,15 +36,55 @@ with col3:
         format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
-col4, col5 = st.columns(2)
-with col4:
-    # Lev is "Maj-AL"/"Maj-NL"/"Maj-AL,Maj-NL" (the last for a pitcher
-    # traded across leagues mid-season) — a plain substring check on the
-    # raw column, no team-abbreviation lookup needed.
-    league = st.selectbox("League", ["All", "AL", "NL"])
-with col5:
-    age_lo, age_hi = int(pitching["Age"].min()), int(pitching["Age"].max())
-    age_range = st.slider("Age", age_lo, age_hi, (age_lo, age_hi))
+# Every numeric column is fair game for both the any-stat filters below and
+# the Custom Leaderboard tab — no hand-curated list to fall out of date when
+# a new stat column gets ingested.
+_ID_COLS = {"mlbID", "season"}
+numeric_stats = [
+    c for c in pitching.columns
+    if c not in _ID_COLS and pd.api.types.is_numeric_dtype(pitching[c])
+]
+numeric_stats.sort(key=lambda c: db.STAT_DISPLAY_LABELS.get(c, c).lower())
+_stat_label = lambda c: db.STAT_DISPLAY_LABELS.get(c, c)
+
+with st.expander("🔍 More filters — league, age, or any stat"):
+    fcol1, fcol2 = st.columns(2)
+    with fcol1:
+        # Lev is "Maj-AL"/"Maj-NL"/"Maj-AL,Maj-NL" (the last for a pitcher
+        # traded across leagues mid-season) — a plain substring check on the
+        # raw column, no team-abbreviation lookup needed.
+        league = st.selectbox("League", ["All", "AL", "NL"])
+    with fcol2:
+        age_lo, age_hi = int(pitching["Age"].min()), int(pitching["Age"].max())
+        age_range = st.slider("Age", age_lo, age_hi, (age_lo, age_hi))
+    filter_stats = st.multiselect(
+        "Filter by any stat",
+        [c for c in numeric_stats if c != "Age"],
+        format_func=_stat_label,
+        help="Each stat you pick gets its own min/max range slider. While a range is "
+             "narrowed, players missing that stat are excluded.",
+    )
+    stat_ranges = {}
+    range_cols = st.columns(2)
+    for i, c in enumerate(filter_stats):
+        col_vals = pitching[c].dropna()
+        if col_vals.empty or float(col_vals.min()) == float(col_vals.max()):
+            continue
+        with range_cols[i % 2]:
+            if pd.api.types.is_integer_dtype(pitching[c]):
+                lo, hi = int(col_vals.min()), int(col_vals.max())
+                picked = st.slider(_stat_label(c), lo, hi, (lo, hi), key=f"pit_filter_{c}")
+            else:
+                lo = math.floor(float(col_vals.min()) * 1000) / 1000
+                hi = math.ceil(float(col_vals.max()) * 1000) / 1000
+                picked = st.slider(
+                    _stat_label(c), lo, hi, (lo, hi),
+                    step=max((hi - lo) / 200, 0.001), key=f"pit_filter_{c}",
+                )
+        # Only applied when actually narrowed — an untouched full-range
+        # slider shouldn't silently drop players who are missing the stat.
+        if picked != (lo, hi):
+            stat_ranges[c] = picked
 
 filtered = pitching[pitching["IP"] >= min_ip]
 if team != "All":
@@ -50,14 +92,16 @@ if team != "All":
 if league != "All":
     filtered = filtered[filtered["Lev"].str.contains(league, na=False)]
 filtered = filtered[filtered["Age"].between(age_range[0], age_range[1])]
+for c, (lo, hi) in stat_ranges.items():
+    filtered = filtered[filtered[c].between(lo, hi)]
 ascending = sort_by in ("ERA", "FIP", "xERA", "WHIP")
 filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
 
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Chart Explorer"]
+standard_tab, advanced_tab, statcast_tab, custom_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced", "Statcast", "Custom Leaderboard", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -154,6 +198,52 @@ with statcast_tab:
         font_color="#FAFAFA",
     )
     st.plotly_chart(fig, use_container_width=True)
+
+# Stats where a LOWER number is the good direction — drives the color
+# gradient in the Custom Leaderboard. Anything not listed colors high=green.
+_PITCHING_LOWER_BETTER = {
+    "ERA", "FIP", "xERA", "WHIP", "BB", "BB_9", "HR", "L", "BAbip",
+    "xBA_against", "xSLG_against", "xwOBA_against",
+    "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
+}
+
+with custom_tab:
+    st.caption(
+        "Build your own leaderboard — pick any stats we track, in any combination, sorted however "
+        "you like. The team/IP/league/age/stat filters above all apply here too."
+    )
+    chosen = st.multiselect(
+        "Stats to show",
+        numeric_stats,
+        default=["Age", "IP", "ERA", "WHIP", "SO", "WAR"],
+        format_func=_stat_label,
+        key="pit_custom_cols",
+    )
+    if not chosen:
+        st.info("Pick at least one stat to build a leaderboard.")
+    else:
+        ccol1, ccol2 = st.columns(2)
+        with ccol1:
+            custom_sort = st.selectbox("Sort by", chosen, format_func=_stat_label, key="pit_custom_sort")
+        with ccol2:
+            custom_order = st.radio(
+                "Order", ["High → Low", "Low → High"], horizontal=True, key="pit_custom_order",
+            )
+        display = teams.add_team_abbr(table_rows)[["Name", "Tm"] + chosen]
+        display = display.sort_values(
+            custom_sort, ascending=(custom_order == "Low → High"), na_position="last",
+        ).reset_index(drop=True)
+        st.dataframe(
+            style.style_stats_table(
+                display.rename(columns=_stat_label),
+                higher_better=[_stat_label(c) for c in chosen if c not in _PITCHING_LOWER_BETTER],
+                lower_better=[_stat_label(c) for c in chosen if c in _PITCHING_LOWER_BETTER],
+                team_col="Tm",
+                team_color_fn=teams.color_for_abbr,
+            ),
+            use_container_width=True,
+            height=600,
+        )
 
 with explore_tab:
     st.caption("Pick any two stats to plot against each other, sized by IP and colored by ERA.")

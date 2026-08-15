@@ -3049,7 +3049,27 @@ HALL_OF_FAME_MLBIDS = {
 # format_func wherever one of these columns is a dropdown option, so the
 # stored value (used for sorting/querying) stays the real column name while
 # only the displayed text changes.
-STAT_DISPLAY_LABELS = {"OPS_plus": "OPS+", "ERA_plus": "ERA+", "wRC_plus": "wRC+"}
+STAT_DISPLAY_LABELS = {
+    "OPS_plus": "OPS+", "ERA_plus": "ERA+", "wRC_plus": "wRC+",
+    "K_PCT": "K%", "BB_PCT": "BB%", "K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB",
+    "GB_FB": "GB/FB", "BAbip": "BABIP",
+    "avg_exit_velo": "Avg Exit Velo", "max_exit_velo": "Max Exit Velo",
+    "hard_hit_pct": "Hard-Hit%", "barrel_pct": "Barrel%",
+    "contact_pct": "Contact%", "contact_pctile": "Contact Pctile",
+    "chase_pct": "Chase%", "chase_pctile": "Chase Pctile",
+    "bat_speed": "Bat Speed (mph)", "bat_speed_pctile": "Bat Speed Pctile",
+    "xISO_pctile": "xISO Pctile", "xOBP_pctile": "xOBP Pctile",
+    "xBA_diff": "BA − xBA", "xSLG_diff": "SLG − xSLG", "xwOBA_diff": "wOBA − xwOBA",
+    "xERA_diff": "ERA − xERA",
+    "sprint_speed": "Sprint Speed (ft/s)", "hp_to_1b": "Home-to-1st (s)",
+    "baserunning_runs": "Baserunning Runs (BsR)",
+    "avg_exit_velo_against": "Avg EV Against", "hard_hit_pct_against": "Hard-Hit% Against",
+    "barrel_pct_against": "Barrel% Against",
+    "fastball_velo": "Fastball Velo (mph)", "fastball_velo_pctile": "FB Velo Pctile",
+    "induced_chase_pct": "Induced Chase%", "induced_chase_pctile": "Induced Chase Pctile",
+    "xBA_against": "xBA Against", "xSLG_against": "xSLG Against", "xwOBA_against": "xwOBA Against",
+    "HVS": "HVS (Hitting Value Score)",
+}
 
 
 # Curated so every option is a real column in BATTING_COLS/PITCHING_COLS —
