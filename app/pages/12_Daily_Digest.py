@@ -163,6 +163,33 @@ if milestones:
 else:
     st.caption("Nothing notable yesterday.")
 
+style.colored_header("Biggest Plays", "headliners")
+st.caption(
+    "Yesterday's largest win-probability swings across all of MLB, from our own trained model — "
+    "the moments that actually flipped games."
+)
+top_plays = db.load_wpa_top_plays(yesterday.year, mtime)
+plays_yday = top_plays[top_plays["date"] == yesterday.isoformat()] if not top_plays.empty else top_plays
+if plays_yday is None or plays_yday.empty:
+    st.caption("No graded plays for yesterday yet — they land with the nightly refresh.")
+else:
+    batting_names = db.load_batting(yesterday.year, mtime)[["mlbID", "Name"]]
+    name_by_id = dict(zip(batting_names["mlbID"], batting_names["Name"]))
+    for _, p in plays_yday.sort_values("wpa_batter", key=abs, ascending=False).head(5).iterrows():
+        batter_name = name_by_id.get(int(p["batter"]), "")
+        swing = abs(p["wpa_batter"]) * 100
+        before, after = p["wp_before"] * 100, p["wp_after"] * 100
+        desc = p["des"] if isinstance(p["des"], str) and p["des"] else p["events"]
+        st.markdown(
+            f"<div style='background-color:#1B243866;border-left:4px solid #F5B942;padding:8px 14px;"
+            f"border-radius:6px;margin:4px 0'>"
+            f"<span style='color:#F5B942;font-weight:700'>{swing:.0f}% swing</span> "
+            f"<span style='color:#9AA3B5;font-size:0.85rem'>home win probability {before:.0f}% → {after:.0f}%"
+            + (f" · {batter_name}" if batter_name else "") + "</span>"
+            f"<div style='color:#DCE1EA'>{desc}</div></div>",
+            unsafe_allow_html=True,
+        )
+
 style.colored_header("Top Batting Performances", "batting")
 top_batters = db.top_n_recent_batters(recent_batting, "day", 5)
 if top_batters.empty:

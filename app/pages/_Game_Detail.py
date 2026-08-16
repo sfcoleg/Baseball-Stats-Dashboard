@@ -117,10 +117,32 @@ def render_game_center():
     wp_df = db.load_win_probability(game_pk)
     if not wp_df.empty:
         style.colored_header("Win Probability", "batting")
+        # Live tension gauge from OUR trained model — how much the very
+        # next plate appearance could swing the game vs. an average moment.
+        if status == "In Progress":
+            lev = db.current_leverage(game_pk)
+            if lev and lev["ratio"] >= 1.5:
+                heat = "🔥🔥🔥" if lev["ratio"] >= 3 else ("🔥🔥" if lev["ratio"] >= 2 else "🔥")
+                st.markdown(
+                    f"<div style='background-color:#D32F2F22;border-left:4px solid #D32F2F;"
+                    f"padding:8px 14px;border-radius:6px;margin:4px 0'>"
+                    f"{heat} <b>High-leverage moment</b> — this at-bat can swing the game "
+                    f"{lev['ratio']:.1f}× more than an average one "
+                    f"<span style='color:#9AA3B5'>(our win probability model)</span></div>",
+                    unsafe_allow_html=True,
+                )
+        model_wp = db.model_win_probability(game_pk)
+        if not model_wp.empty:
+            wp_df = wp_df.merge(model_wp[["atBatIndex", "wp_model"]], on="atBatIndex", how="left")
         st.plotly_chart(
             style.win_probability_chart(wp_df, away_abbr, home_abbr, away_color, home_color),
             use_container_width=True, key="game_center_wp",
         )
+        if "wp_model" in wp_df.columns and wp_df["wp_model"].notna().any():
+            st.caption(
+                "Solid line: MLB's live win probability. Dotted line: our own model, trained on "
+                "five seasons of play-by-play — see the glossary for how it works."
+            )
         if len(wp_df) > 1:
             swings = wp_df["home_win_pct"].diff().abs()
             top_idx = swings.idxmax()

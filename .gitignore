@@ -6,3 +6,4 @@ __pycache__/
 data/refresh.log
 .claude/
 .streamlit/secrets.toml
+ingest/wp_cache/

@@ -890,6 +890,32 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
                     st.session_state["selected_season"] = season
                     st.switch_page("pages/_Player.py")
 
+# Win Probability Impact — this player's WPA from our trained model (see
+# the Clutch tabs on Batting/Pitching for the league-wide view).
+wpa_bat = db.load_wpa_batting(season, mtime)
+wpa_pit = db.load_wpa_pitching(season, mtime)
+my_wpa_bat = wpa_bat[wpa_bat["mlbID"] == mlbID] if not wpa_bat.empty else wpa_bat
+my_wpa_pit = wpa_pit[wpa_pit["mlbID"] == mlbID] if not wpa_pit.empty else wpa_pit
+if (my_wpa_bat is not None and not my_wpa_bat.empty) or (my_wpa_pit is not None and not my_wpa_pit.empty):
+    style.colored_header("Win Probability Impact", "headliners", color)
+    st.caption(
+        "WPA (Win Probability Added) — how much this player's plate appearances moved their "
+        "team's chance of winning across the season, from our own trained win probability model. "
+        "Timing matters: late, close-game production counts for more."
+    )
+    for label, mine in [("As batter", my_wpa_bat), ("As pitcher", my_wpa_pit)]:
+        if mine is None or mine.empty:
+            continue
+        row = mine.iloc[0]
+        st.markdown(f"**{label}**")
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("WPA", f"{row['wpa']:+.2f}")
+        c2.metric("WPA+", f"{row['wpa_plus']:+.2f}")
+        c3.metric("WPA-", f"{row['wpa_minus']:+.2f}")
+        c4.metric("Biggest Play", f"{row['best_play_wpa'] * 100:+.0f}%")
+        if isinstance(row["best_play_desc"], str) and row["best_play_desc"]:
+            st.caption(f"Biggest play ({row['best_play_date']}): {row['best_play_desc']}")
+
 awards = db.load_player_awards(mlbID)
 if awards and awards["marquee"]:
     style.colored_header("Awards", "headliners", color)

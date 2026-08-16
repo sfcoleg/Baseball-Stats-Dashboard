@@ -1333,6 +1333,15 @@ def fetch_and_store():
     except Exception as e:
         print(f"ump scorecard update failed (non-fatal): {e}")
 
+    # Yesterday's WPA (see wpa_backfill.py) — folds yesterday's plays into
+    # the season clutch aggregates + top-plays table using the trained win
+    # probability artifact. Same guard: never let it break the refresh.
+    try:
+        from wpa_backfill import update_day as wpa_update_day
+        wpa_update_day((date.today() - timedelta(days=1)).isoformat())
+    except Exception as e:
+        print(f"wpa update failed (non-fatal): {e}")
+
 
 def backfill_season(season):
     """One-time fetch of a single historical season's batting/pitching/fielding

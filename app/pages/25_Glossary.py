@@ -105,6 +105,26 @@ _entry(
     "neutral field.",
 )
 
+style.colored_header("Win Probability & Clutch", "headliners")
+_entry(
+    "In-game Win Probability",
+    "Our own model of the home team's chance of winning at any moment, trained on five seasons "
+    "(2021-2025) of real play-by-play — every combination of inning, score, outs, and runners maps "
+    "to how often teams actually won from that spot. Validated against a full held-out season.",
+)
+_entry(
+    "WPA (Win Probability Added)",
+    "The sum of how much each of a player's plate appearances moved their team's win probability. "
+    "A walk-off homer might be +40%; a solo shot in a blowout, +2%. WPA+ counts only the positive "
+    "swings, WPA- only the negative — together they show volume vs. efficiency of impact.",
+)
+_entry(
+    "Leverage",
+    "How much the current situation could swing the game compared to an average moment — bases "
+    "loaded, one-run game, 9th inning is high leverage; a blowout's 6th inning is not. Game Center "
+    "flags live at-bats at 1.5× average leverage or more.",
+)
+
 style.colored_header("Umpire Scorecards", "headliners")
 _entry("Accuracy", "Share of called pitches (balls and strikes only, no swings) that matched the rulebook zone, judged against that specific batter's own measured strike zone.")
 _entry("vs Expected", "Accuracy minus what a league-average umpire would have scored on the exact same pitches, adjusted for how difficult (how close to the edge of the zone) those pitches were.")

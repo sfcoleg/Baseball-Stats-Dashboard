@@ -499,6 +499,142 @@ def load_win_probability(game_pk) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
 
 
+# --- In-house win probability model (the WPA engine) ------------------------
+# Trained offline by ingest/train_wp_model.py from five seasons of real
+# play-by-play; app/wp_model.json holds P(home wins) and a leverage index
+# for every observed game state. Serving is a dict lookup — no ML runtime.
+
+WP_MODEL_PATH = Path(__file__).resolve().parent / "wp_model.json"
+
+
+@st.cache_resource(show_spinner=False)
+def load_wp_model() -> dict | None:
+    try:
+        return json.loads(WP_MODEL_PATH.read_text())
+    except Exception:
+        return None
+
+
+def wp_lookup(model: dict, inning: int, half: int, outs: int, base: int, diff: int) -> tuple[float, float]:
+    """(win probability for the HOME team, leverage index) for a game
+    state. half: 0=top, 1=bottom. base: bitmask 1st=1/2nd=2/3rd=4.
+    Unseen exact states fall back to the coarse (inning, half, diff)
+    average baked into the artifact."""
+    cfg = model["config"]
+    inning_c = min(int(inning), cfg["max_inning"])
+    diff_c = max(-cfg["max_diff"], min(cfg["max_diff"], int(diff)))
+    key = f"{inning_c}|{half}|{outs}|{base}|{diff_c}"
+    entry = model["states"].get(key)
+    if entry:
+        return float(entry[0]), float(entry[1])
+    coarse = model["fallback"].get(f"{inning_c}|{half}|{diff_c}")
+    if coarse is not None:
+        return float(coarse), float(model.get("mean_li", 0.03))
+    return 0.5 + 0.04 * max(-5, min(5, diff_c)), float(model.get("mean_li", 0.03))
+
+
+@st.cache_data(show_spinner=False, ttl=60, max_entries=30)
+def model_win_probability(game_pk) -> pd.DataFrame:
+    """OUR model's home win probability after every completed plate
+    appearance of a game, reconstructed from the live feed's play list —
+    the state entering each play is the previous play's post-play score,
+    outs, and runners. Companion to load_win_probability (MLB's own
+    numbers) so Game Center can overlay the two."""
+    model = load_wp_model()
+    cols = ["atBatIndex", "wp_model", "leverage"]
+    if model is None:
+        return pd.DataFrame(columns=cols)
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=10
+        )
+        resp.raise_for_status()
+        plays = (resp.json().get("liveData", {}).get("plays", {}) or {}).get("allPlays", [])
+    except Exception:
+        return pd.DataFrame(columns=cols)
+
+    rows = []
+    prev = {"home": 0, "away": 0, "outs": 0, "base": 0, "half_key": None}
+    for play in plays:
+        about = play.get("about") or {}
+        if not about.get("isComplete"):
+            continue
+        inning = about.get("inning") or 1
+        half = 1 if about.get("halfInning") == "bottom" else 0
+        half_key = (inning, half)
+        # New half-inning: outs and runners reset regardless of what the
+        # previous play's post-state said.
+        outs = 0 if half_key != prev["half_key"] else prev["outs"]
+        base = 0 if half_key != prev["half_key"] else prev["base"]
+        diff = prev["home"] - prev["away"]
+        p, li = wp_lookup(model, inning, half, outs, base, diff)
+        rows.append({"atBatIndex": about.get("atBatIndex"), "wp_model": p * 100, "leverage": li})
+
+        result = play.get("result") or {}
+        count = play.get("count") or {}
+        matchup = play.get("matchup") or {}
+        prev = {
+            "home": result.get("homeScore", prev["home"]),
+            "away": result.get("awayScore", prev["away"]),
+            "outs": min(count.get("outs", 0), 2),
+            "base": (
+                (1 if matchup.get("postOnFirst") else 0)
+                + (2 if matchup.get("postOnSecond") else 0)
+                + (4 if matchup.get("postOnThird") else 0)
+            ),
+            "half_key": half_key,
+        }
+    return pd.DataFrame(rows, columns=cols) if rows else pd.DataFrame(columns=cols)
+
+
+def current_leverage(game_pk) -> dict | None:
+    """Leverage of the CURRENT state of a live game, for Game Center's
+    'how tense is this moment' badge. Returns {li, ratio, wp_home} or None."""
+    model = load_wp_model()
+    if model is None:
+        return None
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=10
+        )
+        resp.raise_for_status()
+        live = resp.json().get("liveData", {})
+    except Exception:
+        return None
+    line = live.get("linescore") or {}
+    if (line.get("inningState") or "") not in ("Top", "Bottom"):
+        return None
+    offense = line.get("offense") or {}
+    base = (
+        (1 if offense.get("first") else 0)
+        + (2 if offense.get("second") else 0)
+        + (4 if offense.get("third") else 0)
+    )
+    inning = line.get("currentInning") or 1
+    half = 1 if line.get("inningState") == "Bottom" else 0
+    outs = min(line.get("outs") or 0, 2)
+    teams = line.get("teams") or {}
+    diff = (teams.get("home", {}).get("runs") or 0) - (teams.get("away", {}).get("runs") or 0)
+    p, li = wp_lookup(model, inning, half, outs, base, diff)
+    mean_li = model.get("mean_li") or 0.03
+    return {"li": li, "ratio": li / mean_li if mean_li else 1.0, "wp_home": p}
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_wpa_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("wpa_batting", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_wpa_pitching(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("wpa_pitching", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_wpa_top_plays(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("wpa_top_plays", season, db_mtime_val)
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=500)
 def load_schedule_for_date(date_str: str) -> pd.DataFrame:
     """Every game played on `date_str` — any past date, not just today —

@@ -105,8 +105,8 @@ filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=T
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, custom_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Custom Leaderboard", "Chart Explorer"]
+standard_tab, advanced_tab, statcast_tab, clutch_tab, custom_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced", "Statcast", "Clutch", "Custom Leaderboard", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -191,6 +191,40 @@ with statcast_tab:
         font_color="#FAFAFA",
     )
     st.plotly_chart(fig, use_container_width=True)
+
+with clutch_tab:
+    st.caption(
+        "WPA (Win Probability Added) — how much each pitcher's plate appearances moved their "
+        "team's chance of winning, summed over the season. From our own trained win probability "
+        "model (see the glossary): closers protecting one-run leads rack up WPA fast, mop-up "
+        "innings barely move it. Filters above apply."
+    )
+    wpa = db.load_wpa_pitching(season, db.db_mtime())
+    if wpa.empty:
+        st.info("No WPA data for this season yet — it covers 2025 onward.")
+    else:
+        clutch = table_rows[["mlbID", "Name", "Tm", "Lev", "IP"]].merge(
+            wpa.drop(columns=["season"]), on="mlbID", how="inner", suffixes=("", "_wpa")
+        )
+        clutch = clutch.sort_values("wpa", ascending=False)
+        display = teams.add_team_abbr(clutch)[
+            ["Name", "Tm", "IP", "wpa", "wpa_plus", "wpa_minus", "best_play_wpa", "best_play_date"]
+        ].rename(columns={
+            "wpa": "WPA", "wpa_plus": "WPA+", "wpa_minus": "WPA-",
+            "best_play_wpa": "Biggest Play", "best_play_date": "Biggest Play Date",
+        })
+        st.dataframe(
+            style.style_stats_table(
+                display,
+                higher_better=["WPA", "WPA+", "Biggest Play"],
+                team_col="Tm",
+                team_color_fn=teams.color_for_abbr,
+                precision={"WPA": "{:+.2f}", "WPA+": "{:+.2f}", "WPA-": "{:+.2f}",
+                           "Biggest Play": "{:+.1%}"},
+            ),
+            use_container_width=True,
+            height=600,
+        )
 
 # Stats where a LOWER number is the good direction — drives the color
 # gradient in the Custom Leaderboard. Anything not listed colors high=green.
