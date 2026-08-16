@@ -1147,14 +1147,6 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
         line=dict(color=home_color, width=2.5), fill="tozeroy", fillcolor=_hex_to_rgba(home_color, 0.15),
         hovertemplate=f"{home_abbr} %{{y:.0f}}%<extra></extra>",
     ))
-    # Our own trained model's estimate, overlaid as a dotted companion line
-    # when Game Center merged it in (see db.model_win_probability).
-    if "wp_model" in wp_df.columns and wp_df["wp_model"].notna().any():
-        fig.add_trace(go.Scatter(
-            x=wp_df["atBatIndex"], y=wp_df["wp_model"], mode="lines",
-            line=dict(color="#FAFAFA", width=1.5, dash="dot"), opacity=0.7,
-            hovertemplate=f"{home_abbr} %{{y:.0f}}% (our model)<extra></extra>",
-        ))
     if "away_score" in wp_df.columns and "home_score" in wp_df.columns and len(wp_df) > 1:
         # .diff()'s first row is NaN, and "NaN != 0" evaluates to True (not
         # NaN) in pandas — the comparison itself never produces a NaN to

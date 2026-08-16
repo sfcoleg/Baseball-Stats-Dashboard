@@ -179,18 +179,10 @@ def render_game_center():
                     f"<span style='color:#9AA3B5'>(our win probability model)</span></div>",
                     unsafe_allow_html=True,
                 )
-        model_wp = db.model_win_probability(game_pk)
-        if not model_wp.empty:
-            wp_df = wp_df.merge(model_wp[["atBatIndex", "wp_model"]], on="atBatIndex", how="left")
         st.plotly_chart(
             style.win_probability_chart(wp_df, away_abbr, home_abbr, away_color, home_color),
             use_container_width=True, key="game_center_wp",
         )
-        if "wp_model" in wp_df.columns and wp_df["wp_model"].notna().any():
-            st.caption(
-                "Solid line: MLB's live win probability. Dotted line: our own model, trained on "
-                "five seasons of play-by-play — see the glossary for how it works."
-            )
         if len(wp_df) > 1:
             swings = wp_df["home_win_pct"].diff().abs()
             top_idx = swings.idxmax()
