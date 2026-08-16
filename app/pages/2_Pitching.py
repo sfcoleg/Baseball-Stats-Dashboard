@@ -208,19 +208,15 @@ with clutch_tab:
         )
         clutch = clutch.sort_values("wpa", ascending=False)
         display = teams.add_team_abbr(clutch)[
-            ["Name", "Tm", "IP", "wpa", "wpa_plus", "wpa_minus", "best_play_wpa", "best_play_date"]
-        ].rename(columns={
-            "wpa": "WPA", "wpa_plus": "WPA+", "wpa_minus": "WPA-",
-            "best_play_wpa": "Biggest Play", "best_play_date": "Biggest Play Date",
-        })
+            ["Name", "Tm", "IP", "wpa", "wpa_plus", "wpa_minus"]
+        ].rename(columns={"wpa": "WPA", "wpa_plus": "WPA+", "wpa_minus": "WPA-"})
         st.dataframe(
             style.style_stats_table(
                 display,
-                higher_better=["WPA", "WPA+", "Biggest Play"],
+                higher_better=["WPA", "WPA+"],
                 team_col="Tm",
                 team_color_fn=teams.color_for_abbr,
-                precision={"WPA": "{:+.2f}", "WPA+": "{:+.2f}", "WPA-": "{:+.2f}",
-                           "Biggest Play": "{:+.1%}"},
+                precision={"WPA": "{:+.2f}", "WPA+": "{:+.2f}", "WPA-": "{:+.2f}"},
             ),
             use_container_width=True,
             height=600,
