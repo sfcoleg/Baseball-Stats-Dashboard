@@ -37,6 +37,7 @@ if st.button("← Back to Today's Games"):
     st.switch_page("pages/8_Todays_Games.py")
 
 season = db.get_seasons("batting")[0]
+mtime = db.db_mtime()
 
 
 def team_color(abbr):
@@ -113,6 +114,53 @@ def render_game_center():
             st.plotly_chart(style.strike_zone_chart(tracker["pitches"]), use_container_width=True, key="game_center_sz")
         else:
             st.caption("Waiting on the next pitch...")
+
+        due_up = db.load_due_up(game_pk)
+        if due_up:
+            style.colored_header("Due Up", "batting")
+            hand = due_up.get("pitcher_hand")
+            hand_label = {"R": "RHP", "L": "LHP"}.get(hand, "")
+            facing_bits = f"Facing {due_up['pitcher_name']}" + (f" ({hand_label})" if hand_label else "")
+            # The pitcher's two most-used pitches, so you know what the
+            # due-up hitters are about to see.
+            p_arsenal = db.get_player_pitch_arsenal(due_up["pitcher_id"], season, mtime)
+            if not p_arsenal.empty:
+                top2 = p_arsenal.head(2)
+                pitches_bits = ", ".join(
+                    f"{r['usage_pct']:.0f}% {r['pitch_name']}"
+                    + (f" ({r['velocity']:.0f} mph)" if pd.notna(r.get("velocity")) else "")
+                    for _, r in top2.iterrows()
+                )
+                facing_bits += f" — {pitches_bits}"
+            st.caption(facing_bits)
+
+            season_batting = db.load_batting(season, mtime)
+            split_key = {"R": "vs RHP", "L": "vs LHP"}.get(hand)
+            cols = st.columns(len(due_up["due"]))
+            for col, batter in zip(cols, due_up["due"]):
+                with col:
+                    with st.container(border=True):
+                        st.markdown(
+                            f"<div style='display:flex;align-items:center;gap:10px'>"
+                            f"<img src='{style.headshot_url(batter['mlbID'], width=100)}' "
+                            f"style='width:44px;height:44px;border-radius:50%;object-fit:cover;"
+                            f"object-position:center 25%'>"
+                            f"<div><div style='color:#9AA3B5;font-size:0.75rem;font-weight:700'>"
+                            f"{batter['label'].upper()}</div>"
+                            f"<div style='font-weight:700'>{batter['name']}</div></div></div>",
+                            unsafe_allow_html=True,
+                        )
+                        mine = season_batting[season_batting["mlbID"] == batter["mlbID"]]
+                        if not mine.empty:
+                            row = mine.iloc[0]
+                            st.caption(
+                                f"Season: {row['BA']:.3f} / {row['OPS']:.3f} OPS · {int(row['HR'])} HR"
+                            )
+                        if split_key:
+                            splits = db.load_split_stats(batter["mlbID"], season, "hitting")
+                            s = splits.get(split_key) or {}
+                            if s.get("avg") and s.get("ops"):
+                                st.caption(f"{split_key}: {s['avg']} AVG / {s['ops']} OPS")
 
     wp_df = db.load_win_probability(game_pk)
     if not wp_df.empty:

@@ -456,6 +456,49 @@ def load_live_pitch_tracker(game_pk) -> dict:
     }
 
 
+@st.cache_data(show_spinner=False, ttl=30, max_entries=10)
+def load_due_up(game_pk) -> dict:
+    """Who's up now / on deck / in the hole, plus the pitcher they're
+    facing (with throwing hand), for Game Center's "Due Up" cards. From
+    the live feed's linescore, which tracks the batting order live —
+    returns {} for games not in progress or on any fetch failure."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
+    except Exception:
+        return {}
+
+    line = (raw.get("liveData") or {}).get("linescore") or {}
+    offense = line.get("offense") or {}
+    defense = line.get("defense") or {}
+    pitcher = defense.get("pitcher") or {}
+    if not pitcher.get("id"):
+        return {}
+
+    # Throwing hand lives in gameData's player registry, not the linescore.
+    players = (raw.get("gameData") or {}).get("players") or {}
+    hand = (
+        (players.get(f"ID{pitcher['id']}") or {}).get("pitchHand") or {}
+    ).get("code") or ""
+
+    due = []
+    for slot, label in [("batter", "At Bat"), ("onDeck", "On Deck"), ("inHole", "In the Hole")]:
+        p = offense.get(slot) or {}
+        if p.get("id"):
+            due.append({"mlbID": int(p["id"]), "name": p.get("fullName", ""), "label": label})
+    if not due:
+        return {}
+    return {
+        "pitcher_id": int(pitcher["id"]),
+        "pitcher_name": pitcher.get("fullName", ""),
+        "pitcher_hand": hand,
+        "due": due,
+    }
+
+
 @st.cache_data(show_spinner=False, ttl=15, max_entries=10)
 def load_win_probability(game_pk) -> pd.DataFrame:
     """Home-team win probability after every completed plate appearance, for
