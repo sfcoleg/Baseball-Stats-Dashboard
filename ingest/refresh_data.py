@@ -1342,6 +1342,37 @@ def fetch_and_store():
     except Exception as e:
         print(f"wpa update failed (non-fatal): {e}")
 
+    # Daily playoff-odds snapshot — the simulator's numbers are recomputed
+    # nightly and were previously discarded, which made an "odds over time"
+    # chart impossible to ever backfill. One row per team per day. Imports
+    # the app's own db module so the stored numbers are exactly what the
+    # Playoffs page shows (same model, same simulation).
+    try:
+        snapshot_playoff_odds()
+    except Exception as e:
+        print(f"playoff odds snapshot failed (non-fatal): {e}")
+
+
+def snapshot_playoff_odds():
+    sys.path.append(str(Path(__file__).resolve().parent.parent / "app"))
+    import db as app_db
+
+    odds = app_db.compute_playoff_odds(app_db.db_mtime())
+    if odds.empty:
+        print("playoff odds snapshot: no odds computed, skipped")
+        return
+    snap = odds[["team_abbr", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]].copy()
+    snap["date"] = date.today().isoformat()
+    snap["season"] = CURRENT_SEASON
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            conn.execute("DELETE FROM playoff_odds_history WHERE date = ?", (snap["date"].iloc[0],))
+        except sqlite3.OperationalError:
+            pass  # first run — table doesn't exist yet, to_sql creates it
+        snap.to_sql("playoff_odds_history", conn, if_exists="append", index=False)
+        conn.commit()
+    print(f"playoff odds snapshot: {len(snap)} teams stored for {snap['date'].iloc[0]}")
+
 
 def backfill_season(season):
     """One-time fetch of a single historical season's batting/pitching/fielding
