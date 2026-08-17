@@ -62,6 +62,14 @@ season = st.selectbox(
     "Season", own_seasons, index=own_seasons.index(default_season), key=f"player_profile_season_{mlbID}",
 )
 
+# Keep the URL in sync with what's actually on screen. Streamlit Cloud
+# drops websocket sessions often; on reconnect the page re-hydrates from
+# the URL's query params, and if those still said the OLD season (or old
+# player, after a sidebar-search switch), the view silently snapped back —
+# which read as "switching years doesn't work."
+if st.query_params.get("mlbid") != str(mlbID) or st.query_params.get("season") != str(season):
+    st.query_params.update({"mlbid": str(mlbID), "season": str(season)})
+
 # "Retired" is judged against the CURRENT season specifically, independent
 # of whichever season is being viewed above — a player who's active now
 # but has no row in some earlier off-year isn't retired, and a retired
@@ -877,13 +885,16 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
                 sim_link = style.player_link(row["mlbID"], season)
                 st.markdown(
                     "<div style='text-align:center'>"
-                    f"<a href='{sim_link}' target='_self' style='color:inherit;text-decoration:none'>"
+                    # display:block on the anchor so the photo and the name
+                    # always stack — inline, a short name fit BESIDE the
+                    # photo instead of under it.
+                    f"<a href='{sim_link}' target='_self' style='color:inherit;text-decoration:none;"
+                    f"display:block'>"
                     f"<img src='{style.headshot_url(row['mlbID'], width=140)}' style='width:72px;height:72px;"
                     "border-radius:10px;object-fit:cover;object-position:center 25%' />"
-                    f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word;"
-                    f"display:inline-block'>{row['Name']}</div></a>"
-                    f"<div><span style='background-color:{sim_color}66;color:#FAFAFA;padding:2px 9px;"
-                    f"border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span></div>"
+                    f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word'>{row['Name']}</div></a>"
+                    f"<div style='margin-top:4px'><span style='background-color:{sim_color}66;color:#FAFAFA;"
+                    f"padding:2px 9px;border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span></div>"
                     "</div>",
                     unsafe_allow_html=True,
                 )
