@@ -874,21 +874,19 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
         for sim_col, (_, row) in zip(sim_cols, similar.iterrows()):
             with sim_col:
                 sim_abbr, _, sim_color = teams.team_meta_from_city(row["Tm"], row["Lev"])
+                sim_link = style.player_link(row["mlbID"], season)
                 st.markdown(
                     "<div style='text-align:center'>"
+                    f"<a href='{sim_link}' target='_self' style='color:inherit;text-decoration:none'>"
                     f"<img src='{style.headshot_url(row['mlbID'], width=140)}' style='width:72px;height:72px;"
                     "border-radius:10px;object-fit:cover;object-position:center 25%' />"
-                    f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word'>{row['Name']}</div>"
-                    f"<span style='background-color:{sim_color}66;color:#FAFAFA;padding:2px 9px;"
-                    f"border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span>"
+                    f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word;"
+                    f"border-bottom:1px dotted rgba(250,250,250,0.35);display:inline-block'>{row['Name']}</div></a>"
+                    f"<div><span style='background-color:{sim_color}66;color:#FAFAFA;padding:2px 9px;"
+                    f"border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span></div>"
                     "</div>",
                     unsafe_allow_html=True,
                 )
-                if st.button("View profile", key=f"similar_{row['mlbID']}", use_container_width=True):
-                    st.session_state["selected_mlbID"] = int(row["mlbID"])
-                    st.session_state["selected_name"] = row["Name"]
-                    st.session_state["selected_season"] = season
-                    st.switch_page("pages/_Player.py")
 
 # Win Probability Impact — this player's WPA from our trained model (see
 # the Clutch tabs on Batting/Pitching for the league-wide view).

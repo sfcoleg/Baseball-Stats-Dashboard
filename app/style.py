@@ -207,15 +207,28 @@ def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
         st.markdown(name_html + stat_html, unsafe_allow_html=True)
 
 
-def milestone_card(mlbID, name, team_abbr, team_color, text):
+def player_link(mlbID, season=None) -> str:
+    """Relative URL to a player's profile page (the same ?mlbid= deep link
+    the profile's share button produces) — used to make player names
+    clickable anywhere HTML is rendered."""
+    url = f"Player?mlbid={int(mlbID)}"
+    if season is not None:
+        url += f"&season={int(season)}"
+    return url
+
+
+def milestone_card(mlbID, name, team_abbr, team_color, text, season=None):
     """Photo on the left, name/badge + the achievement stacked to its
-    right, for the Home page's Milestones section."""
+    right, for the Home page's Milestones section (and leader cards
+    elsewhere). The name links straight to the player's profile page."""
     st.markdown(
         f"<div style='display:flex;align-items:flex-start;gap:12px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
         f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0' />"
         f"<div style='flex:1;min-width:0'>"
-        f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
+        f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>"
+        f"<a href='{player_link(mlbID, season)}' target='_self' style='color:inherit;"
+        f"text-decoration:none;border-bottom:1px dotted rgba(250,250,250,0.35)'>{name}</a> "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
         f"</div>"

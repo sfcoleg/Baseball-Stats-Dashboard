@@ -147,7 +147,9 @@ def render_game_center():
                             f"object-position:center 25%'>"
                             f"<div><div style='color:#9AA3B5;font-size:0.75rem;font-weight:700'>"
                             f"{batter['label'].upper()}</div>"
-                            f"<div style='font-weight:700'>{batter['name']}</div></div></div>",
+                            f"<div style='font-weight:700'><a href='{style.player_link(batter['mlbID'], season)}' "
+                            f"target='_self' style='color:inherit;text-decoration:none;"
+                            f"border-bottom:1px dotted rgba(250,250,250,0.35)'>{batter['name']}</a></div></div></div>",
                             unsafe_allow_html=True,
                         )
                         mine = season_batting[season_batting["mlbID"] == batter["mlbID"]]

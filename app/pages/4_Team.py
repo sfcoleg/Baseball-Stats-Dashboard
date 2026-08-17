@@ -328,17 +328,6 @@ if season == current_season:
         st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
 
 # --- Team leaders -----------------------------------------------------------
-def _leader_card(col, row_data, text, key):
-    """One leader as a milestone-style card with a profile button."""
-    with col:
-        style.milestone_card(int(row_data["mlbID"]), row_data["Name"], selected_abbr, color, text)
-        if st.button("View profile", key=key, use_container_width=True):
-            st.session_state["selected_mlbID"] = int(row_data["mlbID"])
-            st.session_state["selected_name"] = row_data["Name"]
-            st.session_state["selected_season"] = season
-            st.switch_page("pages/_Player.py")
-
-
 leaders = []
 qualified_bat = team_batting[team_batting["PA"] >= 100]
 qualified_pit = team_pitching[team_pitching["IP"] >= 30]
@@ -378,55 +367,65 @@ if wpa_pool:
 
 if leaders:
     style.colored_header("Team Leaders", "headliners")
+    st.caption("Click a name to open the player's profile.")
     for start in range(0, len(leaders), 3):
         cols = st.columns(3)
-        for col, (row_data, text, key) in zip(cols, leaders[start:start + 3]):
-            _leader_card(col, row_data, text, key)
+        for col, (row_data, text, _key) in zip(cols, leaders[start:start + 3]):
+            with col:
+                style.milestone_card(int(row_data["mlbID"]), row_data["Name"],
+                                     selected_abbr, color, text, season=season)
 
-# --- Roster tables -----------------------------------------------------------
-prof_col1, prof_col2 = st.columns([3, 1])
-with prof_col1:
-    roster_names = pd.concat([team_batting[["mlbID", "Name"]], team_pitching[["mlbID", "Name"]]]) \
-        .drop_duplicates("mlbID").sort_values("Name")
-    profile_pick = st.selectbox("Open a player's profile", roster_names["Name"].tolist(),
-                                label_visibility="collapsed")
-with prof_col2:
-    if st.button("View profile", key="roster_profile_btn", use_container_width=True):
-        picked = roster_names[roster_names["Name"] == profile_pick].iloc[0]
-        st.session_state["selected_mlbID"] = int(picked["mlbID"])
-        st.session_state["selected_name"] = picked["Name"]
-        st.session_state["selected_season"] = season
-        st.switch_page("pages/_Player.py")
+
+# --- Roster tables (names link to player profiles) ---------------------------
+def _with_linked_names(df):
+    """Replace Name with a profile URL carrying the display name — rendered
+    as a clickable name by the LinkColumn config below."""
+    out = df.copy()
+    out["Name"] = out.apply(
+        lambda r: style.player_link(r["mlbID"], season) + f"&name={r['Name']}", axis=1
+    )
+    return out
+
+
+_NAME_LINK_CONFIG = {
+    "Name": st.column_config.LinkColumn("Name", display_text=r"name=(.*)$"),
+}
 
 style.colored_header("Batting", "batting")
 st.dataframe(
     style.style_stats_table(
-        team_batting[["Name", "Age", "G", "PA", "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"]],
+        _with_linked_names(team_batting)[["Name", "Age", "G", "PA", "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"]],
         higher_better=["HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"],
         precision={"BA": "{:.3f}", "OBP": "{:.3f}", "SLG": "{:.3f}", "OPS": "{:.3f}"},
     ),
     use_container_width=True,
     hide_index=True,
+    column_config=_NAME_LINK_CONFIG,
 )
 
 style.colored_header("Pitching", "pitching")
 st.dataframe(
     style.style_stats_table(
-        team_pitching[["Name", "Age", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO"]],
+        _with_linked_names(team_pitching)[["Name", "Age", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO"]],
         higher_better=["W", "SV", "SO"],
         lower_better=["ERA", "WHIP", "L"],
         precision={"ERA": "{:.2f}", "WHIP": "{:.3f}"},
     ),
     use_container_width=True,
     hide_index=True,
+    column_config=_NAME_LINK_CONFIG,
 )
 
 style.colored_header("Fielding", "fielding")
+# fielding's player_id IS the mlbID (see db.get_player_fielding) — rename so
+# the shared link helper works on it too.
+linked_fielding = _with_linked_names(team_fielding.rename(columns={"player_id": "mlbID"}))
 st.dataframe(
     style.style_stats_table(
-        team_fielding[["Name", "Pos", "OAA", "FRP", "success_rate"]].rename(columns={"success_rate": "Success Rate"}),
+        linked_fielding[["Name", "Pos", "OAA", "FRP", "success_rate"]].rename(columns={"success_rate": "Success Rate"}),
         higher_better=["OAA", "FRP"],
     ),
     use_container_width=True,
     hide_index=True,
+    column_config=_NAME_LINK_CONFIG,
 )
