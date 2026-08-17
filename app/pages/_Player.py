@@ -881,7 +881,7 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
                     f"<img src='{style.headshot_url(row['mlbID'], width=140)}' style='width:72px;height:72px;"
                     "border-radius:10px;object-fit:cover;object-position:center 25%' />"
                     f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word;"
-                    f"border-bottom:1px dotted rgba(250,250,250,0.35);display:inline-block'>{row['Name']}</div></a>"
+                    f"display:inline-block'>{row['Name']}</div></a>"
                     f"<div><span style='background-color:{sim_color}66;color:#FAFAFA;padding:2px 9px;"
                     f"border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span></div>"
                     "</div>",

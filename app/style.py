@@ -228,7 +228,7 @@ def milestone_card(mlbID, name, team_abbr, team_color, text, season=None):
         f"<div style='flex:1;min-width:0'>"
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>"
         f"<a href='{player_link(mlbID, season)}' target='_self' style='color:inherit;"
-        f"text-decoration:none;border-bottom:1px dotted rgba(250,250,250,0.35)'>{name}</a> "
+        f"text-decoration:none'>{name}</a> "
         f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
         f"</div>"

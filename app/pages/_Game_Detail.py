@@ -149,7 +149,7 @@ def render_game_center():
                             f"{batter['label'].upper()}</div>"
                             f"<div style='font-weight:700'><a href='{style.player_link(batter['mlbID'], season)}' "
                             f"target='_self' style='color:inherit;text-decoration:none;"
-                            f"border-bottom:1px dotted rgba(250,250,250,0.35)'>{batter['name']}</a></div></div></div>",
+                            f"'>{batter['name']}</a></div></div></div>",
                             unsafe_allow_html=True,
                         )
                         mine = season_batting[season_batting["mlbID"] == batter["mlbID"]]
