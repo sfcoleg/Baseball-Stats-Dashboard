@@ -235,6 +235,28 @@ if season == current_season:
         m5.metric("Playoff Odds", f"{pct:.1f}%" if pct is not None else "—")
         m6.metric("World Series Odds", f"{ws_pct:.1f}%" if ws_pct is not None else "—")
 
+        # Records breakdown — the situational splits that explain a season
+        # (a bad one-run record is usually the story behind "worse than
+        # their run differential"). All from played schedule games.
+        played_games = db.team_schedule(selected_abbr, mtime)
+        played_games = played_games[played_games["result"].notna()]
+        if not played_games.empty:
+            margin = (played_games["runs_for"] - played_games["runs_against"]).abs()
+            own_division = row["division"]
+            division_teams = set(standings[standings["division"] == own_division]["team_abbr"]) - {selected_abbr}
+
+            def _rec(mask):
+                seg = played_games[mask]
+                return f"{(seg['result'] == 'W').sum()}-{(seg['result'] == 'L').sum()}"
+
+            style.colored_header("Records Breakdown", "headliners")
+            r1, r2, r3, r4, r5 = st.columns(5)
+            r1.metric("Home", _rec(played_games["home"]))
+            r2.metric("Away", _rec(~played_games["home"]))
+            r3.metric("One-Run Games", _rec(margin == 1))
+            r4.metric("Blowouts (5+)", _rec(margin >= 5))
+            r5.metric("vs Division", _rec(played_games["opponent"].isin(division_teams)))
+
     full_schedule = db.team_schedule(selected_abbr, mtime)
     if not full_schedule.empty:
         style.colored_header("Full Season Schedule", "pitching")
@@ -304,6 +326,77 @@ if season == current_season:
         style.colored_header("Starting Lineup", "fielding")
         st.caption("Current depth-chart starter at each position.")
         st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
+
+# --- Team leaders -----------------------------------------------------------
+def _leader_card(col, row_data, text, key):
+    """One leader as a milestone-style card with a profile button."""
+    with col:
+        style.milestone_card(int(row_data["mlbID"]), row_data["Name"], selected_abbr, color, text)
+        if st.button("View profile", key=key, use_container_width=True):
+            st.session_state["selected_mlbID"] = int(row_data["mlbID"])
+            st.session_state["selected_name"] = row_data["Name"]
+            st.session_state["selected_season"] = season
+            st.switch_page("pages/_Player.py")
+
+
+leaders = []
+qualified_bat = team_batting[team_batting["PA"] >= 100]
+qualified_pit = team_pitching[team_pitching["IP"] >= 30]
+if not qualified_bat.empty:
+    war_row = qualified_bat.sort_values("WAR", ascending=False).iloc[0]
+    if pd.notna(war_row["WAR"]):
+        leaders.append((war_row, f"{war_row['WAR']:.1f} WAR — position-player leader", "leader_war"))
+    ops_row = qualified_bat.sort_values("OPS", ascending=False).iloc[0]
+    leaders.append((ops_row, f"{ops_row['OPS']:.3f} OPS — best bat", "leader_ops"))
+    hr_row = qualified_bat.sort_values("HR", ascending=False).iloc[0]
+    leaders.append((hr_row, f"{int(hr_row['HR'])} HR — power leader", "leader_hr"))
+if not qualified_pit.empty:
+    era_row = qualified_pit.sort_values("ERA").iloc[0]
+    leaders.append((era_row, f"{era_row['ERA']:.2f} ERA — staff ace", "leader_era"))
+    so_row = team_pitching.sort_values("SO", ascending=False).iloc[0]
+    leaders.append((so_row, f"{int(so_row['SO'])} strikeouts — whiff leader", "leader_so"))
+if not team_pitching.empty and team_pitching["SV"].max() > 0:
+    sv_row = team_pitching.sort_values("SV", ascending=False).iloc[0]
+    leaders.append((sv_row, f"{int(sv_row['SV'])} saves — closer", "leader_sv"))
+
+# Clutch hero — the roster's WPA leader from our win probability model
+# (batters and pitchers pooled; WPA data covers 2025 onward).
+roster_ids = set(team_batting["mlbID"]) | set(team_pitching["mlbID"])
+wpa_pool = []
+for wpa_table, names in [(db.load_wpa_batting(season, mtime), team_batting),
+                         (db.load_wpa_pitching(season, mtime), team_pitching)]:
+    if not wpa_table.empty:
+        mine = wpa_table[wpa_table["mlbID"].isin(roster_ids)].merge(
+            names[["mlbID", "Name"]], on="mlbID", how="inner"
+        )
+        wpa_pool.append(mine)
+if wpa_pool:
+    wpa_all = pd.concat(wpa_pool, ignore_index=True)
+    if not wpa_all.empty:
+        clutch_row = wpa_all.sort_values("wpa", ascending=False).iloc[0]
+        leaders.append((clutch_row, f"{clutch_row['wpa']:+.2f} WPA — clutch hero", "leader_wpa"))
+
+if leaders:
+    style.colored_header("Team Leaders", "headliners")
+    for start in range(0, len(leaders), 3):
+        cols = st.columns(3)
+        for col, (row_data, text, key) in zip(cols, leaders[start:start + 3]):
+            _leader_card(col, row_data, text, key)
+
+# --- Roster tables -----------------------------------------------------------
+prof_col1, prof_col2 = st.columns([3, 1])
+with prof_col1:
+    roster_names = pd.concat([team_batting[["mlbID", "Name"]], team_pitching[["mlbID", "Name"]]]) \
+        .drop_duplicates("mlbID").sort_values("Name")
+    profile_pick = st.selectbox("Open a player's profile", roster_names["Name"].tolist(),
+                                label_visibility="collapsed")
+with prof_col2:
+    if st.button("View profile", key="roster_profile_btn", use_container_width=True):
+        picked = roster_names[roster_names["Name"] == profile_pick].iloc[0]
+        st.session_state["selected_mlbID"] = int(picked["mlbID"])
+        st.session_state["selected_name"] = picked["Name"]
+        st.session_state["selected_season"] = season
+        st.switch_page("pages/_Player.py")
 
 style.colored_header("Batting", "batting")
 st.dataframe(
