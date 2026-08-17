@@ -576,6 +576,25 @@ def wp_lookup(model: dict, inning: int, half: int, outs: int, base: int, diff: i
     return 0.5 + 0.04 * max(-5, min(5, diff_c)), float(model.get("mean_li", 0.03))
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=50)
+def load_head_to_head(batter_id: int, pitcher_id: int) -> dict:
+    """Career batter-vs-pitcher matchup totals from the MLB Stats API, for
+    the Compare page's head-to-head section when one player is a hitter
+    and the other a pitcher. Returns the raw stat dict ({} if they've
+    never faced each other or the fetch fails)."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1/people/{int(batter_id)}/stats",
+            params={"stats": "vsPlayerTotal", "opposingPlayerId": int(pitcher_id), "group": "hitting"},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        splits = resp.json().get("stats", [{}])[0].get("splits", [])
+    except Exception:
+        return {}
+    return splits[0].get("stat", {}) if splits else {}
+
+
 def current_leverage(game_pk) -> dict | None:
     """Leverage of the CURRENT state of a live game, for Game Center's
     'how tense is this moment' badge. Returns {li, ratio, wp_home} or None."""
