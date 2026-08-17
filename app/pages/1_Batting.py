@@ -111,8 +111,8 @@ filtered = filtered.sort_values(sort_by, ascending=False).reset_index(drop=True)
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, discipline_tab, clutch_tab, custom_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Plate Discipline", "Clutch", "Custom Leaderboard", "Chart Explorer"]
+standard_tab, advanced_tab, statcast_tab, discipline_tab, custom_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced", "Statcast", "Plate Discipline", "Custom Leaderboard", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -132,20 +132,34 @@ with standard_tab:
     )
 
 with advanced_tab:
-    display = teams.add_team_abbr(table_rows)[
+    # WPA (from our win probability model) rides at the end of Advanced
+    # rather than in a tab of its own — merged by mlbID, blank for players
+    # without graded plate appearances (pre-2025 seasons).
+    adv_rows = table_rows
+    wpa = db.load_wpa_batting(season, db.db_mtime())
+    if not wpa.empty:
+        adv_rows = adv_rows.merge(
+            wpa[["mlbID", "wpa", "wpa_plus"]].rename(columns={"wpa": "WPA", "wpa_plus": "WPA+"}),
+            on="mlbID", how="left",
+        )
+    else:
+        adv_rows = adv_rows.assign(WPA=float("nan"))
+        adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
+    display = teams.add_team_abbr(adv_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
-         "WAR", "OPS_plus", "wRC_plus", "HVS"]
+         "WAR", "OPS_plus", "wRC_plus", "HVS", "WPA", "WPA+"]
     ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HVS"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HVS", "WPA", "WPA+"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
                 "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "Contact%": "{:.1f}",
                 "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HVS": "{:.0f}",
+                "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),
         use_container_width=True,
@@ -210,36 +224,6 @@ with discipline_tab:
         use_container_width=True,
         height=600,
     )
-
-with clutch_tab:
-    st.caption(
-        "WPA (Win Probability Added) — how much each player's plate appearances actually moved "
-        "their team's chance of winning, summed over the season. From our own trained win "
-        "probability model (see the glossary), so timing matters: a walk-off single counts for "
-        "far more than a solo shot in a blowout. Filters above apply."
-    )
-    wpa = db.load_wpa_batting(season, db.db_mtime())
-    if wpa.empty:
-        st.info("No WPA data for this season yet — it covers 2025 onward.")
-    else:
-        clutch = table_rows[["mlbID", "Name", "Tm", "Lev", "PA"]].merge(
-            wpa.drop(columns=["season"]), on="mlbID", how="inner", suffixes=("", "_wpa")
-        )
-        clutch = clutch.sort_values("wpa", ascending=False)
-        display = teams.add_team_abbr(clutch)[
-            ["Name", "Tm", "PA", "wpa", "wpa_plus", "wpa_minus"]
-        ].rename(columns={"wpa": "WPA", "wpa_plus": "WPA+", "wpa_minus": "WPA-"})
-        st.dataframe(
-            style.style_stats_table(
-                display,
-                higher_better=["WPA", "WPA+"],
-                team_col="Tm",
-                team_color_fn=teams.color_for_abbr,
-                precision={"WPA": "{:+.2f}", "WPA+": "{:+.2f}", "WPA-": "{:+.2f}"},
-            ),
-            use_container_width=True,
-            height=600,
-        )
 
 # Stats where a LOWER number is the good direction — drives the color
 # gradient in the Custom Leaderboard. Anything not listed colors high=green.

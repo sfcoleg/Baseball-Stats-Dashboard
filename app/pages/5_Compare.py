@@ -204,6 +204,17 @@ for batter_id, batter_name, pitcher_id, pitcher_name in h2h_pairs:
         c5.metric("HR", h2h.get("homeRuns", 0))
         c6.metric("K / BB", f"{h2h.get('strikeOuts', 0)} / {h2h.get('baseOnBalls', 0)}")
 
+
+def _wpa_pair(pid, is_batter):
+    """(WPA, WPA+) for a player this season, or (None, None) if ungraded."""
+    table = db.load_wpa_batting(season, mtime) if is_batter else db.load_wpa_pitching(season, mtime)
+    mine = table[table["mlbID"] == pid] if not table.empty else table
+    if mine is None or mine.empty:
+        return (None, None)
+    r = mine.iloc[0]
+    return (round(float(r["wpa"]), 2), round(float(r["wpa_plus"]), 2))
+
+
 # --- Batting tables ---------------------------------------------------------
 if batting_role_a is not None or batting_role_b is not None:
     style.colored_header("Batting", "batting")
@@ -228,8 +239,13 @@ if batting_role_a is not None or batting_role_b is not None:
         table = build_compare_table(batting_role_a, batting_role_b, fields,
                                     round_map={"ISO": 3, "BABIP": 3, "K%": 1, "BB%": 1, "wOBA": 3,
                                                "xwOBA": 3, "WAR": 1, "OPS+": 0, "wRC+": 0})
+        wpa_a = _wpa_pair(id_a, True) if batting_role_a is not None else (None, None)
+        wpa_b = _wpa_pair(id_b, True) if batting_role_b is not None else (None, None)
+        table.loc["WPA"] = [wpa_a[0], wpa_b[0]]
+        table.loc["WPA+"] = [wpa_a[1], wpa_b[1]]
         st.dataframe(style.style_comparison(table,
-                                            higher_better=["ISO", "BB%", "wOBA", "xwOBA", "WAR", "OPS+", "wRC+"],
+                                            higher_better=["ISO", "BB%", "wOBA", "xwOBA", "WAR", "OPS+", "wRC+",
+                                                           "WPA", "WPA+"],
                                             lower_better=["K%"]),
                      use_container_width=True)
 
@@ -297,7 +313,11 @@ if pitching_role_a is not None or pitching_role_b is not None:
         table = build_compare_table(pitching_role_a, pitching_role_b, fields,
                                     round_map={"FIP": 2, "xERA": 2, "K/9": 2, "BB/9": 2, "K/BB": 2,
                                                "WAR": 1, "ERA+": 0})
-        st.dataframe(style.style_comparison(table, higher_better=["K/9", "K/BB", "WAR", "ERA+"],
+        wpa_a = _wpa_pair(id_a, False) if pitching_role_a is not None else (None, None)
+        wpa_b = _wpa_pair(id_b, False) if pitching_role_b is not None else (None, None)
+        table.loc["WPA"] = [wpa_a[0], wpa_b[0]]
+        table.loc["WPA+"] = [wpa_a[1], wpa_b[1]]
+        st.dataframe(style.style_comparison(table, higher_better=["K/9", "K/BB", "WAR", "ERA+", "WPA", "WPA+"],
                                             lower_better=["FIP", "xERA", "BB/9"]),
                      use_container_width=True)
 
@@ -378,29 +398,6 @@ if pitching_role_a is not None and pitching_role_b is not None:
                     ),
                     use_container_width=True, hide_index=True,
                 )
-
-# --- Clutch -----------------------------------------------------------------
-wpa_rows = []
-for pid, pname, is_bat, is_pit in [(id_a, name_a, is_batter_a, is_pitcher_a),
-                                   (id_b, name_b, is_batter_b, is_pitcher_b)]:
-    table = db.load_wpa_batting(season, mtime) if is_bat else db.load_wpa_pitching(season, mtime)
-    mine = table[table["mlbID"] == pid] if not table.empty else table
-    if mine is not None and not mine.empty:
-        r = mine.iloc[0]
-        wpa_rows.append({"Player": pname, "Role": "Batter" if is_bat else "Pitcher",
-                         "WPA": round(r["wpa"], 2), "WPA+": round(r["wpa_plus"], 2),
-                         "WPA-": round(r["wpa_minus"], 2)})
-if len(wpa_rows) == 2:
-    style.colored_header("Clutch", "headliners")
-    st.caption(
-        "WPA (Win Probability Added) from our trained in-game model — how much each player's plate "
-        "appearances actually moved their team's chance of winning this season."
-    )
-    wpa_table = pd.DataFrame(wpa_rows).set_index("Player")
-    st.dataframe(
-        style.style_comparison(wpa_table[["WPA", "WPA+", "WPA-"]].T.astype(float)),
-        use_container_width=True,
-    )
 
 # --- Career arc overlay -----------------------------------------------------
 both_batters = is_batter_a and is_batter_b

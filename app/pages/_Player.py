@@ -908,11 +908,10 @@ if (my_wpa_bat is not None and not my_wpa_bat.empty) or (my_wpa_pit is not None 
             continue
         row = mine.iloc[0]
         st.markdown(f"**{label}**")
-        c1, c2, c3, c4 = st.columns(4)
+        c1, c2, c3 = st.columns(3)
         c1.metric("WPA", f"{row['wpa']:+.2f}")
         c2.metric("WPA+", f"{row['wpa_plus']:+.2f}")
-        c3.metric("WPA-", f"{row['wpa_minus']:+.2f}")
-        c4.metric("Biggest Play", f"{row['best_play_wpa'] * 100:+.0f}%")
+        c3.metric("Biggest Play", f"{row['best_play_wpa'] * 100:+.0f}%")
         if isinstance(row["best_play_desc"], str) and row["best_play_desc"]:
             st.caption(f"Biggest play ({row['best_play_date']}): {row['best_play_desc']}")
 

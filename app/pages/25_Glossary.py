@@ -116,7 +116,7 @@ _entry(
     "WPA (Win Probability Added)",
     "The sum of how much each of a player's plate appearances moved their team's win probability. "
     "A walk-off homer might be +40%; a solo shot in a blowout, +2%. WPA+ counts only the positive "
-    "swings, WPA- only the negative — together they show volume vs. efficiency of impact.",
+    "swings — big-moment production without the givebacks netted against it.",
 )
 _entry(
     "Leverage",
