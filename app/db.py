@@ -2323,6 +2323,52 @@ def load_schedule(db_mtime_val: float) -> pd.DataFrame:
             return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=4)
+def load_upcoming_games(days: int = 7) -> pd.DataFrame:
+    """League-wide upcoming schedule with probable starters, for the
+    Schedule page — live from the MLB Stats API (the ingested schedule
+    table has no probable-pitcher data). One row per game, today through
+    today+days."""
+    start = today_pacific()
+    end = start + timedelta(days=days)
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={
+                "sportId": 1, "startDate": start.isoformat(), "endDate": end.isoformat(),
+                "hydrate": "probablePitcher",
+            },
+            timeout=20,
+        )
+        resp.raise_for_status()
+        dates = resp.json().get("dates", [])
+    except Exception:
+        return pd.DataFrame()
+
+    rows = []
+    for d in dates:
+        for g in d.get("games", []):
+            if g.get("gameType") not in ("R",):  # regular season only
+                continue
+            away = (g.get("teams", {}).get("away", {}) or {})
+            home = (g.get("teams", {}).get("home", {}) or {})
+            away_pp = away.get("probablePitcher") or {}
+            home_pp = home.get("probablePitcher") or {}
+            rows.append({
+                "game_pk": g.get("gamePk"),
+                "date": d.get("date"),
+                "game_time_utc": g.get("gameDate"),
+                "status": (g.get("status") or {}).get("abstractGameState"),
+                "away_abbr": teams.abbr_for_team_id((away.get("team") or {}).get("id")),
+                "home_abbr": teams.abbr_for_team_id((home.get("team") or {}).get("id")),
+                "away_pitcher_name": away_pp.get("fullName"),
+                "away_pitcher_mlbID": away_pp.get("id"),
+                "home_pitcher_name": home_pp.get("fullName"),
+                "home_pitcher_mlbID": home_pp.get("id"),
+            })
+    return pd.DataFrame(rows)
+
+
 def team_schedule(team_abbr: str, db_mtime_val: float) -> pd.DataFrame:
     """One team's full regular-season schedule — past results and upcoming
     matchups both, in date/time order (game_time, not just date, so a
