@@ -142,6 +142,90 @@ for season in sorted(db.get_seasons("batting")):
     if fr is not None and not fr.empty and len(fr) >= 20:
         framing_rows.append({"season": season, "spread": fr["framing_runs"].std(),
                              "best": fr["framing_runs"].max()})
+def _custom_trend_section():
+    style.colored_header("Build Your Own Trend", "headliners")
+    st.caption(
+        "Chart any stat we track as a league-wide trend — pick stats, how to aggregate across "
+        "players each season, and a qualification floor. Stats that didn't exist in early seasons "
+        "(Statcast-era columns) simply start their line later."
+    )
+    c1, c2, c3 = st.columns([1, 1, 1])
+    with c1:
+        pool_name = st.radio("Player pool", ["Batting", "Pitching"], horizontal=True, key="trend_pool")
+    with c2:
+        agg_name = st.selectbox("Aggregate", ["Average (qualified players)", "Median (qualified players)", "League total"],
+                                key="trend_agg")
+    with c3:
+        if pool_name == "Batting":
+            min_q = st.number_input("Min PA per player-season", 0, 600, 200, step=50, key="trend_min_pa")
+        else:
+            min_q = st.number_input("Min IP per player-season", 0, 200, 60, step=10, key="trend_min_ip")
+
+    sample = db.load_batting(db.get_seasons("batting")[0], mtime) if pool_name == "Batting" \
+        else db.load_pitching(db.get_seasons("pitching")[0], mtime)
+    _id_cols = {"mlbID", "season"}
+    numeric_stats = sorted(
+        [c for c in sample.columns if c not in _id_cols and pd.api.types.is_numeric_dtype(sample[c])],
+        key=lambda c: db.STAT_DISPLAY_LABELS.get(c, c).lower(),
+    )
+    chosen = st.multiselect(
+        "Stats to chart", numeric_stats,
+        default=["OPS"] if pool_name == "Batting" else ["ERA"],
+        format_func=lambda c: db.STAT_DISPLAY_LABELS.get(c, c),
+        key="trend_stats",
+    )
+    normalize = st.checkbox(
+        "Index to first season (=100)", key="trend_index",
+        help="Rescales every line so its first charted season equals 100 — makes stats with "
+             "different units comparable on one chart.",
+    )
+    if not chosen:
+        return
+
+    loader = db.load_batting if pool_name == "Batting" else db.load_pitching
+    qual_col = "PA" if pool_name == "Batting" else "IP"
+    rows = []
+    for season in sorted(db.get_seasons("batting" if pool_name == "Batting" else "pitching")):
+        df = loader(season, mtime)
+        if df.empty:
+            continue
+        qual = df[df[qual_col].fillna(0) >= min_q]
+        if qual.empty:
+            continue
+        for c in chosen:
+            vals = qual[c].replace([float("inf"), float("-inf")], None).dropna()
+            if vals.empty:
+                continue
+            if agg_name.startswith("Average"):
+                v = vals.mean()
+            elif agg_name.startswith("Median"):
+                v = vals.median()
+            else:
+                v = vals.sum()
+            rows.append({"season": season, "stat": c, "value": float(v)})
+    if not rows:
+        st.caption("No data for that combination.")
+        return
+
+    trend = pd.DataFrame(rows)
+    if normalize:
+        firsts = trend.sort_values("season").groupby("stat")["value"].transform("first")
+        trend["value"] = 100 * trend["value"] / firsts.where(firsts != 0)
+
+    palette = ["#3B82F6", "#F5B942", "#D32F2F", "#7CB342", "#AB47BC", "#26A69A", "#EC407A", "#93C5FD"]
+    fig = go.Figure()
+    for i, (c, seg) in enumerate(trend.groupby("stat")):
+        seg = seg.sort_values("season")
+        fig.add_trace(go.Scatter(
+            x=seg["season"], y=seg["value"], mode="lines+markers",
+            name=db.STAT_DISPLAY_LABELS.get(c, c),
+            line=dict(color=palette[i % len(palette)], width=2.5),
+        ))
+    fig = _axes(fig, "Index (first season = 100)" if normalize else agg_name)
+    fig.update_layout(height=440)
+    st.plotly_chart(fig, use_container_width=True)
+
+
 if framing_rows:
     style.colored_header("The Death of Framing Edges", "fielding")
     st.caption(
@@ -156,3 +240,5 @@ if framing_rows:
     fig.add_trace(go.Scatter(x=frd["season"], y=frd["best"], mode="lines+markers", name="Best framer's runs",
                              line=dict(color="#F5B942", width=2.5)))
     st.plotly_chart(_axes(fig, "Framing Runs"), use_container_width=True)
+
+_custom_trend_section()
