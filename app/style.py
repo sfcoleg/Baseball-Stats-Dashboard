@@ -1295,7 +1295,9 @@ _MPH_TO_FT_PER_S = 1.46667
 _GRAVITY_FT_S2 = 32.174
 
 
-def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: dict) -> go.Figure:
+def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: dict,
+                       arc_width: int = 4, arc_opacity: float = 1.0,
+                       wall_color: str = "#111318", wall_width: int = 3) -> go.Figure:
     """A 3D fly-path view of the same batted balls the 2D spray chart plots
     — one line per ball from home plate to its real landing spot (the same
     hc_x/hc_y-derived x_ft/y_ft the 2D chart uses), arced using basic
@@ -1327,7 +1329,7 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
     for xs, ys in field_lines:
         fig.add_trace(go.Scatter3d(
             x=xs, y=ys, z=[0] * len(xs), mode="lines",
-            line=dict(color="#111318", width=3), showlegend=False, hoverinfo="skip",
+            line=dict(color=wall_color, width=wall_width), showlegend=False, hoverinfo="skip",
         ))
         if xs:
             max_x_abs = max(max_x_abs, max(abs(v) for v in xs))
@@ -1361,7 +1363,7 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
             name_prefix = f"{batter_name}<br>" if pd.notna(batter_name) else ""
             fig.add_trace(go.Scatter3d(
                 x=path_x, y=path_y, z=path_z, mode="lines",
-                line=dict(color=color, width=4),
+                line=dict(color=color, width=arc_width), opacity=arc_opacity,
                 name=outcome, legendgroup=outcome, showlegend=not legend_shown,
                 hovertext=(
                     f"{name_prefix}{outcome}<br>Exit velo: {speed:.1f} mph<br>Launch angle: {angle:.0f}°"
