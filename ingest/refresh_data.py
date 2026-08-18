@@ -1342,6 +1342,14 @@ def fetch_and_store():
     except Exception as e:
         print(f"wpa update failed (non-fatal): {e}")
 
+    # Yesterday's home runs + game finals into the Ballparks tables (see
+    # ingest/ballparks.py) — same non-fatal guard as the other add-ons.
+    try:
+        from ballparks import update_day as ballparks_update_day
+        ballparks_update_day((date.today() - timedelta(days=1)).isoformat())
+    except Exception as e:
+        print(f"ballparks update failed (non-fatal): {e}")
+
     # Daily playoff-odds snapshot — the simulator's numbers are recomputed
     # nightly and were previously discarded, which made an "odds over time"
     # chart impossible to ever backfill. One row per team per day. Imports

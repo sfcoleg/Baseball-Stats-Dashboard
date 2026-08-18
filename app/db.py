@@ -3785,6 +3785,57 @@ def load_pitch_arsenal_all_seasons(db_mtime_val: float) -> pd.DataFrame:
             return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_hr_log(db_mtime_val: float) -> pd.DataFrame:
+    """Every stored home run's landing data across all cached seasons
+    (ingest/ballparks.py), for the Ballparks tab's 3D museum."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM hr_log", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_park_games(db_mtime_val: float) -> pd.DataFrame:
+    """Per-game final scores with the hosting park, for park factors."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM park_games", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def park_factors(db_mtime_val: float) -> pd.DataFrame:
+    """Our own park factors, one row per team's park: runs and HR per game
+    in that team's home games vs. that same team's road games, indexed to
+    100 = neutral. Multi-season (everything in park_games), so a single
+    weird year doesn't swing a park's number."""
+    games = load_park_games(db_mtime_val)
+    hr = load_hr_log(db_mtime_val)
+    if games.empty:
+        return pd.DataFrame()
+    games = games.assign(total=games["home_final"] + games["away_final"])
+    hr_per_game = hr.groupby("game_pk").size().rename("hr_n") if not hr.empty else pd.Series(dtype=float)
+    games = games.merge(hr_per_game, left_on="game_pk", right_index=True, how="left")
+    games["hr_n"] = games["hr_n"].fillna(0)
+
+    rows = []
+    for team in sorted(games["home_team"].dropna().unique()):
+        home = games[games["home_team"] == team]
+        road = games[games["away_team"] == team]
+        if len(home) < 50 or len(road) < 50:
+            continue
+        run_factor = (home["total"].mean() / road["total"].mean()) * 100 if road["total"].mean() else None
+        hr_factor = (home["hr_n"].mean() / road["hr_n"].mean()) * 100 if road["hr_n"].mean() else None
+        rows.append({
+            "team": team, "games": len(home),
+            "run_factor": run_factor, "hr_factor": hr_factor,
+        })
+    return pd.DataFrame(rows)
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_catcher_framing(season: int, db_mtime_val: float) -> pd.DataFrame:
     return _load_optional_table("catcher_framing", season, db_mtime_val)

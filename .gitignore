@@ -7,3 +7,4 @@ data/refresh.log
 .claude/
 .streamlit/secrets.toml
 ingest/wp_cache/
+ingest/park_cache/
