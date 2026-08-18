@@ -103,12 +103,12 @@ else:
     outline = db.team_stadium_outline(abbr)
     field_lines = style.field_wall_lines(outline)
     # With hundreds of arcs, full-opacity lines bury the park outline —
-    # fade the arcs as the count grows and draw the walls bright and thick
-    # so the stadium's shape always reads through the fountain.
-    arc_opacity = min(0.85, max(0.15, 45 / max(len(shown), 1)))
+    # fade the arcs somewhat as the count grows, and keep the walls a
+    # muted-but-thick line so the shape reads without glowing.
+    arc_opacity = min(0.9, max(0.4, 120 / max(len(shown), 1)))
     fig = style.trajectory_3d_chart(
         shown, field_lines, {"Home team": color, "Visitors": "#9AA3B5"},
-        arc_width=3, arc_opacity=arc_opacity, wall_color="#FAFAFA", wall_width=7,
+        arc_width=3, arc_opacity=arc_opacity, wall_color="#8B94A8", wall_width=7,
     )
     st.plotly_chart(fig, use_container_width=True)
 
