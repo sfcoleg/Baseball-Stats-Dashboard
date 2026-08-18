@@ -1258,6 +1258,29 @@ MILB_LEVELS = {
 }
 
 
+@st.cache_data(show_spinner=False, ttl=3600 * 24, max_entries=4)
+def load_milb_parent_orgs(season: int) -> dict:
+    """MiLB team id -> parent MLB organization abbreviation, across every
+    level — the affiliation map behind the Org Pipeline view ("show me
+    every Yankees farmhand"). One teams call per level, cached a day
+    (affiliations basically never change mid-season)."""
+    mapping = {}
+    for sport_id in MILB_LEVELS.values():
+        try:
+            resp = requests.get(
+                "https://statsapi.mlb.com/api/v1/teams",
+                params={"sportId": sport_id, "season": season}, timeout=15,
+            )
+            resp.raise_for_status()
+            for t in resp.json().get("teams", []):
+                abbr = teams.abbr_for_team_id(t.get("parentOrgId"))
+                if t.get("id") and abbr:
+                    mapping[t["id"]] = abbr
+        except Exception:
+            continue
+    return mapping
+
+
 @st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=40)
 def load_milb_stats(sport_id: int, group: str, season: int) -> pd.DataFrame:
     """Real per-player minor-league season stats for one level/group/season
@@ -1288,6 +1311,7 @@ def load_milb_stats(sport_id: int, group: str, season: int) -> pd.DataFrame:
             "mlbID": s.get("player", {}).get("id"),
             "Name": s.get("player", {}).get("fullName"),
             "Tm": s.get("team", {}).get("name"),
+            "team_id": s.get("team", {}).get("id"),
             "League": s.get("league", {}).get("name"),
             "Age": stat.get("age"),
         }
