@@ -1324,31 +1324,31 @@ def fetch_and_store():
         f"{new_achievements} new milestone achievements to {DB_PATH}"
     )
 
-    # Umpire scorecards for yesterday's games (see ump_scorecards.py) —
-    # guarded so a hiccup in this add-on can never take down the rest of
-    # the nightly refresh that the whole site depends on.
-    try:
-        from ump_scorecards import update_day
-        update_day((date.today() - timedelta(days=1)).isoformat())
-    except Exception as e:
-        print(f"ump scorecard update failed (non-fatal): {e}")
-
-    # Yesterday's WPA (see wpa_backfill.py) — folds yesterday's plays into
-    # the season clutch aggregates + top-plays table using the trained win
-    # probability artifact. Same guard: never let it break the refresh.
-    try:
-        from wpa_backfill import update_day as wpa_update_day
-        wpa_update_day((date.today() - timedelta(days=1)).isoformat())
-    except Exception as e:
-        print(f"wpa update failed (non-fatal): {e}")
-
-    # Yesterday's home runs + game finals into the Ballparks tables (see
-    # ingest/ballparks.py) — same non-fatal guard as the other add-ons.
-    try:
-        from ballparks import update_day as ballparks_update_day
-        ballparks_update_day((date.today() - timedelta(days=1)).isoformat())
-    except Exception as e:
-        print(f"ballparks update failed (non-fatal): {e}")
+    # Per-day add-ons (umpire scorecards, WPA, ballparks) for every day
+    # since the last successful refresh — NOT just yesterday. A skipped
+    # nightly run (GitHub occasionally drops scheduled workflows, or the
+    # push races a development commit and fails) used to leave permanent
+    # holes: those updaters only ever looked one day back. Now the run
+    # date is recorded in a refresh_meta table and any missed days are
+    # caught up first, so a failed Tuesday heals itself on Wednesday.
+    for day in _days_needing_update():
+        print(f"--- per-day updates for {day} ---")
+        try:
+            from ump_scorecards import update_day
+            update_day(day)
+        except Exception as e:
+            print(f"ump scorecard update failed (non-fatal): {e}")
+        try:
+            from wpa_backfill import update_day as wpa_update_day
+            wpa_update_day(day)
+        except Exception as e:
+            print(f"wpa update failed (non-fatal): {e}")
+        try:
+            from ballparks import update_day as ballparks_update_day
+            ballparks_update_day(day)
+        except Exception as e:
+            print(f"ballparks update failed (non-fatal): {e}")
+    _record_refresh_run()
 
     # Daily playoff-odds snapshot — the simulator's numbers are recomputed
     # nightly and were previously discarded, which made an "odds over time"
@@ -1359,6 +1359,42 @@ def fetch_and_store():
         snapshot_playoff_odds()
     except Exception as e:
         print(f"playoff odds snapshot failed (non-fatal): {e}")
+
+
+def _days_needing_update() -> list[str]:
+    """Every date from the day after the last successful refresh through
+    yesterday, capped at 7 days back (a longer outage should be healed
+    with the explicit backfill scripts, not a silent hour-long catch-up
+    inside the nightly job). First-ever run just does yesterday."""
+    yesterday = date.today() - timedelta(days=1)
+    last = None
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            row = conn.execute(
+                "SELECT value FROM refresh_meta WHERE key = 'last_daily_update'"
+            ).fetchone()
+            last = date.fromisoformat(row[0]) if row else None
+        except sqlite3.OperationalError:
+            pass
+    start = max(last + timedelta(days=1) if last else yesterday, yesterday - timedelta(days=6))
+    days = []
+    d = start
+    while d <= yesterday:
+        days.append(d.isoformat())
+        d += timedelta(days=1)
+    return days
+
+
+def _record_refresh_run() -> None:
+    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute("CREATE TABLE IF NOT EXISTS refresh_meta (key TEXT PRIMARY KEY, value TEXT)")
+        conn.execute(
+            "INSERT INTO refresh_meta (key, value) VALUES ('last_daily_update', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            (yesterday,),
+        )
+        conn.commit()
 
 
 def snapshot_playoff_odds():
