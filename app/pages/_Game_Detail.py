@@ -115,6 +115,47 @@ def render_game_center():
         else:
             st.caption("Waiting on the next pitch...")
 
+        current_pitchers = db.load_current_pitchers(game_pk)
+        if current_pitchers:
+            style.colored_header("On the Mound", "pitching")
+            st.caption("Each team's pitcher currently in the game — tonight's line and season numbers.")
+            p_cols = st.columns(len(current_pitchers))
+            for col, p in zip(p_cols, current_pitchers):
+                abbr = away_abbr if p["side"] == "away" else home_abbr
+                norm = teams.normalize_mlb_abbr(abbr)
+                p_color = teams.color_for_abbr(norm)
+                with col:
+                    with st.container(border=True):
+                        mound_tag = (
+                            "<span style='background-color:#D32F2F33;color:#FF8A80;padding:2px 8px;"
+                            "border-radius:6px;font-weight:700;font-size:0.7rem;margin-left:6px'>"
+                            "ON THE MOUND</span>" if p["on_mound"] else ""
+                        )
+                        st.markdown(
+                            f"<div style='display:flex;align-items:center;gap:12px'>"
+                            f"<img src='{style.headshot_url(p['mlbID'], width=120)}' "
+                            f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;"
+                            f"object-position:center 25%'>"
+                            f"<div><span style='background-color:{p_color}66;color:#FAFAFA;padding:2px 8px;"
+                            f"border-radius:6px;font-weight:700;font-size:0.8rem'>{norm}</span>{mound_tag}"
+                            f"<div style='font-weight:700;font-size:1.05rem;margin-top:2px'>"
+                            f"<a href='{style.player_link(p['mlbID'], season)}' target='_self' "
+                            f"style='color:inherit;text-decoration:none'>{p['name']}</a></div></div></div>",
+                            unsafe_allow_html=True,
+                        )
+                        g = p["game"]
+                        if g.get("ip") is not None:
+                            st.caption(
+                                f"Tonight: {g['ip']} IP · {g.get('h', 0)} H · {g.get('er', 0)} ER · "
+                                f"{g.get('so', 0)} K · {g.get('bb', 0)} BB · {g.get('pitches', 0)} pitches"
+                            )
+                        s = p["season"]
+                        if s.get("era"):
+                            st.caption(
+                                f"Season: {s['era']} ERA · {s.get('whip', '—')} WHIP · "
+                                f"{s.get('so', 0)} K in {s.get('ip', '—')} IP"
+                            )
+
         due_up = db.load_due_up(game_pk)
         if due_up:
             style.colored_header("Due Up", "batting")

@@ -499,6 +499,61 @@ def load_due_up(game_pk) -> dict:
     }
 
 
+@st.cache_data(show_spinner=False, ttl=30, max_entries=10)
+def load_current_pitchers(game_pk) -> list[dict]:
+    """Each team's pitcher currently in the game — the one on the mound
+    right now for the fielding side, and the batting side's most recent
+    (still-active) pitcher — with tonight's line and season numbers, for
+    Game Center's "On the Mound" cards. From the live feed's boxscore:
+    the per-team `pitchers` list is in order of appearance, so its last
+    entry is that team's current arm. Returns [] for games not in
+    progress or on any fetch failure."""
+    try:
+        resp = requests.get(
+            f"https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live", timeout=10,
+        )
+        resp.raise_for_status()
+        live = resp.json().get("liveData", {})
+    except Exception:
+        return []
+
+    line = live.get("linescore") or {}
+    on_mound_id = ((line.get("defense") or {}).get("pitcher") or {}).get("id")
+    box_teams = (live.get("boxscore") or {}).get("teams") or {}
+
+    out = []
+    for side in ("away", "home"):
+        team = box_teams.get(side) or {}
+        pitcher_ids = team.get("pitchers") or []
+        if not pitcher_ids:
+            continue
+        pid = pitcher_ids[-1]
+        player = (team.get("players") or {}).get(f"ID{pid}") or {}
+        game_stats = (player.get("stats") or {}).get("pitching") or {}
+        season_stats = (player.get("seasonStats") or {}).get("pitching") or {}
+        out.append({
+            "side": side,
+            "mlbID": int(pid),
+            "name": (player.get("person") or {}).get("fullName", ""),
+            "on_mound": pid == on_mound_id,
+            "game": {
+                "ip": game_stats.get("inningsPitched"),
+                "h": game_stats.get("hits"),
+                "er": game_stats.get("earnedRuns"),
+                "so": game_stats.get("strikeOuts"),
+                "bb": game_stats.get("baseOnBalls"),
+                "pitches": game_stats.get("numberOfPitches"),
+            },
+            "season": {
+                "era": season_stats.get("era"),
+                "whip": season_stats.get("whip"),
+                "ip": season_stats.get("inningsPitched"),
+                "so": season_stats.get("strikeOuts"),
+            },
+        })
+    return out
+
+
 @st.cache_data(show_spinner=False, ttl=15, max_entries=10)
 def load_win_probability(game_pk) -> pd.DataFrame:
     """Home-team win probability after every completed plate appearance, for
