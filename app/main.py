@@ -272,8 +272,6 @@ components.html(
     height=0,
 )
 
-sidebar.render_search()
-
 # Free agency is an offseason feature — irrelevant (and a little confusing,
 # since "unattached" reads oddly for a guy who's mid-season on a roster)
 # while the season's actually being played. Flip this to True once the
@@ -309,11 +307,29 @@ PAGES = [
 if SHOW_FREE_AGENCY:
     PAGES.insert(-1, st.Page("pages/21_Free_Agency.py", title="Free Agency"))
 
-pg = st.navigation(PAGES, position="hidden")
+# NHL pages live under url_paths starting with "nhl" — that prefix is how
+# the active sport is derived (from the URL, so deep links and bookmarks
+# always land in the right sport with the right sidebar). Phase 0: just a
+# placeholder home; the real page set slots in here as it's built.
+NHL_PAGES = [
+    st.Page("nhl/pages/home.py", title="NHL Home", url_path="nhl"),
+]
 
-for p in PAGES:
-    if p.title not in ("Player", "Game Center", "Glossary", "Settings"):
-        st.sidebar.page_link(p, label=p.title)
+# Every page from both sports is registered (so every URL resolves), but
+# only the active sport's links get rendered below.
+pg = st.navigation(PAGES + NHL_PAGES, position="hidden")
+active_sport = "nhl" if (pg.url_path or "").startswith("nhl") else "mlb"
+
+sidebar.render_sport_switcher(active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0]})
+sidebar.render_search(active_sport)
+
+if active_sport == "mlb":
+    for p in PAGES:
+        if p.title not in ("Player", "Game Center", "Glossary", "Settings"):
+            st.sidebar.page_link(p, label=p.title)
+else:
+    for p in NHL_PAGES:
+        st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))
 
 # Small, deliberately understated link to Settings — sits below the main
 # nav (not mixed into the loop above), shrunk/muted via a href-matching CSS

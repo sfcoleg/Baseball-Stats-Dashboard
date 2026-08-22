@@ -1,13 +1,55 @@
-"""Persistent player-search box shown in the sidebar on every page (not a
-dedicated Search page) — call render_search() near the top of each page,
-right after st.set_page_config()."""
+"""Sidebar header: the sport switcher (⚾ MLB | 🏒 NHL) and the persistent
+player-search box, rendered once per run from main.py above the page nav."""
 import streamlit as st
 
 import db
 
+SPORT_LABELS = {"mlb": "⚾ MLB", "nhl": "🏒 NHL"}
+_LABEL_TO_SPORT = {v: k for k, v in SPORT_LABELS.items()}
 
-def render_search():
-    st.sidebar.caption("Player Search")
+
+def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
+    """Compact segmented toggle at the top of the sidebar. The URL decides
+    which sport is active (main.py derives it from the current page's
+    url_path); this widget only ever *changes* sport when the user clicks
+    it — on every other run it's re-synced to the URL so deep links and
+    normal navigation never get bounced by a stale widget value.
+
+    `home_pages` maps sport -> the st.Page to switch to."""
+    clicked = st.session_state.get("sport_switch")
+    prev = st.session_state.get("_sport_switch_rendered")
+    if clicked is not None and prev is not None and clicked != prev:
+        target = _LABEL_TO_SPORT.get(clicked)
+        if target and target != active_sport and target in home_pages:
+            st.session_state["_sport_switch_rendered"] = clicked
+            st.switch_page(home_pages[target])
+
+    # Sync to the URL-derived sport before rendering (allowed: we set the
+    # key before the widget is created this run).
+    st.session_state["sport_switch"] = SPORT_LABELS[active_sport]
+    st.sidebar.markdown(
+        "<style>"
+        "[data-testid='stSidebar'] [data-testid='stSegmentedControl'] button {"
+        "  font-size: 0.8rem !important; padding: 2px 10px !important; min-height: 0 !important;"
+        "}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+    st.sidebar.segmented_control(
+        "Sport", list(SPORT_LABELS.values()), key="sport_switch",
+        label_visibility="collapsed",
+    )
+    st.session_state["_sport_switch_rendered"] = SPORT_LABELS[active_sport]
+
+
+def render_search(active_sport: str = "mlb") -> None:
+    if active_sport != "mlb":
+        st.sidebar.text_input(
+            "Search players", key="sidebar_search_query_nhl", placeholder="NHL search coming soon",
+            label_visibility="collapsed", disabled=True,
+        )
+        return
+
     query = st.sidebar.text_input(
         "Search players", key="sidebar_search_query", placeholder="e.g. Ohtani, Judge",
         label_visibility="collapsed",
