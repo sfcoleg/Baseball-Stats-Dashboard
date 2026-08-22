@@ -468,6 +468,20 @@ def load_schedule_week(start: str = "now") -> dict:
     }
 
 
+@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
+def load_club_schedule(team_abbr: str) -> list[dict]:
+    """A team's full current-season schedule (preseason + regular + any
+    playoffs), oldest first, from the club-schedule-season endpoint."""
+    try:
+        resp = requests.get(
+            f"https://api-web.nhle.com/v1/club-schedule-season/{team_abbr}/now", timeout=15, headers=_HEADERS
+        )
+        resp.raise_for_status()
+        return resp.json().get("games", [])
+    except Exception:
+        return []
+
+
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
 def load_roster(team_abbr: str) -> dict:
     """Current roster for `team_abbr`: {'forwards': [...], 'defensemen': [...], 'goalies': [...]}."""

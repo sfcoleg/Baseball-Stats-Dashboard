@@ -1,7 +1,9 @@
 """NHL Team — roster (live) + standings context + our own stat leaders for
 one team."""
 import sys
+from datetime import datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -100,6 +102,72 @@ if seasons:
                     unsafe_allow_html=True,
                 )
                 st.caption(f"{int(g['wins'])}-{int(g['losses'])}-{int(g['otLosses'])} · {g['savePct']:.1f} SV%")
+
+st.divider()
+
+# --- Schedule ------------------------------------------------------------
+style.colored_header("Schedule", "chart")
+games = ndb.load_club_schedule(abbr)
+if not games:
+    st.caption("Schedule unavailable right now.")
+else:
+    def _opp(g):
+        is_home = g["homeTeam"]["abbrev"] == abbr
+        opp = g["awayTeam"]["abbrev"] if is_home else g["homeTeam"]["abbrev"]
+        return is_home, opp
+
+    def _local_time(g):
+        try:
+            utc = datetime.fromisoformat(g["startTimeUTC"].replace("Z", "+00:00"))
+            return utc.astimezone(ZoneInfo("America/New_York")).strftime("%-I:%M %p ET")
+        except Exception:
+            return ""
+
+    played = [g for g in games if g.get("gameState") in ("OFF", "FINAL")]
+    upcoming = [g for g in games if g.get("gameState") not in ("OFF", "FINAL")]
+    wins = sum(
+        1 for g in played
+        if (g["homeTeam"].get("score", 0) > g["awayTeam"].get("score", 0)) == (g["homeTeam"]["abbrev"] == abbr)
+    )
+    up_tab, res_tab = st.tabs([f"Upcoming ({len(upcoming)})", f"Results ({len(played)})"])
+    with up_tab:
+        rows = []
+        for g in upcoming:
+            is_home, opp = _opp(g)
+            p_home = ndb.game_win_prob(g["homeTeam"]["abbrev"], g["awayTeam"]["abbrev"]) if g.get("gameType") != 1 else None
+            p_us = None if p_home is None else (p_home if is_home else 1 - p_home)
+            rows.append({
+                "Date": pd.to_datetime(g["gameDate"]).strftime("%a %b %-d"),
+                "": "vs" if is_home else "@", "Opponent": opp, "Time": _local_time(g),
+                "Win%": f"{p_us * 100:.0f}%" if p_us is not None else "",
+                "Type": {1: "Preseason", 2: "", 3: "Playoffs"}.get(g.get("gameType"), ""),
+            })
+        if rows:
+            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)))
+        else:
+            st.caption("No games left on the schedule.")
+    with res_tab:
+        if not played:
+            st.caption("No games played yet this season.")
+        else:
+            st.caption(f"{wins}-{len(played) - wins} in games played.")
+            rows = []
+            for g in reversed(played):
+                is_home, opp = _opp(g)
+                us = g["homeTeam"].get("score", 0) if is_home else g["awayTeam"].get("score", 0)
+                them = g["awayTeam"].get("score", 0) if is_home else g["homeTeam"].get("score", 0)
+                last = (g.get("gameOutcome") or {}).get("lastPeriodType", "REG")
+                rows.append({
+                    "Date": pd.to_datetime(g["gameDate"]).strftime("%a %b %-d"),
+                    "": "vs" if is_home else "@", "Opponent": opp,
+                    "Result": f"{'W' if us > them else 'L'} {us}-{them}" + ("" if last == "REG" else f" ({last})"),
+                    "Type": {1: "Preseason", 2: "", 3: "Playoffs"}.get(g.get("gameType"), ""),
+                    "Game Center": f"nhl-game?game={g['id']}",
+                })
+            st.dataframe(
+                pd.DataFrame(rows), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)),
+                column_config={"Game Center": st.column_config.LinkColumn("Game Center", display_text="Open")},
+            )
 
 st.divider()
 
