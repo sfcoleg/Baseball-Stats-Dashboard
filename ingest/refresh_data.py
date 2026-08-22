@@ -1351,12 +1351,17 @@ def fetch_and_store():
     _record_refresh_run()
 
     # NHL skaters (see nhl_refresh.py) — refreshes the latest season into
-    # data/nhl.db. Same non-fatal guard; the MLB refresh never waits on it.
-    try:
-        from nhl_refresh import update_latest as nhl_update_latest
-        nhl_update_latest()
-    except Exception as e:
-        print(f"nhl refresh failed (non-fatal): {e}")
+    # data/nhl.db, but only in-season: October through June. Over the
+    # summer the numbers are final and there's nothing to pull. Same
+    # non-fatal guard; the MLB refresh never waits on it.
+    if date.today().month >= 10 or date.today().month <= 6:
+        try:
+            from nhl_refresh import update_latest as nhl_update_latest
+            nhl_update_latest()
+        except Exception as e:
+            print(f"nhl refresh failed (non-fatal): {e}")
+    else:
+        print("nhl refresh skipped (offseason — resumes in October)")
 
     # Daily playoff-odds snapshot — the simulator's numbers are recomputed
     # nightly and were previously discarded, which made an "odds over time"
