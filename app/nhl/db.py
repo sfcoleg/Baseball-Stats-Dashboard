@@ -45,8 +45,8 @@ def season_label(start_year: int) -> str:
 # Display labels for the raw API column names.
 STAT_LABELS = {
     "skaterFullName": "Name", "teamAbbrevs": "Tm", "positionCode": "Pos", "gamesPlayed": "GP",
-    "goals": "G", "assists": "A", "points": "P", "pointsPerGame": "P/GP", "plusMinus": "+/-",
-    "penaltyMinutes": "PIM", "ppGoals": "PPG", "ppPoints": "PPP", "shGoals": "SHG", "shPoints": "SHP",
+    "goals": "G", "assists": "A", "points": "P", "pointsPerGame": "PPG", "plusMinus": "+/-",
+    "penaltyMinutes": "PIM", "ppGoals": "PP G", "ppPoints": "PP P", "shGoals": "SH G", "shPoints": "SH P",
     "gameWinningGoals": "GWG", "otGoals": "OTG", "shots": "S", "shootingPct": "S%",
     "timeOnIcePerGame": "TOI/GP", "faceoffWinPct": "FO%",
     "ixG": "ixG", "ixG_5v5": "ixG 5v5", "ixG_high_danger": "HD ixG", "high_danger_shots": "HD Shots",
