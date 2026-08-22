@@ -26,10 +26,6 @@ from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Birthplace Map | Diamond Metrics", layout="wide")
 st.title("Birthplace Map")
-st.caption(
-    "Where every NHL player was born, and where every team plays. Bubbles are hometowns sized by "
-    "how many players they've produced — hover for names. Logos mark each team's home arena."
-)
 
 mtime = ndb.nhl_db_mtime()
 seasons = ndb.skater_seasons(mtime)

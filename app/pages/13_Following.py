@@ -13,12 +13,6 @@ import teams
 
 st.set_page_config(page_title="Following | Diamond Metrics", layout="wide")
 st.title("Following")
-st.caption(
-    "Follow teams and players to get a personalized feed: today's games for your teams, "
-    "yesterday's performances for your players. Saved in this browser only (no account) — "
-    "it'll be here next time you visit on this device/browser, but won't follow you to another one."
-)
-
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()

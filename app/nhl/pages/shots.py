@@ -23,10 +23,6 @@ if not seasons:
 season = st.selectbox("Season", seasons, format_func=ndb.season_label)
 shots = ndb.load_shots(season, mtime)
 shots["Tm"] = shots["teamId"].map(nteams.abbr_for_id)
-st.caption(
-    "Coordinates are normalized so every shot attacks the right-hand goal, regardless of period or "
-    "home/away — a player's or team's shots always cluster the same direction."
-)
 
 view = st.radio("View", ["Player", "Team"], horizontal=True)
 

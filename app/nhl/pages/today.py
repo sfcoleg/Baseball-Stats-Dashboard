@@ -15,13 +15,6 @@ from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
-_elo = ndb.load_elo_model()
-if _elo:
-    st.caption(
-        f"Win% on scheduled games is our own margin-of-victory-adjusted Elo model — not real "
-        f"sportsbook lines. Trained on {_elo['trained_through']} results, "
-        f"{_elo['holdout_accuracy']:.1%} accuracy on its {_elo['holdout_season']} holdout."
-    )
 
 if "nhl_games_date" not in st.session_state:
     st.session_state["nhl_games_date"] = ndb.today_pacific()

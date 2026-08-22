@@ -20,16 +20,6 @@ if clicked_team:
 
 st.title("Standings")
 elo_model = ndb.load_elo_model()
-caption = (
-    "Points-based NHL standings by conference and division. Click a team to jump to its Team page. "
-    "p = Presidents' Trophy pace, z = clinched conference, y = clinched division, x = clinched a playoff berth."
-)
-if elo_model:
-    caption += (
-        f" Elo is our own game-odds model's current power rating (1500 = average) — see Today's Games "
-        f"for how it's used."
-    )
-st.caption(caption)
 
 standings = ndb.load_standings()
 if standings.empty:

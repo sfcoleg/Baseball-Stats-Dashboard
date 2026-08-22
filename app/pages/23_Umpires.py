@@ -12,12 +12,6 @@ import style
 
 st.set_page_config(page_title="Umpires | Diamond Metrics", layout="wide")
 st.title("Umpires")
-st.caption(
-    "Ball/strike accountability for every home-plate umpire — each called pitch graded against that "
-    "batter's own rulebook zone (Altuve's calls are judged against Altuve's zone, Judge's against "
-    "Judge's). Our own grading from MLB tracking data, not an official MLB stat — see the methodology "
-    "notes at the bottom."
-)
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

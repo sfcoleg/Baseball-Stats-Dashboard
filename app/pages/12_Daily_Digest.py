@@ -164,15 +164,9 @@ else:
     st.caption("Nothing notable yesterday.")
 
 style.colored_header("Biggest Plays", "headliners")
-st.caption(
-    "Yesterday's largest win-probability swings across all of MLB, from our own trained model — "
-    "the moments that actually flipped games."
-)
 top_plays = db.load_wpa_top_plays(yesterday.year, mtime)
 plays_yday = top_plays[top_plays["date"] == yesterday.isoformat()] if not top_plays.empty else top_plays
-if plays_yday is None or plays_yday.empty:
-    st.caption("No graded plays for yesterday yet — they land with the nightly refresh.")
-else:
+if plays_yday is not None and not plays_yday.empty:
     batting_names = db.load_batting(yesterday.year, mtime)[["mlbID", "Name"]]
     name_by_id = dict(zip(batting_names["mlbID"], batting_names["Name"]))
     for _, p in plays_yday.sort_values("wpa_batter", key=abs, ascending=False).head(5).iterrows():

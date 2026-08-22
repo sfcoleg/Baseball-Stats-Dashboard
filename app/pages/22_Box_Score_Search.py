@@ -12,7 +12,6 @@ import teams
 
 st.set_page_config(page_title="Box Score Search | Diamond Metrics", layout="wide")
 st.title("Box Score Search")
-st.caption("Look up any past game's box score, not just today's or yesterday's.")
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

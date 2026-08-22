@@ -120,11 +120,6 @@ with tx_tab:
 
 # --- Awards Race ------------------------------------------------------------
 with awards_tab:
-    st.caption(
-        "A stats-only composite score, not real award-voting data — ranked by a blend of WAR and other "
-        f"advanced stats. Minimums: {db.MVP_MIN_PA}+ PA for MVP, {db.CY_YOUNG_MIN_IP}+ IP for Cy Young."
-    )
-
     seasons = db.get_seasons("batting")
     season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
 

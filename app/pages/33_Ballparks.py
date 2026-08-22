@@ -16,12 +16,6 @@ import teams
 st.set_page_config(page_title="Ballparks | Diamond Metrics", layout="wide")
 st.title("Ballparks")
 style.glossary_link()
-st.caption(
-    "Each park's effect on the game, measured from our own data — plus every home run hit there, "
-    "in 3D. Factors compare scoring in a team's home games vs. that same team's road games "
-    "(100 = neutral), pooled across 2021-2026 so one weird season doesn't define a park."
-)
-
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()

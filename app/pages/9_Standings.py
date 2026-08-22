@@ -16,11 +16,6 @@ if clicked_team:
     st.switch_page("pages/4_Team.py")
 
 st.title("Standings")
-st.caption(
-    "Current MLB division standings, from the MLB Stats API. Click a team's name to jump to its Team page. "
-    "z = clinched division, x = clinched a playoff spot, e = eliminated from postseason contention."
-)
-
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()

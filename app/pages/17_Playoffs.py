@@ -30,15 +30,6 @@ if SHOW_BRACKET_FEATURES:
     bracket_picks.bootstrap()
 
 st.title("Playoffs")
-st.caption(
-    "Playoff and World Series odds are a Monte Carlo simulation of the rest of the season (see the Team "
-    "page for the methodology)."
-    + (
-        " The bracket below is the actual current seeding if the season ended today — not a simulated "
-        "outcome. Click a team to jump to its Team page."
-        if SHOW_BRACKET_FEATURES else ""
-    )
-)
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")

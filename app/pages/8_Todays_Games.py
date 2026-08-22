@@ -14,12 +14,6 @@ import teams
 
 st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
-st.caption(
-    "Our own win probabilities/odds — not real sportsbook lines. From a logistic-regression model "
-    "trained on 2015-2025 games (56.7% accuracy on its 2025 holdout): team record, run differential, "
-    "prior-season strength, each probable starter's prior-season ERA, and home field."
-)
-
 # Normally seeded by predictions.bootstrap() in main.py, but Streamlit's
 # legacy pages/-folder auto-discovery can route a direct URL hit straight to
 # this page's script (bypassing main.py entirely) — so bootstrap defensively

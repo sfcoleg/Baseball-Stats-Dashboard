@@ -17,11 +17,6 @@ import style
 st.set_page_config(page_title="League Trends | Diamond Metrics", layout="wide")
 st.title("League Trends")
 style.glossary_link()
-st.caption(
-    "The state of the sport, season by season — league-wide rates computed from every player row "
-    "we cache. 2020 is the 60-game COVID season; treat its dots gently."
-)
-
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()

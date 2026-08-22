@@ -15,11 +15,6 @@ import teams
 
 st.set_page_config(page_title="Schedule | Diamond Metrics", layout="wide")
 st.title("Schedule")
-st.caption(
-    "The week ahead, league-wide — probable starters from MLB, win odds from our own trained "
-    "model. Odds shift as records and probables firm up."
-)
-
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
@@ -67,7 +62,6 @@ if not duels.empty:
 
 if not duels.empty:
     style.colored_header("Duels to Watch", "headliners")
-    st.caption("Upcoming matchups where both probable starters carry a sub-3.80 ERA — circle these.")
     for _, g in duels.head(5).iterrows():
         away_color = teams.color_for_abbr(g["away_abbr"])
         home_color = teams.color_for_abbr(g["home_abbr"])
