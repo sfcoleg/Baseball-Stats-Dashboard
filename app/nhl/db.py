@@ -450,6 +450,24 @@ def load_schedule_for_date(date_str: str) -> list[dict]:
     return []
 
 
+@st.cache_data(show_spinner=False, ttl=300, max_entries=8)
+def load_schedule_week(start: str = "now") -> dict:
+    """One schedule 'week' as the NHL serves it: {'days': [{date, games}],
+    'next': date, 'prev': date}. `start` is YYYY-MM-DD or 'now' (which the
+    API resolves to the week containing the next game day — in the
+    offseason that's opening week, so the page is never empty)."""
+    try:
+        resp = requests.get(f"https://api-web.nhle.com/v1/schedule/{start}", timeout=15, headers=_HEADERS)
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception:
+        return {"days": [], "next": None, "prev": None}
+    return {
+        "days": [{"date": d["date"], "games": d.get("games", [])} for d in payload.get("gameWeek", [])],
+        "next": payload.get("nextStartDate"), "prev": payload.get("previousStartDate"),
+    }
+
+
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
 def load_roster(team_abbr: str) -> dict:
     """Current roster for `team_abbr`: {'forwards': [...], 'defensemen': [...], 'goalies': [...]}."""

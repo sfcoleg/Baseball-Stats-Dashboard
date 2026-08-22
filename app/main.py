@@ -323,6 +323,7 @@ NHL_PAGES = [
     st.Page("nhl/pages/team.py", title="NHL Team", url_path="nhl-team"),
     st.Page("nhl/pages/compare.py", title="NHL Compare", url_path="nhl-compare"),
     st.Page("nhl/pages/today.py", title="NHL Today's Games", url_path="nhl-today"),
+    st.Page("nhl/pages/schedule.py", title="NHL Schedule", url_path="nhl-schedule"),
     st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
     st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
