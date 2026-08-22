@@ -1,17 +1,45 @@
-"""NHL data layer — readers over data/nhl.db (built by ingest/nhl_refresh.py).
+"""NHL data layer — readers over data/nhl.db (built by ingest/nhl_refresh.py)
+plus live reads straight from the NHL's public api-web.nhle.com (standings,
+scores, rosters, player bios) that are never worth nightly-ingesting since
+they're small, change in-season, and the API already serves them fast.
 Deliberately separate from the MLB db module: different database file,
 different tables, independent refresh."""
+import json
 import sqlite3
+from datetime import date, datetime
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
+import requests
 import streamlit as st
 
 NHL_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nhl.db"
+ELO_MODEL_PATH = Path(__file__).resolve().parent / "elo_model.json"
+_HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
 def nhl_db_mtime() -> float:
     return NHL_DB_PATH.stat().st_mtime if NHL_DB_PATH.exists() else 0.0
+
+
+def today_pacific() -> date:
+    """Same Pacific-anchored 'what day is it' as the MLB side (db.py) — see
+    that module's docstring for why (Streamlit Cloud runs in UTC, which
+    rolls over to "tomorrow" while it's still evening on the US west
+    coast)."""
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
+
+
+def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
+    """Percentile of `value` within `series` (0-100). Same as the MLB side's
+    db.percentile_rank() — duplicated rather than cross-imported to keep
+    the two sport modules independent."""
+    clean = series.dropna()
+    if value is None or pd.isna(value) or len(clean) == 0:
+        return None
+    pct = (clean >= value).mean() * 100 if lower_is_better else (clean <= value).mean() * 100
+    return int(round(pct))
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
@@ -38,13 +66,213 @@ def load_skaters(season: int, db_mtime_val: float) -> pd.DataFrame:
             return pd.DataFrame()
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def goalie_seasons(db_mtime_val: float) -> list[int]:
+    if not NHL_DB_PATH.exists():
+        return []
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            rows = conn.execute("SELECT DISTINCT season FROM goalies ORDER BY season DESC").fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [r[0] for r in rows]
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_goalies(season: int, db_mtime_val: float) -> pd.DataFrame:
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM goalies WHERE season = ?", conn, params=(season,))
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_skater_career(player_id: int, db_mtime_val: float) -> pd.DataFrame:
+    """Every season we have on file for one skater, oldest first — for the
+    player profile's season-by-season table (our own ingested columns, so
+    it has xG/CF%/etc. that the NHL's own player-landing endpoint lacks)."""
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT * FROM skaters WHERE playerId = ? ORDER BY season", conn, params=(int(player_id),)
+            )
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_goalie_career(player_id: int, db_mtime_val: float) -> pd.DataFrame:
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT * FROM goalies WHERE playerId = ? ORDER BY season", conn, params=(int(player_id),)
+            )
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
 def season_label(start_year: int) -> str:
     return f"{start_year}-{str(start_year + 1)[-2:]}"
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def shot_seasons(db_mtime_val: float) -> list[int]:
+    if not NHL_DB_PATH.exists():
+        return []
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            rows = conn.execute("SELECT DISTINCT season FROM shots ORDER BY season DESC").fetchall()
+        except sqlite3.OperationalError:
+            return []
+    return [r[0] for r in rows]
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_shots(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Every shot attempt (goal/shot-on-goal/missed/blocked) for a season —
+    see ingest/nhl_shots.py. Can be a large-ish table (~100k+ rows/season);
+    callers filter down to one player or team."""
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM shots WHERE season = ?", conn, params=(season,))
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Skaters and goalies whose name contains `query` (case-insensitive),
+    for the Compare page's player pickers. Returns
+    playerId/Name/Tm/role/positionCode — role is 'Skater' or 'Goalie'."""
+    if not NHL_DB_PATH.exists() or not query.strip():
+        return pd.DataFrame()
+    like = f"%{query.strip()}%"
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            skaters = pd.read_sql(
+                "SELECT playerId, skaterFullName AS Name, teamAbbrevs AS Tm, positionCode "
+                "FROM skaters WHERE season = ? AND skaterFullName LIKE ? COLLATE NOCASE",
+                conn, params=(season, like),
+            )
+            skaters["role"] = "Skater"
+        except pd.errors.DatabaseError:
+            skaters = pd.DataFrame()
+        try:
+            goalies = pd.read_sql(
+                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm FROM goalies "
+                "WHERE season = ? AND goalieFullName LIKE ? COLLATE NOCASE",
+                conn, params=(season, like),
+            )
+            goalies["role"] = "Goalie"
+            goalies["positionCode"] = "G"
+        except pd.errors.DatabaseError:
+            goalies = pd.DataFrame()
+    return pd.concat([skaters, goalies], ignore_index=True)
+
+
+# ---------------------------------------------------------------------------
+# Live reads (api-web.nhle.com) — standings, scores/schedule, rosters, bios.
+# Never stored in nhl.db: small payloads, already fast, and change in-season
+# in ways nightly ingest would just make stale.
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+def load_standings(date_str: str = "now") -> pd.DataFrame:
+    """League standings as of `date_str` ('now' for current/most-recent).
+    One row per team with points, record splits, streak, and clinch status."""
+    try:
+        resp = requests.get(f"https://api-web.nhle.com/v1/standings/{date_str}", timeout=15, headers=_HEADERS)
+        resp.raise_for_status()
+        rows = resp.json().get("standings", [])
+    except Exception:
+        return pd.DataFrame()
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
+    for col in ("teamName", "teamCommonName", "placeName", "teamAbbrev"):
+        if col in df.columns:
+            df[col] = df[col].map(lambda v: v.get("default") if isinstance(v, dict) else v)
+    return df
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=8)
+def load_schedule_for_date(date_str: str) -> list[dict]:
+    """Every game on `date_str` (YYYY-MM-DD), with live score/state if in
+    progress or final. Short TTL so a page left open during live games
+    keeps moving."""
+    try:
+        resp = requests.get(f"https://api-web.nhle.com/v1/schedule/{date_str}", timeout=15, headers=_HEADERS)
+        resp.raise_for_status()
+        weeks = resp.json().get("gameWeek", [])
+    except Exception:
+        return []
+    for day in weeks:
+        if day.get("date") == date_str:
+            return day.get("games", [])
+    return []
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=32)
+def load_roster(team_abbr: str) -> dict:
+    """Current roster for `team_abbr`: {'forwards': [...], 'defensemen': [...], 'goalies': [...]}."""
+    try:
+        resp = requests.get(
+            f"https://api-web.nhle.com/v1/roster/{team_abbr}/current", timeout=15, headers=_HEADERS
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=64)
+def load_player_landing(player_id: int) -> dict:
+    """The NHL's own player-profile payload: headshot, bio, draft info,
+    career/season totals (all leagues), awards, last-5-games log."""
+    try:
+        resp = requests.get(
+            f"https://api-web.nhle.com/v1/player/{int(player_id)}/landing", timeout=15, headers=_HEADERS
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
+
+
+# ---------------------------------------------------------------------------
+# Game-odds model (Elo, fit offline by ingest/nhl_elo.py -> elo_model.json).
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=1)
+def load_elo_model() -> dict | None:
+    if not ELO_MODEL_PATH.exists():
+        return None
+    return json.loads(ELO_MODEL_PATH.read_text())
+
+
+def game_win_prob(home_abbr: str, away_abbr: str) -> float | None:
+    """Pregame P(home team wins), from the fitted Elo model — None if the
+    model hasn't been trained yet (see ingest/nhl_elo.py)."""
+    model = load_elo_model()
+    if not model:
+        return None
+    ratings = model["ratings"]
+    elo_home = ratings.get(home_abbr, 1500.0)
+    elo_away = ratings.get(away_abbr, 1500.0)
+    return 1.0 / (1.0 + 10 ** ((elo_away - (elo_home + model["home_advantage"])) / 400))
+
+
 # Display labels for the raw API column names.
 STAT_LABELS = {
-    "skaterFullName": "Name", "teamAbbrevs": "Tm", "positionCode": "Pos", "gamesPlayed": "GP",
+    "skaterFullName": "Name", "teamAbbrevs": "Tm", "positionCode": "Pos", "shootsCatches": "Shoots", "gamesPlayed": "GP",
     "goals": "G", "assists": "A", "points": "P", "pointsPerGame": "PPG", "plusMinus": "+/-",
     "penaltyMinutes": "PIM", "ppGoals": "PP G", "ppPoints": "PP P", "shGoals": "SH G", "shPoints": "SH P",
     "gameWinningGoals": "GWG", "otGoals": "OTG", "shots": "S", "shootingPct": "S%",
@@ -67,4 +295,12 @@ STAT_LABELS = {
     "shootingPctWrist": "Wrist S%", "shootingPctSnap": "Snap S%", "shootingPctSlap": "Slap S%",
     "shootingPctBackhand": "Backhand S%", "shootingPctTipIn": "Tip S%",
     "shotsOnNetWrist": "Wrist SOG", "shotsOnNetSnap": "Snap SOG", "shotsOnNetSlap": "Slap SOG",
+    # Goalies
+    "goalieFullName": "Name", "gamesStarted": "GS", "wins": "W", "losses": "L", "otLosses": "OTL",
+    "goalsAgainst": "GA", "goalsAgainstAverage": "GAA", "shotsAgainst": "SA", "saves": "SV",
+    "savePct": "SV%", "shutouts": "SO", "completeGames": "CG", "completeGamePct": "CG%",
+    "incompleteGames": "ICG", "qualityStart": "QS", "qualityStartsPct": "QS%",
+    "regulationWins": "Reg. W", "regulationLosses": "Reg. L", "goalsFor": "Team GF",
+    "goalsForAverage": "Team GF/GP", "shotsAgainstPer60": "SA/60", "xGA": "xGA",
+    "xGA_high_danger": "HD xGA", "xGA_5v5": "xGA 5v5", "gsax": "GSAx", "gsax5v5": "GSAx 5v5",
 }

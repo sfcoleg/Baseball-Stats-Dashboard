@@ -82,6 +82,24 @@ REPORTS = {
     ],
 }
 
+# Goalie reports — same API family, different endpoint (api.nhle.com/stats/rest/en/goalie/<report>).
+GOALIE_REPORTS = {
+    "summary": [
+        "playerId", "goalieFullName", "teamAbbrevs", "shootsCatches", "gamesPlayed", "gamesStarted",
+        "wins", "losses", "otLosses", "goalsAgainst", "goalsAgainstAverage", "shotsAgainst", "saves",
+        "savePct", "shutouts", "timeOnIce",
+    ],
+    "advanced": [
+        "playerId", "completeGames", "completeGamePct", "incompleteGames", "qualityStart",
+        "qualityStartsPct", "regulationWins", "regulationLosses", "goalsFor", "goalsForAverage",
+        "shotsAgainstPer60",
+    ],
+    "bios": [
+        "playerId", "birthDate", "birthCountryCode", "height", "weight", "draftYear", "draftRound",
+        "draftOverall",
+    ],
+}
+
 # MoneyPuck column -> our column. Pulled for situation == "all" except the
 # 5v5 on-ice share, which is the possession-quality stat people mean by xGF%.
 MONEYPUCK_ALL = {
@@ -96,6 +114,18 @@ MONEYPUCK_ALL = {
 MONEYPUCK_5V5 = {
     "onIce_xGoalsPercentage": "xGF_pct_5v5",
     "I_F_xGoals": "ixG_5v5",
+}
+
+# Goalies: MoneyPuck's per-goalie CSV has actual xGoals-against (not a
+# per-skater on-ice share), so GSAx = xGA - goalsAgainst is computed in the
+# app layer from these two raw columns, same pattern as skaters' finishing
+# (goals - ixG).
+GOALIE_MONEYPUCK_ALL = {
+    "xGoals": "xGA",
+    "highDangerxGoals": "xGA_high_danger",
+}
+GOALIE_MONEYPUCK_5V5 = {
+    "xGoals": "xGA_5v5",
 }
 
 
@@ -145,6 +175,71 @@ def fetch_moneypuck(start_year: int) -> pd.DataFrame:
         if c in out.columns:
             out[c] = out[c] * 100
     return out
+
+
+def fetch_goalie_report(report: str, season_id: int) -> pd.DataFrame:
+    def _get():
+        resp = requests.get(
+            f"https://api.nhle.com/stats/rest/en/goalie/{report}",
+            params={"cayenneExp": f"seasonId={season_id} and gameTypeId=2", "limit": -1},
+            timeout=30, headers=HEADERS,
+        )
+        resp.raise_for_status()
+        return pd.DataFrame(resp.json().get("data", []))
+
+    df = _with_retries(_get, f"goalie/{report} {season_id}")
+    keep = [c for c in GOALIE_REPORTS[report] if c in df.columns]
+    return df[keep] if not df.empty else pd.DataFrame(columns=GOALIE_REPORTS[report])
+
+
+def fetch_goalie_moneypuck(start_year: int) -> pd.DataFrame:
+    def _get():
+        resp = requests.get(
+            f"https://moneypuck.com/moneypuck/playerData/seasonSummary/{start_year}/regular/goalies.csv",
+            timeout=60, headers=HEADERS,
+        )
+        resp.raise_for_status()
+        return pd.read_csv(io.StringIO(resp.text))
+
+    df = _with_retries(_get, f"moneypuck goalies {start_year}")
+    if df.empty or "playerId" not in df.columns:
+        return pd.DataFrame(columns=["playerId"])
+    all_sit = df[df["situation"] == "all"][["playerId"] + list(GOALIE_MONEYPUCK_ALL)].rename(columns=GOALIE_MONEYPUCK_ALL)
+    five = df[df["situation"] == "5on5"][["playerId"] + list(GOALIE_MONEYPUCK_5V5)].rename(columns=GOALIE_MONEYPUCK_5V5)
+    return all_sit.merge(five, on="playerId", how="left")
+
+
+def build_goalie_season(start_year: int) -> pd.DataFrame:
+    season_id = int(f"{start_year}{start_year + 1}")
+    merged = None
+    for report in GOALIE_REPORTS:
+        df = fetch_goalie_report(report, season_id)
+        print(f"  goalie/{report}: {len(df)} rows", flush=True)
+        merged = df if merged is None else merged.merge(df, on="playerId", how="left")
+    mp = fetch_goalie_moneypuck(start_year)
+    print(f"  moneypuck goalie xGA: {len(mp)} rows", flush=True)
+    merged = merged.merge(mp, on="playerId", how="left")
+
+    for c in ["savePct", "completeGamePct", "qualityStartsPct"]:
+        if c in merged.columns:
+            merged[c] = pd.to_numeric(merged[c], errors="coerce") * 100
+    merged["season"] = start_year
+    return merged
+
+
+def store_goalie_season(df: pd.DataFrame, start_year: int) -> None:
+    NHL_DB_PATH.parent.mkdir(exist_ok=True)
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            existing = {r[1] for r in conn.execute("PRAGMA table_info(goalies)")}
+            if existing and existing != set(df.columns):
+                conn.execute("DROP TABLE goalies")
+            else:
+                conn.execute("DELETE FROM goalies WHERE season = ?", (start_year,))
+        except sqlite3.OperationalError:
+            pass
+        df.to_sql("goalies", conn, if_exists="append", index=False)
+        conn.commit()
 
 
 def build_season(start_year: int) -> pd.DataFrame:
@@ -197,6 +292,8 @@ def update_latest() -> None:
     yr = latest_season_start_year()
     print(f"=== NHL skaters {yr}-{yr + 1} ===")
     store_season(build_season(yr), yr)
+    print(f"=== NHL goalies {yr}-{yr + 1} ===")
+    store_goalie_season(build_goalie_season(yr), yr)
 
 
 if __name__ == "__main__":
@@ -208,6 +305,10 @@ if __name__ == "__main__":
             df = build_season(yr)
             store_season(df, yr)
             print(f"  stored {len(df)} skaters")
+            print(f"=== NHL goalies {yr}-{yr + 1} ===")
+            gdf = build_goalie_season(yr)
+            store_goalie_season(gdf, yr)
+            print(f"  stored {len(gdf)} goalies")
     else:
         update_latest()
     print("done")

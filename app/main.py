@@ -314,6 +314,13 @@ if SHOW_FREE_AGENCY:
 NHL_PAGES = [
     st.Page("nhl/pages/home.py", title="NHL Home", url_path="nhl"),
     st.Page("nhl/pages/skaters.py", title="NHL Skaters", url_path="nhl-skaters"),
+    st.Page("nhl/pages/goalies.py", title="NHL Goalies", url_path="nhl-goalies"),
+    st.Page("nhl/pages/team.py", title="NHL Team", url_path="nhl-team"),
+    st.Page("nhl/pages/compare.py", title="NHL Compare", url_path="nhl-compare"),
+    st.Page("nhl/pages/today.py", title="NHL Today's Games", url_path="nhl-today"),
+    st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
+    st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
+    st.Page("nhl/pages/player.py", title="NHL Player", url_path="nhl-player"),  # deep-link only, not in nav loop
 ]
 
 # Every page from both sports is registered (so every URL resolves), but
@@ -330,7 +337,8 @@ if active_sport == "mlb":
             st.sidebar.page_link(p, label=p.title)
 else:
     for p in NHL_PAGES:
-        st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))
+        if p.title != "NHL Player":
+            st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))
 
 # Small, deliberately understated link to Settings — sits below the main
 # nav (not mixed into the loop above), shrunk/muted via a href-matching CSS

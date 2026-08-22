@@ -40,3 +40,23 @@ def _primary(abbr) -> str:
     if not isinstance(abbr, str) or not abbr:
         return ""
     return abbr.split(",")[-1].strip()
+
+
+# Numeric team id (as used by play-by-play's eventOwnerTeamId, schedule's
+# team.id, etc.) -> abbreviation. From api.nhle.com/stats/rest/en/team,
+# filtered to the 32 current franchises (+ARI, still used for pre-Utah-move
+# game data).
+_ID_TO_ABBR = {
+    24: "ANA", 6: "BOS", 7: "BUF", 20: "CGY", 12: "CAR", 16: "CHI", 21: "COL", 29: "CBJ",
+    25: "DAL", 17: "DET", 22: "EDM", 13: "FLA", 26: "LAK", 30: "MIN", 8: "MTL", 18: "NSH",
+    1: "NJD", 2: "NYI", 3: "NYR", 9: "OTT", 4: "PHI", 5: "PIT", 28: "SJS", 55: "SEA",
+    19: "STL", 14: "TBL", 10: "TOR", 68: "UTA", 23: "VAN", 54: "VGK", 15: "WSH", 52: "WPG",
+    53: "ARI",
+}
+
+
+def abbr_for_id(team_id) -> str:
+    try:
+        return _ID_TO_ABBR.get(int(team_id), "")
+    except (TypeError, ValueError):
+        return ""
