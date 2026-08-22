@@ -1,5 +1,5 @@
-"""Site-wide preferences — reached via the small "⚙️ Settings" link at the
-bottom of the sidebar (see main.py), separate from the "ℹ️ Glossary" link
+"""Site-wide preferences — reached via the small "Settings" link at the
+bottom of the sidebar (see main.py), separate from the "Glossary" link
 next to it. Saved to this browser's localStorage only (see prefs.py) — same
 no-accounts, per-browser model as following.py/predictions.py."""
 import sys

@@ -12,7 +12,7 @@ from nhl import db as ndb
 from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL | Diamond Metrics", layout="wide")
-st.title("🏒 NHL")
+st.title("NHL")
 st.caption(
     "Skater and goalie stats, standings, live scores, head-to-head comparisons, shot maps, and a "
     "trained game-odds model — built on the same free NHL and MoneyPuck data as the rest of the site."

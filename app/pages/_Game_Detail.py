@@ -213,11 +213,10 @@ def render_game_center():
         if status == "In Progress":
             lev = db.current_leverage(game_pk)
             if lev and lev["ratio"] >= 1.5:
-                heat = "🔥🔥🔥" if lev["ratio"] >= 3 else ("🔥🔥" if lev["ratio"] >= 2 else "🔥")
                 st.markdown(
                     f"<div style='background-color:#D32F2F22;border-left:4px solid #D32F2F;"
                     f"padding:8px 14px;border-radius:6px;margin:4px 0'>"
-                    f"{heat} <b>High-leverage moment</b> — this at-bat can swing the game "
+                    f"<b>High-leverage moment</b> — this at-bat can swing the game "
                     f"{lev['ratio']:.1f}× more than an average one "
                     f"<span style='color:#9AA3B5'>(our win probability model)</span></div>",
                     unsafe_allow_html=True,

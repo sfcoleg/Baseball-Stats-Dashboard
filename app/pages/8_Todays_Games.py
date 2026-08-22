@@ -255,8 +255,7 @@ def render_games():
                             + "}}</style>",
                             unsafe_allow_html=True,
                         )
-                        label = f"✓ {abbr}" if is_picked else abbr
-                        if st.button(label, key=pick_key, use_container_width=True):
+                        if st.button(abbr, key=pick_key, use_container_width=True):
                             predictions.add_pick(row["game_pk"], row["date"], abbr, row["away_abbr"], row["home_abbr"])
                             # A full rerun, not scope="fragment" — st.rerun()
                             # aborts the script immediately, so a save() call

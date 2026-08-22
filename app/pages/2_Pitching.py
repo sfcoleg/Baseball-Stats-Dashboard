@@ -46,7 +46,7 @@ numeric_stats = [
 numeric_stats.sort(key=lambda c: db.STAT_DISPLAY_LABELS.get(c, c).lower())
 _stat_label = lambda c: db.STAT_DISPLAY_LABELS.get(c, c)
 
-with st.expander("🔍 More filters — league, age, or any stat"):
+with st.expander("More filters — league, age, or any stat"):
     fcol1, fcol2 = st.columns(2)
     with fcol1:
         # Lev is "Maj-AL"/"Maj-NL"/"Maj-AL,Maj-NL" (the last for a pitcher

@@ -139,4 +139,4 @@ if awards:
     for a in awards:
         trophy = a["trophy"]["default"]
         years = ", ".join(str(s["seasonId"])[:4] for s in a.get("seasons", []))
-        st.markdown(f"🏆 **{trophy}** — {years}")
+        st.markdown(f"**{trophy}** — {years}")

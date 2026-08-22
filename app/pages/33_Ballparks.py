@@ -75,7 +75,7 @@ if not mine.empty:
     m3.metric("Games Measured", int(row["games"]))
     m4.metric("HRs Stored", len(park_hrs))
     if abbr == "ATH":
-        st.caption("⚠️ Athletics numbers blend the Oakland Coliseum and Sutter Health Park eras.")
+        st.caption("Athletics numbers blend the Oakland Coliseum and Sutter Health Park eras.")
 
 # --- The 3D HR museum --------------------------------------------------------
 style.colored_header("Every Home Run, in 3D", "chart")
