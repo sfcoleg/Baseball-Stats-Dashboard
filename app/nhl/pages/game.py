@@ -202,10 +202,14 @@ def _render():
                 r = sub[sub["result"] == result]
                 if r.empty:
                     continue
+                # Goals are yellow stars on both sides; the team-colored
+                # outline is what says whose goal it was.
+                is_goal = result == "goal"
                 fig.add_trace(go.Scatter(
                     x=r["x"], y=r["y"], mode="markers",
                     name=f"{abbr} {nstyle._RESULT_LABELS[result].lower()} ({len(r)})",
-                    marker=dict(color=color, symbol=symbol, size=size, opacity=alpha, line=dict(width=1, color="#FFFFFF")),
+                    marker=dict(color="#FACC15" if is_goal else color, symbol=symbol, size=size, opacity=alpha,
+                                line=dict(width=2 if is_goal else 1, color=color if is_goal else "#FFFFFF")),
                     text=[f"{s.shooter} — P{s.period} {s.time} ({s.shotType or ''})" for s in r.itertuples()],
                     hoverinfo="text",
                 ))

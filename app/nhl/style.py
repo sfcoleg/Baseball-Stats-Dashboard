@@ -90,7 +90,7 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
 
 
 _RESULT_STYLE = {
-    "goal": ("#16A34A", "star", 14),
+    "goal": ("#FACC15", "star", 15),
     "shot-on-goal": ("#2563EB", "circle", 8),
     "missed-shot": ("#6B7280", "circle-open", 7),
     "blocked-shot": ("#D97706", "x", 7),
