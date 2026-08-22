@@ -128,8 +128,10 @@ cities["color"] = cities["birthCountryCode"].map(lambda c: list(COUNTRY_COLORS.g
 # Radius in meters: sqrt scaling so a 20-player city isn't 20x a 1-player
 # dot, floored so lone players are still visible zoomed out.
 cities["radius"] = cities["n"].map(lambda n: 9000 + 11000 * math.sqrt(n))
+# Plain text only — deck.gl escapes substituted tooltip values, so any
+# HTML here would show up literally as "<br/>".
 cities["who"] = cities["names"].map(
-    lambda ns: "<br/>".join(ns[:8]) + (f"<br/><i>+{len(ns) - 8} more</i>" if len(ns) > 8 else "")
+    lambda ns: ", ".join(ns[:8]) + (f" … +{len(ns) - 8} more" if len(ns) > 8 else "")
 )
 cities["headline"] = cities.apply(
     lambda r: f"{r['n']} player{'s' if r['n'] != 1 else ''}", axis=1
