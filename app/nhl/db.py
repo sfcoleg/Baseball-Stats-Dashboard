@@ -326,6 +326,42 @@ def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame
     return pd.concat([skaters, goalies], ignore_index=True)
 
 
+def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
+    """Search skaters and goalies by name across every cached season (not
+    just the current one) — used by the persistent sidebar search, so a
+    player who's since retired or changed teams is still findable. One row
+    per player: their most recent season and that season's team."""
+    if not NHL_DB_PATH.exists() or not query.strip():
+        return pd.DataFrame(columns=["playerId", "Name", "Tm", "role", "season"])
+    like = f"%{query.strip()}%"
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            skaters = pd.read_sql(
+                "SELECT playerId, skaterFullName AS Name, teamAbbrevs AS Tm, season FROM skaters "
+                "WHERE skaterFullName LIKE ? COLLATE NOCASE",
+                conn, params=(like,),
+            )
+            skaters["role"] = "Skater"
+        except pd.errors.DatabaseError:
+            skaters = pd.DataFrame()
+        try:
+            goalies = pd.read_sql(
+                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm, season FROM goalies "
+                "WHERE goalieFullName LIKE ? COLLATE NOCASE",
+                conn, params=(like,),
+            )
+            goalies["role"] = "Goalie"
+        except pd.errors.DatabaseError:
+            goalies = pd.DataFrame()
+    combined = pd.concat([skaters, goalies], ignore_index=True)
+    if combined.empty:
+        return pd.DataFrame(columns=["playerId", "Name", "Tm", "role", "season"])
+    # A skater/goalie has at most one row per season per table — keep the
+    # most recent season's row per player (their current team of record).
+    picked = combined.sort_values("season", ascending=False).drop_duplicates(subset="playerId", keep="first")
+    return picked.sort_values("Name").reset_index(drop=True)
+
+
 # ---------------------------------------------------------------------------
 # Live reads (api-web.nhle.com) — standings, scores/schedule, rosters, bios.
 # Never stored in nhl.db: small payloads, already fast, and change in-season

@@ -15,12 +15,21 @@ from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Player | Diamond Metrics", layout="wide")
 
-player_id = st.query_params.get("nhlid")
-if not player_id:
+# Hydrates a shared link (?nhlid=...) into session_state — the sidebar
+# search sets nhl_selected_playerId directly (st.switch_page doesn't
+# carry query params), so a link opened fresh needs this fallback path,
+# same pattern as the MLB side's _Player.py.
+if "nhl_selected_playerId" not in st.session_state and "nhlid" in st.query_params:
+    try:
+        st.session_state["nhl_selected_playerId"] = int(st.query_params["nhlid"])
+    except (TypeError, ValueError):
+        pass
+
+if "nhl_selected_playerId" not in st.session_state:
     st.title("Player")
-    st.info("Open a player profile from Skaters, Goalies, Team, or Standings.")
+    st.info("Use the search box in the sidebar, or open a profile from Skaters, Goalies, Team, or Standings.")
     st.stop()
-player_id = int(player_id)
+player_id = st.session_state["nhl_selected_playerId"]
 
 landing = ndb.load_player_landing(player_id)
 if not landing:

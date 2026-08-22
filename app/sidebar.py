@@ -3,6 +3,8 @@ player-search box, rendered once per run from main.py above the page nav."""
 import streamlit as st
 
 import db
+from nhl import db as ndb
+from nhl import teams as nteams
 
 SPORT_LABELS = {"mlb": "⚾ MLB", "nhl": "🏒 NHL"}
 _LABEL_TO_SPORT = {v: k for k, v in SPORT_LABELS.items()}
@@ -65,10 +67,7 @@ def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
 
 def render_search(active_sport: str = "mlb") -> None:
     if active_sport != "mlb":
-        st.sidebar.text_input(
-            "Search players", key="sidebar_search_query_nhl", placeholder="NHL search coming soon",
-            label_visibility="collapsed", disabled=True,
-        )
+        _render_nhl_search()
         return
 
     query = st.sidebar.text_input(
@@ -93,6 +92,33 @@ def render_search(active_sport: str = "mlb") -> None:
             st.session_state["selected_name"] = row["Name"]
             st.session_state["selected_season"] = int(row["season"])
             st.switch_page("pages/_Player.py")
+
+    if len(matches) > 8:
+        st.sidebar.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
+
+
+def _render_nhl_search() -> None:
+    query = st.sidebar.text_input(
+        "Search players", key="sidebar_search_query_nhl", placeholder="e.g. McDavid, Hellebuyck",
+        label_visibility="collapsed",
+    )
+
+    if not ndb.NHL_DB_PATH.exists() or not query.strip():
+        return
+
+    mtime = ndb.nhl_db_mtime()
+    matches = ndb.search_players_all_seasons(query, mtime)
+
+    if matches.empty:
+        st.sidebar.caption("No matches.")
+        return
+
+    for _, row in matches.head(8).iterrows():
+        tm = nteams._primary(row["Tm"])
+        label = f"{row['Name']} ({tm}) — {row['role']}"
+        if st.sidebar.button(label, key=f"sidebar_result_nhl_{row['playerId']}", use_container_width=True):
+            st.session_state["nhl_selected_playerId"] = int(row["playerId"])
+            st.switch_page("nhl/pages/player.py")
 
     if len(matches) > 8:
         st.sidebar.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
