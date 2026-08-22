@@ -278,6 +278,7 @@ components.html(
 # regular season wraps up, and back to False again once free agents start
 # signing in bulk and pennant races take back over.
 SHOW_FREE_AGENCY = False
+st.session_state["_show_free_agency"] = SHOW_FREE_AGENCY  # read by pages/34_Other.py
 
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
@@ -293,6 +294,10 @@ PAGES = [
     st.Page("pages/31_Schedule.py", title="Schedule"),
     st.Page("pages/9_Standings.py", title="Standings"),
     st.Page("pages/17_Playoffs.py", title="Playoffs"),
+    st.Page("pages/34_Other.py", title="Other"),
+    # Everything below is reached through the Other hub page above, not its
+    # own sidebar slot — still registered here (so their URLs/page_links
+    # resolve), just excluded from the main nav loop below.
     st.Page("pages/30_League_Trends.py", title="League Trends"),
     st.Page("pages/33_Ballparks.py", title="Ballparks"),
     st.Page("pages/23_Umpires.py", title="Umpires"),
@@ -331,9 +336,14 @@ active_sport = "nhl" if (pg.url_path or "").startswith("nhl") else "mlb"
 sidebar.render_sport_switcher(active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0]})
 sidebar.render_search(active_sport)
 
+_MLB_NAV_HIDDEN = (
+    "Player", "Game Center", "Glossary", "Settings",
+    "League Trends", "Ballparks", "Umpires", "Around the League", "Minor Leagues",
+    "Box Score Search", "Free Agency",
+)
 if active_sport == "mlb":
     for p in PAGES:
-        if p.title not in ("Player", "Game Center", "Glossary", "Settings"):
+        if p.title not in _MLB_NAV_HIDDEN:
             st.sidebar.page_link(p, label=p.title)
 else:
     for p in NHL_PAGES:
@@ -358,6 +368,6 @@ st.sidebar.markdown(
     unsafe_allow_html=True,
 )
 settings_page = next(p for p in PAGES if p.title == "Settings")
-st.sidebar.page_link(settings_page, label="⚙️ Settings", use_container_width=False)
+st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
 
 pg.run()

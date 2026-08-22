@@ -1,5 +1,7 @@
 """NHL Today's Games — live scores/schedule for a given date, straight from
-the NHL's own schedule API (see nhl/db.py's load_schedule_for_date)."""
+the NHL's own schedule API (see nhl/db.py's load_schedule_for_date). Card
+layout mirrors the MLB side's Today's Games: one row per game, team info
+on the outside, score/status/venue in the middle."""
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -39,12 +41,23 @@ with nav2:
 date_str = st.session_state["nhl_games_date"].strftime("%Y-%m-%d")
 
 
+def _records() -> dict:
+    standings = ndb.load_standings()
+    if standings.empty:
+        return {}
+    return {
+        r["teamAbbrev"]: f"{int(r['wins'])}-{int(r['losses'])}-{int(r['otLosses'])}"
+        for _, r in standings.iterrows()
+    }
+
+
 @st.fragment(run_every=20)
 def _render_games(date_str: str):
     games = ndb.load_schedule_for_date(date_str)
     if not games:
         st.info("No games scheduled for this date.")
         return
+    records = _records()
 
     def _status(game: dict) -> str:
         state = game.get("gameState")
@@ -63,32 +76,74 @@ def _render_games(date_str: str):
         except Exception:
             return state or "Scheduled"
 
-    cols_per_row = 3
-    rows = [games[i:i + cols_per_row] for i in range(0, len(games), cols_per_row)]
-    for row in rows:
-        cols = st.columns(cols_per_row)
-        for col, game in zip(cols, row):
-            away, home = game["awayTeam"], game["homeTeam"]
-            with col:
-                with st.container(border=True):
-                    st.caption(_status(game) + f"  ·  {(game.get('venue') or {}).get('default', '')}")
-                    live = game.get("gameState") in ("OFF", "FINAL", "LIVE", "CRIT")
-                    a_score = away.get("score", "") if live else ""
-                    h_score = home.get("score", "") if live else ""
-                    l, r = st.columns(2)
-                    with l:
-                        st.image(away.get("logo", ""), width=40)
-                        st.markdown(f"**{away['abbrev']}** {a_score}")
-                    with r:
-                        st.image(home.get("logo", ""), width=40)
-                        st.markdown(f"**{home['abbrev']}** {h_score}")
-                    if not live:
-                        p_home = ndb.game_win_prob(home["abbrev"], away["abbrev"])
-                        if p_home is not None:
-                            st.caption(f"Win%: {away['abbrev']} {100 * (1 - p_home):.0f}% — {home['abbrev']} {100 * p_home:.0f}%")
-                    if st.button("Team pages", key=f"gm{game['id']}", use_container_width=True):
-                        st.session_state["nhl_team_page_selected_team"] = home["abbrev"]
-                        st.switch_page("nhl/pages/team.py")
+    for game in games:
+        away, home = game["awayTeam"], game["homeTeam"]
+        state = game.get("gameState")
+        started = state not in ("FUT", "PRE")
+        live_now = state in ("LIVE", "CRIT")
+        away_color, home_color = nteams.color_for_abbr(away["abbrev"]), nteams.color_for_abbr(home["abbrev"])
+        p_home = None if started else ndb.game_win_prob(home["abbrev"], away["abbrev"])
+
+        with st.container(border=True):
+            if live_now:
+                st.markdown(
+                    "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"
+                    "<span style='background-color:#D32F2F;color:#FFFFFF;padding:3px 12px;"
+                    "border-radius:8px;font-weight:700;font-size:0.75rem;letter-spacing:0.5px'>LIVE</span></div>",
+                    unsafe_allow_html=True,
+                )
+            acol, mid, hcol = st.columns([3, 2, 3])
+
+            def _team_col(team, color, prob):
+                logo_html = (
+                    f"<img src='{team.get('logo', '')}' style='height:32px;width:32px;object-fit:contain;"
+                    f"vertical-align:middle;margin-right:6px'>" if team.get("logo") else ""
+                )
+                st.markdown(
+                    f"<div style='display:flex;align-items:center'>{logo_html}"
+                    f"<span style='background-color:{color}66;color:#FAFAFA;padding:3px 10px;"
+                    f"border-radius:8px;font-weight:700'>{team['abbrev']}</span> &nbsp;"
+                    f"<span style='font-weight:700;font-size:1.1rem'>{nteams.nickname_for_abbr(team['abbrev'])}</span></div>",
+                    unsafe_allow_html=True,
+                )
+                record = records.get(team["abbrev"])
+                if record:
+                    st.caption(f"Record: {record}")
+                if prob is not None:
+                    st.markdown(
+                        f"<div style='font-size:1.3rem;font-weight:700'>{prob * 100:.0f}%</div>"
+                        f"<div style='color:#9AA3B5'>win probability</div>",
+                        unsafe_allow_html=True,
+                    )
+
+            with acol:
+                _team_col(away, away_color, (1 - p_home) if p_home is not None else None)
+
+            with mid:
+                if started:
+                    st.markdown(
+                        f"<div style='text-align:center;font-size:1.8rem;font-weight:700'>"
+                        f"{away.get('score', 0)} - {home.get('score', 0)}</div>",
+                        unsafe_allow_html=True,
+                    )
+                else:
+                    st.markdown(
+                        "<div style='text-align:center;color:#9AA3B5;padding-top:8px'>@</div>",
+                        unsafe_allow_html=True,
+                    )
+                st.markdown(
+                    f"<div style='text-align:center;color:#9AA3B5'>{_status(game)}</div>", unsafe_allow_html=True
+                )
+                venue = (game.get("venue") or {}).get("default")
+                if venue:
+                    st.markdown(f"<div style='text-align:center;color:#9AA3B5;font-size:0.85rem'>{venue}</div>",
+                                unsafe_allow_html=True)
+                if st.button("Team pages", key=f"gm{game['id']}", use_container_width=True):
+                    st.session_state["nhl_team_page_selected_team"] = home["abbrev"]
+                    st.switch_page("nhl/pages/team.py")
+
+            with hcol:
+                _team_col(home, home_color, p_home)
 
 
 _render_games(date_str)
