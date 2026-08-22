@@ -313,6 +313,7 @@ if SHOW_FREE_AGENCY:
 # placeholder home; the real page set slots in here as it's built.
 NHL_PAGES = [
     st.Page("nhl/pages/home.py", title="NHL Home", url_path="nhl"),
+    st.Page("nhl/pages/skaters.py", title="NHL Skaters", url_path="nhl-skaters"),
 ]
 
 # Every page from both sports is registered (so every URL resolves), but

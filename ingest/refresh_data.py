@@ -1350,6 +1350,14 @@ def fetch_and_store():
             print(f"ballparks update failed (non-fatal): {e}")
     _record_refresh_run()
 
+    # NHL skaters (see nhl_refresh.py) — refreshes the latest season into
+    # data/nhl.db. Same non-fatal guard; the MLB refresh never waits on it.
+    try:
+        from nhl_refresh import update_latest as nhl_update_latest
+        nhl_update_latest()
+    except Exception as e:
+        print(f"nhl refresh failed (non-fatal): {e}")
+
     # Daily playoff-odds snapshot — the simulator's numbers are recomputed
     # nightly and were previously discarded, which made an "odds over time"
     # chart impossible to ever backfill. One row per team per day. Imports
