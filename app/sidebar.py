@@ -32,6 +32,27 @@ def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
         "[data-testid='stSidebar'] [data-testid='stSegmentedControl'] button {"
         "  font-size: 0.8rem !important; padding: 2px 10px !important; min-height: 0 !important;"
         "}"
+        # Below ~640px (phones) every sidebar tap target above is sized for
+        # a mouse cursor, not a thumb — the collapse/expand arrow is 28x28,
+        # nav links and the sport switcher are ~28px tall, all well under
+        # the ~44px minimum touch target every mobile HIG recommends. This
+        # widens just those three on narrow screens without touching the
+        # deliberately compact desktop sizing above.
+        "@media (max-width: 640px) {"
+        "  [data-testid='stExpandSidebarButton'], [data-testid='stSidebarCollapseButton'] button {"
+        "    padding: 12px !important;"
+        "  }"
+        "  [data-testid='stExpandSidebarButton'] svg, [data-testid='stSidebarCollapseButton'] svg {"
+        "    width: 22px !important; height: 22px !important;"
+        "  }"
+        "  [data-testid='stSidebar'] [data-testid='stSegmentedControl'] button {"
+        "    padding: 10px 16px !important; min-height: 44px !important; font-size: 0.95rem !important;"
+        "  }"
+        "  [data-testid='stSidebar'] a[data-testid='stPageLink-NavLink'] {"
+        "    min-height: 44px !important; padding-top: 10px !important; padding-bottom: 10px !important;"
+        "    display: flex !important; align-items: center !important;"
+        "  }"
+        "}"
         "</style>",
         unsafe_allow_html=True,
     )

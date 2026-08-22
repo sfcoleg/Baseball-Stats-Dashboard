@@ -69,7 +69,13 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
             "</tr>"
         )
     return (
-        "<table style='width:100%;border-collapse:collapse;font-size:0.9rem'>"
+        # No fixed width: inside the page's overflow-x:auto wrapper, a
+        # width:100% table gets squeezed to fit (cramping L10/Streak/Elo)
+        # instead of actually scrolling — letting it size to its content
+        # and nowrap-ping every cell means it's exactly as wide as it needs
+        # to be, and only THEN does the wrapper's horizontal scroll kick in
+        # on narrow/mobile screens.
+        "<table style='border-collapse:collapse;font-size:0.9rem;white-space:nowrap'>"
         "<thead><tr style='color:#9AA3B5;text-align:center'>"
         "<th style='padding:5px 10px;text-align:left'>Team</th>"
         "<th style='padding:5px 10px'>GP</th><th style='padding:5px 10px'>W</th>"
