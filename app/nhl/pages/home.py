@@ -5,6 +5,7 @@ The sport switcher in the sidebar (see sidebar.render_sport_switcher)
 lands here; every NHL page lives under a url_path starting with "nhl" so
 the active sport can be derived from the URL alone."""
 import sys
+from datetime import timedelta
 from pathlib import Path
 
 import plotly.express as px
@@ -121,58 +122,62 @@ def _headliner_card(label, name, player_id, team_abbr, stat_line):
     )
 
 
-# --- Milestones reached this season -------------------------------------
-SKATER_MILESTONES = [("goals", 50, "goals"), ("points", 100, "points")]
-GOALIE_MILESTONES = [("wins", 35, "wins"), ("shutouts", 5, "shutouts")]
-milestone_rows = []
-for col, threshold, label in SKATER_MILESTONES:
-    hit = skaters[skaters[col] >= threshold]
-    for _, p in hit.iterrows():
-        milestone_rows.append((p["skaterFullName"], p["playerId"], p["Tm"], f"{int(p[col])} {label}"))
-for col, threshold, label in GOALIE_MILESTONES:
-    hit = goalies[goalies[col] >= threshold]
-    for _, p in hit.iterrows():
-        milestone_rows.append((p["goalieFullName"], p["playerId"], p["Tm"], f"{int(p[col])} {label}"))
+# --- Daily milestones (yesterday's hat tricks, shutouts, milestones) ----
+yesterday = ndb.today_pacific() - timedelta(days=1)
+daily_milestones = ndb.get_daily_milestones(yesterday.isoformat(), season, mtime)
 
-if milestone_rows:
-    style.colored_header("Milestones Reached", "headliners")
-    st.caption(f"The {ndb.season_label(season)} 50-goal, 100-point, 35-win, and 5-shutout clubs.")
+if daily_milestones:
+    style.colored_header("Milestones", "headliners")
+    st.caption(f"Notable achievements from {yesterday.strftime('%B %-d')}'s games.")
     # A fresh st.columns(4) per row of 4 (not one st.columns(4) reused via
     # i % 4) — columns() stacks column-major on mobile, so reusing one
     # would read item 0, 4, 8, 12, then 1, 5, 9... A new call per row means
     # each column ever holds exactly one item, so stacking can't reorder it.
-    for row_start in range(0, len(milestone_rows), 4):
-        row_items = milestone_rows[row_start:row_start + 4]
+    for row_start in range(0, len(daily_milestones), 4):
+        row_items = daily_milestones[row_start:row_start + 4]
         mcols = st.columns(4)
-        for col, (name, pid, tm, text) in zip(mcols, row_items):
+        for col, m in zip(mcols, row_items):
             with col:
                 with st.container(border=True):
-                    _headliner_card("Milestone", name, pid, tm, text)
+                    _headliner_card(m["category"], m["name"], m["playerId"], m["Tm"], m["text"])
     st.divider()
 
 
-# --- Headliners -----------------------------------------------------------
+# --- Headliners (hot yesterday / this week / this month) ----------------
 qualified_goalies = goalies[goalies["gamesPlayed"] >= 20]  # also used by Team Snapshot below
 
 if season == latest_season:
     style.colored_header("Skater Headliners", "batting")
     h1, h2, h3 = st.columns(3)
-    for col, stat, label in [(h1, "points", "Points Leader"), (h2, "goals", "Goals Leader"), (h3, "assists", "Assists Leader")]:
+    for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
-                top = skaters.sort_values(stat, ascending=False).iloc[0]
-                _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], f"{int(top[stat])} {stat}")
+                top = ndb.top_recent_skater(period, season, mtime)
+                if top is None:
+                    st.caption(label)
+                    st.markdown("No games yet")
+                elif period == "day":
+                    stat_line = f"{int(top['goals'])} G, {int(top['assists'])} A, {int(top['points'])} PTS"
+                    _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
+                else:
+                    stat_line = f"{int(top['points'])} PTS ({int(top['goals'])} G, {int(top['assists'])} A) in {int(top['games'])} GP"
+                    _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
 
     style.colored_header("Goalie Headliners", "pitching")
     g1, g2, g3 = st.columns(3)
-    with g1:
-        with st.container(border=True):
-            top = qualified_goalies.sort_values("wins", ascending=False).iloc[0]
-            _headliner_card("Wins Leader", top["goalieFullName"], top["playerId"], top["Tm"], f"{int(top['wins'])} wins")
-    with g2:
-        with st.container(border=True):
-            top = qualified_goalies.sort_values("savePct", ascending=False).iloc[0]
-            _headliner_card("SV% Leader", top["goalieFullName"], top["playerId"], top["Tm"], f"{top['savePct']:.1f} SV%")
+    for col, period, label in [(g1, "day", "Hot Yesterday"), (g2, "week", "Hot This Week"), (g3, "month", "Hot This Month")]:
+        with col:
+            with st.container(border=True):
+                top = ndb.top_recent_goalie(period, season, mtime)
+                if top is None:
+                    st.caption(label)
+                    st.markdown("No games yet")
+                elif period == "day":
+                    stat_line = f"{int(top['saves'])} saves, {int(top['goalsAgainst'])} GA"
+                    _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
+                else:
+                    stat_line = f"{top['savePct']:.1f} SV% in {int(top['games'])} GP"
+                    _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
     with g3:
         with st.container(border=True):
             gsax = qualified_goalies["xGA"] - qualified_goalies["goalsAgainst"]

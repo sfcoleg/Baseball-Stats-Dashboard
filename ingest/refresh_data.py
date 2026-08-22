@@ -1360,6 +1360,16 @@ def fetch_and_store():
             nhl_update_latest()
         except Exception as e:
             print(f"nhl refresh failed (non-fatal): {e}")
+        # Yesterday's per-game skater/goalie log (see nhl_daily_log.py) —
+        # powers Home's daily Milestones and Headliners trending. Same
+        # in-season gate and non-fatal guard as the season-stat refresh
+        # above; independent try/except so one failing doesn't skip the
+        # other.
+        try:
+            from nhl_daily_log import update_yesterday as nhl_update_yesterday_log
+            nhl_update_yesterday_log()
+        except Exception as e:
+            print(f"nhl daily log failed (non-fatal): {e}")
     else:
         print("nhl refresh skipped (offseason — resumes in October)")
 

@@ -6,7 +6,7 @@ Deliberately separate from the MLB db module: different database file,
 different tables, independent refresh."""
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -146,6 +146,154 @@ def load_shots(season: int, db_mtime_val: float) -> pd.DataFrame:
             return pd.read_sql("SELECT * FROM shots WHERE season = ?", conn, params=(season,))
         except pd.errors.DatabaseError:
             return pd.DataFrame()
+
+
+# ---------------------------------------------------------------------------
+# Daily per-game log (ingest/nhl_daily_log.py) — powers Home's daily
+# Milestones and the Headliners day/week/month trending cards. Unlike the
+# season tables above, this is genuinely time-aware: it knows WHEN a goal
+# was scored, which season totals alone can't answer.
+# ---------------------------------------------------------------------------
+
+GOAL_MILESTONE_THRESHOLDS = [20, 30, 40, 50, 60]
+POINT_MILESTONE_THRESHOLDS = [50, 75, 100, 125, 150]
+RECENT_MIN_GAMES = {"week": 3, "month": 8}
+
+
+def _read_daily_log(table: str, where: str, params: tuple) -> pd.DataFrame:
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql(f"SELECT * FROM {table} WHERE {where}", conn, params=params)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame()
+
+
+def load_daily_skater_log(date_str: str) -> pd.DataFrame:
+    return _read_daily_log("daily_skater_log", "date = ?", (date_str,))
+
+
+def load_daily_goalie_log(date_str: str) -> pd.DataFrame:
+    return _read_daily_log("daily_goalie_log", "date = ?", (date_str,))
+
+
+def _window_skater_log(days: int, end_date: date) -> pd.DataFrame:
+    start = (end_date - timedelta(days=days - 1)).isoformat()
+    df = _read_daily_log("daily_skater_log", "date >= ? AND date <= ?", (start, end_date.isoformat()))
+    if df.empty:
+        return df
+    agg = df.groupby("playerId").agg(
+        goals=("goals", "sum"), assists=("assists", "sum"), points=("points", "sum"), games=("gamePk", "nunique"),
+    ).reset_index()
+    agg["Tm"] = agg["playerId"].map(df.sort_values("date").groupby("playerId")["Tm"].last())
+    return agg
+
+
+def _window_goalie_log(days: int, end_date: date) -> pd.DataFrame:
+    start = (end_date - timedelta(days=days - 1)).isoformat()
+    df = _read_daily_log("daily_goalie_log", "date >= ? AND date <= ?", (start, end_date.isoformat()))
+    if df.empty:
+        return df
+    agg = df.groupby("playerId").agg(
+        goalsAgainst=("goalsAgainst", "sum"), shotsAgainst=("shotsAgainst", "sum"),
+        shutouts=("shutout", "sum"), games=("gamePk", "nunique"),
+    ).reset_index()
+    agg["savePct"] = (1 - agg["goalsAgainst"] / agg["shotsAgainst"].replace(0, pd.NA)) * 100
+    agg["Tm"] = agg["playerId"].map(df.sort_values("date").groupby("playerId")["Tm"].last())
+    return agg
+
+
+def top_recent_skater(period: str, season: int, db_mtime_val: float, as_of: date | None = None):
+    """Best skater performance for 'day'/'week'/'month', ending at `as_of`
+    (default: yesterday Pacific) — a pd.Series with name/Tm/playerId/stat
+    line, or None if nothing qualifies (e.g. offseason)."""
+    end = as_of or (today_pacific() - timedelta(days=1))
+    if period == "day":
+        df = load_daily_skater_log(end.isoformat())
+    else:
+        df = _window_skater_log(7 if period == "week" else 30, end)
+        min_games = RECENT_MIN_GAMES.get(period, 1)
+        df = df[df["games"] >= min_games] if not df.empty else df
+    if df.empty:
+        return None
+    names = load_skaters(season, db_mtime_val)[["playerId", "skaterFullName"]]
+    df = df.merge(names, on="playerId", how="left")
+    return df.sort_values(["points", "goals"], ascending=False).iloc[0]
+
+
+def top_recent_goalie(period: str, season: int, db_mtime_val: float, as_of: date | None = None):
+    """Best goalie performance for 'day'/'week'/'month' — ranked by saves
+    for a single day (workload matters when everyone's SV% clusters near
+    1.000 on a light night), by SV% (min shots faced) for week/month."""
+    end = as_of or (today_pacific() - timedelta(days=1))
+    if period == "day":
+        df = load_daily_goalie_log(end.isoformat())
+        if df.empty:
+            return None
+        df = df[df["shotsAgainst"] >= 5]
+        if df.empty:
+            return None
+        df = df.assign(saves=df["shotsAgainst"] - df["goalsAgainst"])
+        rank_cols = ["saves"]
+    else:
+        df = _window_goalie_log(7 if period == "week" else 30, end)
+        if df.empty:
+            return None
+        min_shots = 30 if period == "week" else 100
+        df = df[df["shotsAgainst"] >= min_shots]
+        if df.empty:
+            return None
+        rank_cols = ["savePct"]
+    names = load_goalies(season, db_mtime_val)[["playerId", "goalieFullName"]]
+    df = df.merge(names, on="playerId", how="left")
+    return df.sort_values(rank_cols, ascending=False).iloc[0]
+
+
+def get_daily_milestones(date_str: str, season: int, db_mtime_val: float) -> list[dict]:
+    """Hat tricks, shutouts, and season goal/point milestones crossed on
+    `date_str` — the NHL analog of the MLB side's db.get_milestones()."""
+    milestones = []
+    day_skaters = load_daily_skater_log(date_str)
+    if not day_skaters.empty:
+        season_skaters = load_skaters(season, db_mtime_val)[["playerId", "skaterFullName", "goals", "points"]]
+        merged = day_skaters.merge(season_skaters, on="playerId", how="left", suffixes=("", "_season"))
+        for _, row in merged.iterrows():
+            if row["goals"] >= 3:
+                milestones.append({
+                    "playerId": row["playerId"], "name": row["skaterFullName"], "Tm": row["Tm"],
+                    "category": "Hat Trick", "text": f"{int(row['goals'])}-goal game",
+                })
+            if pd.notna(row.get("goals_season")):
+                before = row["goals_season"] - row["goals"]
+                for t in GOAL_MILESTONE_THRESHOLDS:
+                    if before < t <= row["goals_season"]:
+                        milestones.append({
+                            "playerId": row["playerId"], "name": row["skaterFullName"], "Tm": row["Tm"],
+                            "category": "Goal Milestone", "text": f"Reached {t} goals this season",
+                        })
+            if pd.notna(row.get("points_season")):
+                before = row["points_season"] - row["points"]
+                for t in POINT_MILESTONE_THRESHOLDS:
+                    if before < t <= row["points_season"]:
+                        milestones.append({
+                            "playerId": row["playerId"], "name": row["skaterFullName"], "Tm": row["Tm"],
+                            "category": "Point Milestone", "text": f"Reached {t} points this season",
+                        })
+
+    day_goalies = load_daily_goalie_log(date_str)
+    if not day_goalies.empty:
+        season_goalies = load_goalies(season, db_mtime_val)[["playerId", "goalieFullName"]]
+        merged = day_goalies.merge(season_goalies, on="playerId", how="left")
+        for _, row in merged[merged["shutout"] == 1].iterrows():
+            milestones.append({
+                "playerId": row["playerId"], "name": row["goalieFullName"], "Tm": row["Tm"],
+                "category": "Shutout", "text": f"Shutout ({int(row['shotsAgainst'])} saves)",
+            })
+
+    _priority = {"Hat Trick": 0, "Shutout": 1, "Point Milestone": 2, "Goal Milestone": 3}
+    milestones.sort(key=lambda m: _priority.get(m["category"], 99))
+    return milestones
 
 
 def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame:
