@@ -1,6 +1,8 @@
 """NHL-side display helpers — the hockey analog of app/style.py. Kept
 separate since headshot/logo CDNs, routes, and chart shapes are all
 different from the MLB side."""
+import math
+
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -88,39 +90,134 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
 
 
 _RESULT_STYLE = {
-    "goal": ("#22C55E", "star", 13),
-    "shot-on-goal": ("#60A5FA", "circle", 7),
-    "missed-shot": ("#9AA3B5", "circle", 5),
-    "blocked-shot": ("#F59E0B", "x", 6),
+    "goal": ("#16A34A", "star", 14),
+    "shot-on-goal": ("#2563EB", "circle", 8),
+    "missed-shot": ("#6B7280", "circle-open", 7),
+    "blocked-shot": ("#D97706", "x", 7),
 }
 _RESULT_LABELS = {"goal": "Goal", "shot-on-goal": "Shot on net", "missed-shot": "Missed", "blocked-shot": "Blocked"}
 
 
+def _arc(cx, cy, r, a0, a1, n=24):
+    """Points along a circular arc (degrees), for building rink paths —
+    plotly shape paths only support straight segments and beziers, not
+    SVG arcs, so every curve is a short polyline."""
+    return [(cx + r * math.cos(math.radians(a)), cy + r * math.sin(math.radians(a)))
+            for a in [a0 + (a1 - a0) * i / n for i in range(n + 1)]]
+
+
+def _path(points, close=True) -> str:
+    d = "M " + " L ".join(f"{x:.2f} {y:.2f}" for x, y in points)
+    return d + (" Z" if close else "")
+
+
+# Regulation NHL sheet, in feet, center ice at (0, 0): 200 x 85 with
+# 28-ft corner radii; goal lines 11 ft from the end boards (x = ±89),
+# blue lines at ±25, faceoff circles (r = 15) at (±69, ±22).
+RINK_LEN, RINK_WID, CORNER_R = 200.0, 85.0, 28.0
+GOAL_LINE_X, BLUE_LINE_X = 89.0, 25.0
+ICE = "#EEF3F8"
+BOARDS = "#7B8494"
+RED = "#D63B3B"
+BLUE = "#2E6BD3"
+CREASE_FILL = "rgba(46,107,211,0.22)"
+
+
+def _rink_outline_points():
+    hx, hy, r = RINK_LEN / 2, RINK_WID / 2, CORNER_R
+    pts = []
+    pts += _arc(hx - r, hy - r, r, 0, 90)       # top-right corner
+    pts += _arc(-hx + r, hy - r, r, 90, 180)    # top-left
+    pts += _arc(-hx + r, -hy + r, r, 180, 270)  # bottom-left
+    pts += _arc(hx - r, -hy + r, r, 270, 360)   # bottom-right
+    return pts
+
+
+def _corner_clip_y(x: float) -> float:
+    """Half-height of the ice at a given |x| inside the corner radius —
+    goal lines stop where they meet the curved boards."""
+    hx, hy, r = RINK_LEN / 2, RINK_WID / 2, CORNER_R
+    dx = abs(x) - (hx - r)
+    if dx <= 0:
+        return hy
+    return (hy - r) + math.sqrt(max(r * r - dx * dx, 0))
+
+
 def rink_outline(fig: "go.Figure") -> "go.Figure":
-    """Draws a simplified half-length-normalized NHL rink (200x85 ft, center
-    ice at 0,0) as plotly shapes: boundary, center/blue/goal lines, center
-    circle, and both goal creases. Shots are normalized so every shot
-    attacks the right-hand goal (see ingest/nhl_shots.py's
-    _normalize_side) — the rink is drawn full-length so that clustering is
-    visible against the whole sheet."""
-    line = dict(color="rgba(154,163,181,0.5)", width=1.5)
-    fig.add_shape(type="rect", x0=-100, x1=100, y0=-42.5, y1=42.5, line=line)
-    fig.add_shape(type="line", x0=0, x1=0, y0=-42.5, y1=42.5, line=dict(color="rgba(239,68,68,0.5)", width=1.5))
-    for x in (-25, 25):
-        fig.add_shape(type="line", x0=x, x1=x, y0=-42.5, y1=42.5, line=dict(color="rgba(96,165,250,0.5)", width=1.5))
-    for x in (-89, 89):
-        fig.add_shape(type="line", x0=x, x1=x, y0=-42.5, y1=42.5, line=line)
-        crease_dir = 1 if x > 0 else -1
-        fig.add_shape(
-            type="circle", x0=x - 6 * crease_dir, x1=x + 6 * crease_dir, y0=-4, y1=4,
-            line=dict(color="rgba(96,165,250,0.35)", width=1),
-        )
-    fig.add_shape(type="circle", x0=-15, x1=15, y0=-15, y1=15, line=line)
+    """Draws a regulation NHL rink (to scale, in feet, center ice at 0,0)
+    as plotly shapes: white ice with rounded boards, center red line, blue
+    lines, goal lines, center + four faceoff circles with dots, the
+    neutral-zone dots, both creases, goal frames, and the goalie
+    trapezoids. Plot axes should be hidden with scaleanchor so 1 ft = 1 ft
+    in both directions."""
+    hy = RINK_WID / 2
+    # Ice surface
+    fig.add_shape(type="path", path=_path(_rink_outline_points()), fillcolor=ICE,
+                  line=dict(color=BOARDS, width=3), layer="below")
+    # Blue lines (1 ft wide) and center red line
+    for x in (-BLUE_LINE_X, BLUE_LINE_X):
+        fig.add_shape(type="rect", x0=x - 0.5, x1=x + 0.5, y0=-hy, y1=hy, fillcolor=BLUE, line_width=0, layer="below")
+    fig.add_shape(type="rect", x0=-0.5, x1=0.5, y0=-hy, y1=hy, fillcolor=RED, line_width=0, layer="below")
+    # Goal lines, clipped to the boards' corner radius
+    gy = _corner_clip_y(GOAL_LINE_X)
+    for x in (-GOAL_LINE_X, GOAL_LINE_X):
+        fig.add_shape(type="line", x0=x, x1=x, y0=-gy, y1=gy, line=dict(color=RED, width=2), layer="below")
+    # Center circle + dot
+    fig.add_shape(type="circle", x0=-15, x1=15, y0=-15, y1=15, line=dict(color=BLUE, width=2), layer="below")
+    fig.add_shape(type="circle", x0=-1, x1=1, y0=-1, y1=1, fillcolor=BLUE, line_width=0, layer="below")
+    # End-zone faceoff circles + dots, and the neutral-zone dots
+    for x in (-69, 69):
+        for y in (-22, 22):
+            fig.add_shape(type="circle", x0=x - 15, x1=x + 15, y0=y - 15, y1=y + 15,
+                          line=dict(color=RED, width=2), layer="below")
+            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer="below")
+            # Hash marks on each circle (2 ft long, 5.67 ft apart)
+            for sx in (-1, 1):
+                for sy in (-1, 1):
+                    fig.add_shape(type="line", x0=x + sx * 2.83, x1=x + sx * 2.83,
+                                  y0=y + sy * 15, y1=y + sy * 17, line=dict(color=RED, width=1.5), layer="below")
+    for x in (-20, 20):
+        for y in (-22, 22):
+            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer="below")
+    # Creases (6-ft radius semicircles, 8 ft wide at the goal line), goal
+    # frames (6 x 3.33 ft) and trapezoids — both ends
+    for sign in (-1, 1):
+        gx = sign * GOAL_LINE_X
+        a0, a1 = (90, 270) if sign > 0 else (-90, 90)
+        # 6-ft-radius arc bulging toward center ice, cut to 8 ft wide at
+        # the goal line (|y| <= 4), closed along the goal line.
+        half = math.degrees(math.asin(4 / 6))
+        crease = [(gx, -4.0)] + [(gx - sign * 6 * math.cos(math.radians(t)), 6 * math.sin(math.radians(t)))
+                                 for t in [-half + 2 * half * i / 20 for i in range(21)]] + [(gx, 4.0)]
+        fig.add_shape(type="path", path=_path(crease), fillcolor=CREASE_FILL,
+                      line=dict(color=RED, width=1.5), layer="below")
+        fig.add_shape(type="rect", x0=gx, x1=gx + sign * 3.33, y0=-3, y1=3,
+                      fillcolor="rgba(214,59,59,0.15)", line=dict(color=RED, width=2), layer="below")
+        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=11, y1=14, line=dict(color=RED, width=1.5), layer="below")
+        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=-11, y1=-14, line=dict(color=RED, width=1.5), layer="below")
+    return fig
+
+
+def rink_layout(fig: "go.Figure", height: int = 460, **kwargs) -> "go.Figure":
+    """Axes/aspect settings every rink chart shares."""
+    fig.update_layout(
+        height=height, margin=dict(l=10, r=10, t=kwargs.pop("top", 10), b=10),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        # constrain="domain" is what keeps this robust: with the default
+        # (constrain="range"), plotly satisfies the 1:1 scaleanchor by
+        # EXPANDING an axis range, and on Streamlit's first layout pass (when
+        # the container can briefly measure ~0 px) that expansion blows the
+        # ranges up by hundreds of x and the rink renders as a dot. Shrinking
+        # the axis domain instead leaves the ranges exactly as given.
+        xaxis=dict(range=[-103, 103], visible=False, scaleanchor="y", scaleratio=1, constrain="domain"),
+        yaxis=dict(range=[-46, 46], visible=False, constrain="domain"),
+        **kwargs,
+    )
     return fig
 
 
 def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
-    """One player's or team's shots on the normalized rink, colored/shaped
+    """One player's or team's shots on the regulation rink, colored/shaped
     by result. `shots` needs x/y/result columns (see ingest/nhl_shots.py)."""
     fig = go.Figure()
     rink_outline(fig)
@@ -130,14 +227,9 @@ def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
             continue
         fig.add_trace(go.Scatter(
             x=sub["x"], y=sub["y"], mode="markers", name=f"{_RESULT_LABELS[result]} ({len(sub)})",
-            marker=dict(color=color, symbol=symbol, size=size, line=dict(width=1, color="#1A1F2E")),
+            marker=dict(color=color, symbol=symbol, size=size, opacity=0.85, line=dict(width=1, color="#FFFFFF")),
             hoverinfo="skip",
         ))
-    fig.update_layout(
-        title=name, height=450, margin=dict(l=10, r=10, t=40, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(20,24,36,0.4)", font_color="#FAFAFA",
-        xaxis=dict(range=[-101, 101], visible=False, scaleanchor="y", scaleratio=1),
-        yaxis=dict(range=[-43.5, 43.5], visible=False),
-        legend=dict(orientation="h", yanchor="bottom", y=-0.08, x=0),
-    )
+    rink_layout(fig, height=470, top=40, title=dict(text=name, x=0.5, xanchor="center"),
+                legend=dict(orientation="h", yanchor="bottom", y=-0.06, x=0))
     return fig

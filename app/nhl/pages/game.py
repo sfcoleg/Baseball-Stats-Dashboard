@@ -205,17 +205,11 @@ def _render():
                 fig.add_trace(go.Scatter(
                     x=r["x"], y=r["y"], mode="markers",
                     name=f"{abbr} {nstyle._RESULT_LABELS[result].lower()} ({len(r)})",
-                    marker=dict(color=color, symbol=symbol, size=size, opacity=alpha, line=dict(width=1, color="#1A1F2E")),
+                    marker=dict(color=color, symbol=symbol, size=size, opacity=alpha, line=dict(width=1, color="#FFFFFF")),
                     text=[f"{s.shooter} — P{s.period} {s.time} ({s.shotType or ''})" for s in r.itertuples()],
                     hoverinfo="text",
                 ))
-        fig.update_layout(
-            height=460, margin=dict(l=10, r=10, t=10, b=10), paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="rgba(20,24,36,0.4)", font_color="#FAFAFA",
-            xaxis=dict(range=[-101, 101], visible=False, scaleanchor="y", scaleratio=1),
-            yaxis=dict(range=[-43.5, 43.5], visible=False),
-            legend=dict(orientation="h", yanchor="bottom", y=-0.1, x=0, font=dict(size=11)),
-        )
+        nstyle.rink_layout(fig, height=460, legend=dict(orientation="h", yanchor="bottom", y=-0.08, x=0, font=dict(size=11)))
         st.plotly_chart(fig, use_container_width=True)
 
         on_net = shots[shots["result"].isin(["goal", "shot-on-goal"])]
