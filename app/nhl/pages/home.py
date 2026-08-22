@@ -144,47 +144,52 @@ if daily_milestones:
 
 
 # --- Headliners (hot yesterday / this week / this month) ----------------
+# Only rendered when there's real recent game data — during the offseason
+# there's nothing to be "hot" from, and six blank "No games yet" cards
+# read as broken rather than intentional. "day" is the lowest-bar presence
+# check: if even that has nothing, week/month (wider windows) won't either.
 qualified_goalies = goalies[goalies["gamesPlayed"] >= 20]  # also used by Team Snapshot below
 
 if season == latest_season:
-    style.colored_header("Skater Headliners", "batting")
-    h1, h2, h3 = st.columns(3)
-    for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
-        with col:
-            with st.container(border=True):
-                top = ndb.top_recent_skater(period, season, mtime)
-                if top is None:
-                    st.caption(label)
-                    st.markdown("No games yet")
-                elif period == "day":
-                    stat_line = f"{int(top['goals'])} G, {int(top['assists'])} A, {int(top['points'])} PTS"
-                    _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
-                else:
-                    stat_line = f"{int(top['points'])} PTS ({int(top['goals'])} G, {int(top['assists'])} A) in {int(top['games'])} GP"
-                    _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
+    has_recent_skaters = ndb.top_recent_skater("day", season, mtime) is not None
+    has_recent_goalies = ndb.top_recent_goalie("day", season, mtime) is not None
 
-    style.colored_header("Goalie Headliners", "pitching")
-    g1, g2, g3 = st.columns(3)
-    for col, period, label in [(g1, "day", "Hot Yesterday"), (g2, "week", "Hot This Week"), (g3, "month", "Hot This Month")]:
-        with col:
-            with st.container(border=True):
-                top = ndb.top_recent_goalie(period, season, mtime)
-                if top is None:
-                    st.caption(label)
-                    st.markdown("No games yet")
-                elif period == "day":
-                    stat_line = f"{int(top['saves'])} saves, {int(top['goalsAgainst'])} GA"
-                    _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
-                else:
-                    stat_line = f"{top['savePct']:.1f} SV% in {int(top['games'])} GP"
-                    _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
-    with g3:
-        with st.container(border=True):
-            gsax = qualified_goalies["xGA"] - qualified_goalies["goalsAgainst"]
-            top = qualified_goalies.loc[gsax.idxmax()]
-            _headliner_card("GSAx Leader", top["goalieFullName"], top["playerId"], top["Tm"], f"{gsax.max():+.1f} GSAx")
+    if has_recent_skaters:
+        style.colored_header("Skater Headliners", "batting")
+        h1, h2, h3 = st.columns(3)
+        for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
+            with col:
+                with st.container(border=True):
+                    top = ndb.top_recent_skater(period, season, mtime)
+                    if top is None:
+                        st.caption(label)
+                        st.markdown("Not enough games yet")
+                    elif period == "day":
+                        stat_line = f"{int(top['goals'])} G, {int(top['assists'])} A, {int(top['points'])} PTS"
+                        _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
+                    else:
+                        stat_line = f"{int(top['points'])} PTS ({int(top['goals'])} G, {int(top['assists'])} A) in {int(top['games'])} GP"
+                        _headliner_card(label, top["skaterFullName"], top["playerId"], top["Tm"], stat_line)
 
-    st.divider()
+    if has_recent_goalies:
+        style.colored_header("Goalie Headliners", "pitching")
+        g1, g2, g3 = st.columns(3)
+        for col, period, label in [(g1, "day", "Hot Yesterday"), (g2, "week", "Hot This Week"), (g3, "month", "Hot This Month")]:
+            with col:
+                with st.container(border=True):
+                    top = ndb.top_recent_goalie(period, season, mtime)
+                    if top is None:
+                        st.caption(label)
+                        st.markdown("Not enough games yet")
+                    elif period == "day":
+                        stat_line = f"{int(top['saves'])} saves, {int(top['goalsAgainst'])} GA"
+                        _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
+                    else:
+                        stat_line = f"{top['savePct']:.1f} SV% in {int(top['games'])} GP"
+                        _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
+
+    if has_recent_skaters or has_recent_goalies:
+        st.divider()
 
 
 # --- Top 10 goal scorers chart -------------------------------------------
