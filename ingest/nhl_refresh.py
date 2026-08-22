@@ -77,8 +77,8 @@ REPORTS = {
         "shootingPctTipIn",
     ],
     "bios": [
-        "playerId", "birthDate", "birthCountryCode", "height", "weight", "draftYear", "draftRound",
-        "draftOverall",
+        "playerId", "birthDate", "birthCity", "birthStateProvinceCode", "birthCountryCode",
+        "nationalityCode", "height", "weight", "draftYear", "draftRound", "draftOverall",
     ],
 }
 
@@ -95,8 +95,8 @@ GOALIE_REPORTS = {
         "shotsAgainstPer60",
     ],
     "bios": [
-        "playerId", "birthDate", "birthCountryCode", "height", "weight", "draftYear", "draftRound",
-        "draftOverall",
+        "playerId", "birthDate", "birthCity", "birthStateProvinceCode", "birthCountryCode",
+        "nationalityCode", "height", "weight", "draftYear", "draftRound", "draftOverall",
     ],
 }
 

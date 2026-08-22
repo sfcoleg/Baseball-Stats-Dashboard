@@ -325,6 +325,7 @@ NHL_PAGES = [
     st.Page("nhl/pages/today.py", title="NHL Today's Games", url_path="nhl-today"),
     st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
+    st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
     st.Page("nhl/pages/player.py", title="NHL Player", url_path="nhl-player"),  # deep-link only, not in nav loop
 ]
 

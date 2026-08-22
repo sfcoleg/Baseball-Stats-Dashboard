@@ -1370,6 +1370,14 @@ def fetch_and_store():
             nhl_update_yesterday_log()
         except Exception as e:
             print(f"nhl daily log failed (non-fatal): {e}")
+        # Geocode any birthplaces new since last night (call-ups, trades —
+        # usually zero or a handful; see nhl_geocode.py). Everything already
+        # cached is skipped, so this is cheap nightly.
+        try:
+            from nhl_geocode import run as nhl_geocode_run
+            nhl_geocode_run()
+        except Exception as e:
+            print(f"nhl geocode failed (non-fatal): {e}")
     else:
         print("nhl refresh skipped (offseason — resumes in October)")
 

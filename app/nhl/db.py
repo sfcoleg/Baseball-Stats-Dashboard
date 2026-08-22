@@ -296,6 +296,52 @@ def get_daily_milestones(date_str: str, season: int, db_mtime_val: float) -> lis
     return milestones
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_geo_places(db_mtime_val: float) -> pd.DataFrame:
+    """Geocoded birthplaces (ingest/nhl_geocode.py): city/region/country ->
+    lat/lon. Rows with NULL lat are places Nominatim couldn't match."""
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame(columns=["city", "region", "country", "lat", "lon"])
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT city, region, country, lat, lon FROM geo_places", conn)
+        except pd.errors.DatabaseError:
+            return pd.DataFrame(columns=["city", "region", "country", "lat", "lon"])
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_birthplaces(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """One row per player (skaters + goalies) for a season, with birthplace
+    and its geocoded lat/lon — the Birthplace Map's data. Players whose
+    birthplace couldn't be geocoded come back with NaN lat/lon so the page
+    can count them honestly rather than silently dropping them."""
+    skaters = load_skaters(season, db_mtime_val)
+    goalies = load_goalies(season, db_mtime_val)
+    cols = ["playerId", "teamAbbrevs", "positionCode", "gamesPlayed", "birthCity",
+            "birthStateProvinceCode", "birthCountryCode", "nationalityCode"]
+    frames = []
+    if not skaters.empty and "birthCity" in skaters.columns:
+        s = skaters[cols + ["skaterFullName", "points"]].rename(columns={"skaterFullName": "name"})
+        s["role"] = "Skater"
+        frames.append(s)
+    if not goalies.empty and "birthCity" in goalies.columns:
+        g = goalies[[c for c in cols if c != "positionCode"] + ["goalieFullName", "wins"]].rename(
+            columns={"goalieFullName": "name"})
+        g["positionCode"] = "G"
+        g["role"] = "Goalie"
+        frames.append(g)
+    if not frames:
+        return pd.DataFrame()
+    df = pd.concat(frames, ignore_index=True)
+    for c in ("birthCity", "birthStateProvinceCode", "birthCountryCode"):
+        df[c] = df[c].fillna("").astype(str).str.strip()
+    geo = load_geo_places(db_mtime_val).rename(
+        columns={"city": "birthCity", "region": "birthStateProvinceCode", "country": "birthCountryCode"})
+    for c in ("birthCity", "birthStateProvinceCode", "birthCountryCode"):
+        geo[c] = geo[c].fillna("").astype(str)
+    return df.merge(geo, on=["birthCity", "birthStateProvinceCode", "birthCountryCode"], how="left")
+
+
 def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame:
     """Skaters and goalies whose name contains `query` (case-insensitive),
     for the Compare page's player pickers. Returns
