@@ -88,12 +88,12 @@ with std_tab:
 with adv_tab:
     st.caption(
         "Possession and expected goals. CF%/FF% and the per-60 rates are 5v5 from the NHL; "
-        "ixG (individual expected goals) and xGF% (share of expected goals while on ice) are "
-        "from MoneyPuck's public model. G − ixG = finishing above expectation. PDO = on-ice "
+        "xG (a skater's own expected goals) and xGF% (share of expected goals while on ice) are "
+        "from MoneyPuck's public model. G − xG = finishing above expectation. PDO = on-ice "
         "shooting% + save% (luck gauge, regresses to ~100)."
     )
     filtered["finishing"] = filtered["goals"] - filtered["ixG"]
-    ndb.STAT_LABELS.setdefault("finishing", "G − ixG")
+    ndb.STAT_LABELS.setdefault("finishing", "G − xG")
     _table(
         ["skaterFullName", "Tm", "positionCode", "gamesPlayed", "goals", "ixG", "finishing",
          "ixG_high_danger", "xGF_pct_5v5", "office_xGF_pct", "satPercentage", "satRelative",

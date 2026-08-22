@@ -49,7 +49,7 @@ STAT_LABELS = {
     "penaltyMinutes": "PIM", "ppGoals": "PP G", "ppPoints": "PP P", "shGoals": "SH G", "shPoints": "SH P",
     "gameWinningGoals": "GWG", "otGoals": "OTG", "shots": "S", "shootingPct": "S%",
     "timeOnIcePerGame": "TOI/GP", "faceoffWinPct": "FO%",
-    "ixG": "ixG", "ixG_5v5": "ixG 5v5", "ixG_high_danger": "HD ixG", "high_danger_shots": "HD Shots",
+    "ixG": "xG", "ixG_5v5": "xG 5v5", "ixG_high_danger": "HD xG", "high_danger_shots": "HD Shots",
     "xGF_pct_5v5": "xGF% 5v5", "xGF_pct_all": "xGF%", "office_xGF_pct": "Off-ice xGF%",
     "onice_xGF": "On-ice xGF", "onice_xGA": "On-ice xGA",
     "satPercentage": "CF%", "satRelative": "CF% Rel", "usatPercentage": "FF%", "usatRelative": "FF% Rel",
