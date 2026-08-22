@@ -326,6 +326,8 @@ NHL_PAGES = [
     st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
     st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
+    st.Page("nhl/pages/digest.py", title="NHL Daily Digest", url_path="nhl-digest"),
+    st.Page("nhl/pages/game.py", title="NHL Game Center", url_path="nhl-game"),  # reached from Today's Games / Digest, not the nav
     st.Page("nhl/pages/player.py", title="NHL Player", url_path="nhl-player"),  # deep-link only, not in nav loop
 ]
 
@@ -347,8 +349,13 @@ if active_sport == "mlb":
         if p.title not in _MLB_NAV_HIDDEN:
             st.sidebar.page_link(p, label=p.title)
 else:
+    # Daily Digest stays registered (so /nhl-digest resolves for previews)
+    # but off the sidebar until the season starts — every section is
+    # empty over the summer. Flip to True in October.
+    SHOW_NHL_DIGEST = False
+    _nhl_hidden = {"NHL Player", "NHL Game Center"} | (set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"})
     for p in NHL_PAGES:
-        if p.title != "NHL Player":
+        if p.title not in _nhl_hidden:
             st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))
 
 # Small, deliberately understated link to Settings — sits below the main

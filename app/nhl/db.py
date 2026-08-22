@@ -477,6 +477,68 @@ def load_player_landing(player_id: int) -> dict:
         return {}
 
 
+# --- Per-game (Game Center) -----------------------------------------------
+# Short TTLs so a live game keeps moving; finished games just re-fetch
+# every 20s while someone is on the page, which is cheap.
+
+def _get_json(url: str):
+    try:
+        resp = requests.get(url, timeout=15, headers=_HEADERS)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception:
+        return {}
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=16)
+def load_game_landing(game_id: int) -> dict:
+    """Scoring summary (every goal with scorer/assists/strength/clip),
+    penalties, three stars, live clock/period."""
+    return _get_json(f"https://api-web.nhle.com/v1/gamecenter/{int(game_id)}/landing")
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=16)
+def load_game_boxscore(game_id: int) -> dict:
+    """Per-player lines for both teams (forwards/defense/goalies)."""
+    return _get_json(f"https://api-web.nhle.com/v1/gamecenter/{int(game_id)}/boxscore")
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=16)
+def load_game_shots(game_id: int) -> pd.DataFrame:
+    """Every shot attempt in one game from play-by-play, coordinates
+    normalized so each TEAM attacks its own end consistently: the home
+    team always shoots toward +x, the away team toward -x (a game map wants
+    the two teams on opposite ends, unlike the season shot map which folds
+    everyone onto one end)."""
+    data = _get_json(f"https://api-web.nhle.com/v1/gamecenter/{int(game_id)}/play-by-play")
+    if not data:
+        return pd.DataFrame()
+    home_id = (data.get("homeTeam") or {}).get("id")
+    names = {r["playerId"]: f"{r['firstName']['default']} {r['lastName']['default']}" for r in data.get("rosterSpots", [])}
+    rows = []
+    for p in data.get("plays", []):
+        kind = p.get("typeDescKey")
+        if kind not in ("goal", "shot-on-goal", "missed-shot", "blocked-shot"):
+            continue
+        d = p.get("details") or {}
+        x, y = d.get("xCoord"), d.get("yCoord")
+        if x is None or y is None:
+            continue
+        is_home = d.get("eventOwnerTeamId") == home_id
+        side = p.get("homeTeamDefendingSide") or "left"
+        # Home attacks the side it is NOT defending. Flip so home always -> +x.
+        home_attacks_right = side == "left"
+        if not home_attacks_right:
+            x, y = -x, -y
+        shooter = d.get("scoringPlayerId") or d.get("shootingPlayerId")
+        rows.append({
+            "period": (p.get("periodDescriptor") or {}).get("number"), "time": p.get("timeInPeriod"),
+            "result": kind, "x": x, "y": y, "is_home": is_home, "shotType": d.get("shotType"),
+            "shooter": names.get(shooter, ""), "shooterId": shooter,
+        })
+    return pd.DataFrame(rows)
+
+
 # ---------------------------------------------------------------------------
 # Game-odds model (Elo, fit offline by ingest/nhl_elo.py -> elo_model.json).
 # ---------------------------------------------------------------------------

@@ -138,7 +138,11 @@ def _render_games(date_str: str):
                 if venue:
                     st.markdown(f"<div style='text-align:center;color:#9AA3B5;font-size:0.85rem'>{venue}</div>",
                                 unsafe_allow_html=True)
-                if st.button("Team pages", key=f"gm{game['id']}", use_container_width=True):
+                if started:
+                    if st.button("Game Center", key=f"gm{game['id']}", use_container_width=True):
+                        st.session_state["nhl_selected_game"] = int(game["id"])
+                        st.switch_page("nhl/pages/game.py")
+                elif st.button("Team pages", key=f"gm{game['id']}", use_container_width=True):
                     st.session_state["nhl_team_page_selected_team"] = home["abbrev"]
                     st.switch_page("nhl/pages/team.py")
 
