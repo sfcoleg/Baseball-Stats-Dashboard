@@ -14,6 +14,9 @@ struct Entry: TimelineEntry {
     let favorite: String
     let feed: Feed?
     let live: [LiveGame]
+    var logos: [String: Data] = [:]
+
+    func logo(_ abbr: String) -> Data? { logos[LogoCache.key(sport, abbr)] }
 }
 
 struct Provider: TimelineProvider {
@@ -30,7 +33,19 @@ struct Provider: TimelineProvider {
             let sport = AppConfig.sport
             let feed = await FeedClient.load()
             let live = await LiveScores.fetch(sport)
-            let entry = Entry(date: .now, sport: sport, favorite: AppConfig.favoriteTeam, feed: feed, live: live)
+            // Every team that could appear in any of the three widgets this
+            // entry feeds — Scores' live games, Standings' whole division
+            // (division isn't known yet, so the whole league), Next Game's
+            // opponent (covered by the standings/schedule teams below).
+            var abbrs = Set(live.flatMap { [$0.away, $0.home] })
+            if let feed {
+                switch sport {
+                case .mlb: abbrs.formUnion(feed.mlb.standings.map(\.teamAbbr))
+                case .nhl: abbrs.formUnion(feed.nhl.standings.map(\.abbr))
+                }
+            }
+            let logos = await LogoCache.prefetch(abbrs.map { (sport, $0) })
+            let entry = Entry(date: .now, sport: sport, favorite: AppConfig.favoriteTeam, feed: feed, live: live, logos: logos)
             // Ask for a refresh sooner while something's live; otherwise every 30 min.
             let next = Calendar.current.date(byAdding: .minute, value: live.contains(where: \.isLive) ? 10 : 30, to: .now)!
             completion(Timeline(entries: [entry], policy: .after(next)))
@@ -108,8 +123,8 @@ struct ScoresWidgetView: View {
                 Spacer()
             } else {
                 ForEach(games.prefix(limit)) { g in
-                    if family == .systemSmall { SmallGame(game: g, favorite: entry.favorite) }
-                    else { GameLine(game: g, favorite: entry.favorite) }
+                    if family == .systemSmall { SmallGame(sport: entry.sport, game: g, favorite: entry.favorite, logos: entry.logos) }
+                    else { GameLine(sport: entry.sport, game: g, favorite: entry.favorite, logos: entry.logos) }
                 }
                 Spacer(minLength: 0)
             }
@@ -119,32 +134,40 @@ struct ScoresWidgetView: View {
 }
 
 struct SmallGame: View {
-    let game: LiveGame; let favorite: String
+    let sport: Sport; let game: LiveGame; let favorite: String; let logos: [String: Data]
     var body: some View {
         VStack(spacing: 6) {
-            HStack { Badge(text: game.away); Spacer(); Text(game.awayScore.map(String.init) ?? "–").font(.title2.weight(.heavy)).monospacedDigit() }
-            HStack { Badge(text: game.home); Spacer(); Text(game.homeScore.map(String.init) ?? "–").font(.title2.weight(.heavy)).monospacedDigit() }
-            HStack {
-                if game.isLive { Circle().fill(.red).frame(width: 6, height: 6) }
-                Text(game.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
-                Spacer()
+            HStack { TeamLogo(sport: sport, abbr: game.away, size: 20, preloaded: logos[LogoCache.key(sport, game.away)], allowNetworkFallback: false); Badge(text: game.away); Spacer(); Text(game.awayScore.map(String.init) ?? "–").font(.title2.weight(.heavy)).monospacedDigit() }
+            HStack { TeamLogo(sport: sport, abbr: game.home, size: 20, preloaded: logos[LogoCache.key(sport, game.home)], allowNetworkFallback: false); Badge(text: game.home); Spacer(); Text(game.homeScore.map(String.init) ?? "–").font(.title2.weight(.heavy)).monospacedDigit() }
+            if sport == .mlb, game.isLive, game.inning != nil {
+                HStack { GameSituationView(game: game, basesSize: 24); Spacer() }
+            } else {
+                HStack {
+                    if game.isLive { Circle().fill(.red).frame(width: 6, height: 6) }
+                    Text(game.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                    Spacer()
+                }
             }
         }
     }
 }
 
 struct GameLine: View {
-    let game: LiveGame; let favorite: String
+    let sport: Sport; let game: LiveGame; let favorite: String; let logos: [String: Data]
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 6) {
             if game.isLive { Circle().fill(.red).frame(width: 6, height: 6) } else { Circle().fill(.clear).frame(width: 6, height: 6) }
-            Badge(text: game.away)
+            TeamLogo(sport: sport, abbr: game.away, size: 18, preloaded: logos[LogoCache.key(sport, game.away)], allowNetworkFallback: false)
             Text(game.awayScore.map(String.init) ?? "").font(.callout.weight(.bold)).monospacedDigit().frame(width: 18, alignment: .trailing)
             Text("@").font(.caption2).foregroundStyle(.secondary)
-            Badge(text: game.home)
+            TeamLogo(sport: sport, abbr: game.home, size: 18, preloaded: logos[LogoCache.key(sport, game.home)], allowNetworkFallback: false)
             Text(game.homeScore.map(String.init) ?? "").font(.callout.weight(.bold)).monospacedDigit().frame(width: 18, alignment: .trailing)
             Spacer()
-            Text(game.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            if sport == .mlb, game.isLive, game.inning != nil {
+                GameSituationView(game: game, basesSize: 16)
+            } else {
+                Text(game.status).font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+            }
         }
     }
 }
@@ -182,6 +205,7 @@ struct StandingsWidgetView: View {
             Header(title: title.isEmpty ? "Standings" : title, sport: entry.sport)
             ForEach(Array(list.enumerated()), id: \.offset) { _, r in
                 HStack {
+                    TeamLogo(sport: entry.sport, abbr: r.0, size: 18, preloaded: entry.logo(r.0), allowNetworkFallback: false)
                     Badge(text: r.0)
                     if r.0 == entry.favorite { Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow) }
                     Spacer()
@@ -223,7 +247,7 @@ struct NextGameWidgetView: View {
                         let opp = home ? g.away : g.home
                         let p = g.pHome.map { home ? $0 : 1 - $0 }
                         Spacer()
-                        HStack { Text(home ? "vs" : "@").foregroundStyle(.secondary); Badge(text: opp).font(.title3) }
+                        HStack { Text(home ? "vs" : "@").foregroundStyle(.secondary); TeamLogo(sport: .nhl, abbr: opp, size: 26, preloaded: entry.logo(opp), allowNetworkFallback: false); Badge(text: opp).font(.title3) }
                         Text(g.startDate.map { $0.formatted(date: .abbreviated, time: .shortened) } ?? g.date).font(.caption).foregroundStyle(.secondary)
                         if let p { Text("\(Int((p * 100).rounded()))% win").font(.title2.weight(.heavy)) }
                         Spacer()
@@ -233,8 +257,9 @@ struct NextGameWidgetView: View {
                 case .mlb:
                     if let g = feed.mlb.today.first(where: { $0.awayAbbr == entry.favorite || $0.homeAbbr == entry.favorite }) {
                         let home = g.homeAbbr == entry.favorite
+                        let opp = home ? g.awayAbbr : g.homeAbbr
                         Spacer()
-                        HStack { Text(home ? "vs" : "@").foregroundStyle(.secondary); Badge(text: home ? g.awayAbbr : g.homeAbbr).font(.title3) }
+                        HStack { Text(home ? "vs" : "@").foregroundStyle(.secondary); TeamLogo(sport: .mlb, abbr: opp, size: 26, preloaded: entry.logo(opp), allowNetworkFallback: false); Badge(text: opp).font(.title3) }
                         Text(g.startDate.map { $0.formatted(date: .omitted, time: .shortened) } ?? "").font(.caption).foregroundStyle(.secondary)
                         if let sp = home ? g.homePitcherName : g.awayPitcherName { Text("SP: \(sp)").font(.caption2).foregroundStyle(.secondary).lineLimit(1) }
                         Spacer()

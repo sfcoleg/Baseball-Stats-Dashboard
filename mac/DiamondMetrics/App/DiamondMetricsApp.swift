@@ -13,6 +13,8 @@ struct DiamondMetricsApp: App {
                 .frame(minWidth: 760, minHeight: 520)
         }
         .windowStyle(.hiddenTitleBar)
+        .defaultPosition(.center)
+        .defaultSize(width: 900, height: 600)
         Settings { SettingsView() }
     }
 }
@@ -106,7 +108,7 @@ struct ScoresView: View {
                     .padding(.top, 80)
             }
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 220), spacing: 12)], spacing: 12) {
-                ForEach(games) { g in GameCard(game: g, favorite: store.favorite) }
+                ForEach(games) { g in GameCard(sport: store.sport, game: g, favorite: store.favorite) }
             }
             .padding()
         }
@@ -114,6 +116,7 @@ struct ScoresView: View {
 }
 
 struct GameCard: View {
+    let sport: Sport
     let game: LiveGame
     let favorite: String
     var body: some View {
@@ -126,8 +129,8 @@ struct GameCard: View {
                 Text(game.status).font(.caption).foregroundStyle(.secondary)
                 Spacer()
             }
-            TeamRow(abbr: game.away, score: game.awayScore, bold: (game.awayScore ?? 0) > (game.homeScore ?? 0) && game.isFinal, fav: game.away == favorite)
-            TeamRow(abbr: game.home, score: game.homeScore, bold: (game.homeScore ?? 0) > (game.awayScore ?? 0) && game.isFinal, fav: game.home == favorite)
+            TeamRow(sport: sport, abbr: game.away, score: game.awayScore, bold: (game.awayScore ?? 0) > (game.homeScore ?? 0) && game.isFinal, fav: game.away == favorite)
+            TeamRow(sport: sport, abbr: game.home, score: game.homeScore, bold: (game.homeScore ?? 0) > (game.awayScore ?? 0) && game.isFinal, fav: game.home == favorite)
         }
         .padding(12)
         .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
@@ -136,9 +139,10 @@ struct GameCard: View {
 }
 
 struct TeamRow: View {
-    let abbr: String; let score: Int?; let bold: Bool; let fav: Bool
+    let sport: Sport; let abbr: String; let score: Int?; let bold: Bool; let fav: Bool
     var body: some View {
         HStack {
+            TeamLogo(sport: sport, abbr: abbr, size: 24)
             Text(abbr).font(.system(.body, design: .rounded).weight(bold ? .heavy : .semibold))
             if fav { Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow) }
             Spacer()
@@ -156,12 +160,12 @@ struct StandingsView: View {
                 case .mlb:
                     let groups = Dictionary(grouping: feed.mlb.standings, by: \.division)
                     ForEach(groups.keys.sorted(), id: \.self) { div in
-                        StandingsTable(title: div, rows: groups[div]!.map { ($0.teamAbbr, "\($0.wins)-\($0.losses)", $0.gamesBack, $0.streak ?? "") }, favorite: store.favorite)
+                        StandingsTable(sport: .mlb, title: div, rows: groups[div]!.map { ($0.teamAbbr, "\($0.wins)-\($0.losses)", $0.gamesBack, $0.streak ?? "") }, favorite: store.favorite)
                     }
                 case .nhl:
                     let groups = Dictionary(grouping: feed.nhl.standings, by: { $0.division ?? "" })
                     ForEach(groups.keys.sorted(), id: \.self) { div in
-                        StandingsTable(title: div, rows: groups[div]!.sorted { ($0.divRank ?? 99) < ($1.divRank ?? 99) }.map { ($0.abbr, "\($0.w ?? 0)-\($0.l ?? 0)-\($0.otl ?? 0)", "\($0.pts ?? 0) pts", $0.streak ?? "") }, favorite: store.favorite)
+                        StandingsTable(sport: .nhl, title: div, rows: groups[div]!.sorted { ($0.divRank ?? 99) < ($1.divRank ?? 99) }.map { ($0.abbr, "\($0.w ?? 0)-\($0.l ?? 0)-\($0.otl ?? 0)", "\($0.pts ?? 0) pts", $0.streak ?? "") }, favorite: store.favorite)
                     }
                 }
             } else {
@@ -172,6 +176,7 @@ struct StandingsView: View {
 }
 
 struct StandingsTable: View {
+    let sport: Sport
     let title: String
     let rows: [(String, String, String, String)]
     let favorite: String
@@ -180,6 +185,7 @@ struct StandingsTable: View {
             Text(title).font(.headline).padding(.top, 8)
             ForEach(Array(rows.enumerated()), id: \.offset) { _, r in
                 HStack {
+                    TeamLogo(sport: sport, abbr: r.0, size: 20)
                     Text(r.0).bold().frame(width: 46, alignment: .leading)
                     if r.0 == favorite { Image(systemName: "star.fill").font(.caption2).foregroundStyle(.yellow) }
                     Spacer()

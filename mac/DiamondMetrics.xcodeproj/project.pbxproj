@@ -1,0 +1,90 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+		43134F4DF53C6E1E2B15C363 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "App/DiamondMetricsApp.swift"; sourceTree = "<group>"; };
+		2C0CB7F719FDA42178571F03 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/BasesView.swift"; sourceTree = "<group>"; };
+		B1E3B70F511BCC7C5ABC76C8 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/Feed.swift"; sourceTree = "<group>"; };
+		AA125DF880973133518DE90C = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/LiveScores.swift"; sourceTree = "<group>"; };
+		04CC35670C0294EC059A1FF0 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Shared/TeamLogos.swift"; sourceTree = "<group>"; };
+		260513CCEBE6B21CFD59DD61 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Widgets/DiamondWidgets.swift"; sourceTree = "<group>"; };
+		09853983A15F1540036B70BF = {isa = PBXBuildFile; fileRef = B1E3B70F511BCC7C5ABC76C8; };
+		D2109E5A8B5EA8104C735A7C = {isa = PBXBuildFile; fileRef = AA125DF880973133518DE90C; };
+		D61143D8C2D6A96BBA43B289 = {isa = PBXBuildFile; fileRef = 04CC35670C0294EC059A1FF0; };
+		535CA27A48902DB7AC959D85 = {isa = PBXBuildFile; fileRef = 2C0CB7F719FDA42178571F03; };
+		60A1178D3AB564D2F41F1710 = {isa = PBXBuildFile; fileRef = 43134F4DF53C6E1E2B15C363; };
+		5F5D550EECA439439BCADA6F = {isa = PBXBuildFile; fileRef = B1E3B70F511BCC7C5ABC76C8; };
+		9E91EEF54810C517FC4C5801 = {isa = PBXBuildFile; fileRef = AA125DF880973133518DE90C; };
+		008E49C99E66C3BD15E1C2F1 = {isa = PBXBuildFile; fileRef = 04CC35670C0294EC059A1FF0; };
+		D76192C8EE56CDBA4F6E2081 = {isa = PBXBuildFile; fileRef = 2C0CB7F719FDA42178571F03; };
+		C6904992E6F3BD79A5E07E27 = {isa = PBXBuildFile; fileRef = 260513CCEBE6B21CFD59DD61; };
+		54FAB0DF23231F75BE63202D = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "App/DiamondMetrics.entitlements"; sourceTree = "<group>"; };
+		EE69C0865F8559238DBD7DCC = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widgets/DiamondWidgets.entitlements"; sourceTree = "<group>"; };
+		157167A57CD89E6F630B7340 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Widgets/Info.plist"; sourceTree = "<group>"; };
+		84337AD8D27FCD69AF2C4FC2 = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Diamond Metrics.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		1B442E42980596EBCD246D51 = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = DiamondWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BE643F4E022B9B789C578386 = {isa = PBXBuildFile; fileRef = 1B442E42980596EBCD246D51; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1129B6A53940C88B539F2B2B = {isa = PBXGroup; children = (43134F4DF53C6E1E2B15C363, 2C0CB7F719FDA42178571F03, B1E3B70F511BCC7C5ABC76C8, AA125DF880973133518DE90C, 04CC35670C0294EC059A1FF0, 260513CCEBE6B21CFD59DD61, 54FAB0DF23231F75BE63202D, EE69C0865F8559238DBD7DCC, 157167A57CD89E6F630B7340, ); path = DiamondMetrics; sourceTree = "<group>"; };
+		547D009064F7C3F13BEF3460 = {isa = PBXGroup; children = (84337AD8D27FCD69AF2C4FC2, 1B442E42980596EBCD246D51, ); name = Products; sourceTree = "<group>"; };
+		518DA81DB9B99529C0C0AEBE = {isa = PBXGroup; children = (1129B6A53940C88B539F2B2B, 547D009064F7C3F13BEF3460, ); sourceTree = "<group>"; };
+		4821909E9BF9E73E471FEA84 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (09853983A15F1540036B70BF, D2109E5A8B5EA8104C735A7C, D61143D8C2D6A96BBA43B289, 535CA27A48902DB7AC959D85, 60A1178D3AB564D2F41F1710, ); runOnlyForDeploymentPostprocessing = 0; };
+		37A859133C5B7A49CE597D35 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (5F5D550EECA439439BCADA6F, 9E91EEF54810C517FC4C5801, 008E49C99E66C3BD15E1C2F1, D76192C8EE56CDBA4F6E2081, C6904992E6F3BD79A5E07E27, ); runOnlyForDeploymentPostprocessing = 0; };
+		6EFAB1ECC0D092E20FE51FCD = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		11EF39465FB5B37CF41E367D = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		F667297ED3AB90EAC07798D4 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		B56E96530BC9DC2EBA288692 = {isa = PBXResourcesBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		496AF46EC2762DDF91F78F13 = {isa = PBXCopyFilesBuildPhase; buildActionMask = 2147483647; dstPath = ""; dstSubfolderSpec = 13; files = (BE643F4E022B9B789C578386, ); name = "Embed Foundation Extensions"; runOnlyForDeploymentPostprocessing = 0; };
+		C19BB360D63F1BA9F02BAB59 = {isa = XCBuildConfiguration; buildSettings = { DEBUG_INFORMATION_FORMAT = dwarf; ONLY_ACTIVE_ARCH = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; GCC_OPTIMIZATION_LEVEL = 0; }; name = Debug; };
+		88A29AB70C762FCDF6D9A1D3 = {isa = XCBuildConfiguration; buildSettings = { DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+		7EF2517A8FE63F4681EC5EEA = {isa = XCConfigurationList; buildConfigurations = (C19BB360D63F1BA9F02BAB59, 88A29AB70C762FCDF6D9A1D3, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		91B8F6FB95707A0AB87A87F1 = {isa = XCBuildConfiguration; buildSettings = {
+    ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; ENABLE_HARDENED_RUNTIME = YES;
+    MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; SWIFT_EMIT_LOC_STRINGS = YES;
+    DEVELOPMENT_TEAM = 9NMHR9YX9B; CODE_SIGN_STYLE = Automatic; CODE_SIGN_IDENTITY = "Apple Development"; ENABLE_USER_SCRIPT_SANDBOXING = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0;
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+    PRODUCT_BUNDLE_IDENTIFIER = com.cromulentlabs.diamondmetrics; PRODUCT_NAME = "Diamond Metrics"; GENERATE_INFOPLIST_FILE = YES;
+    INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports"; INFOPLIST_KEY_NSHumanReadableCopyright = "";
+    CODE_SIGN_ENTITLEMENTS = DiamondMetrics/App/DiamondMetrics.entitlements; COMBINE_HIDPI_IMAGES = YES;
+    LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks"); DEBUG_INFORMATION_FORMAT = dwarf; ONLY_ACTIVE_ARCH = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; GCC_OPTIMIZATION_LEVEL = 0; }; name = Debug; };
+		BB071F776B40F4837F61A6A3 = {isa = XCBuildConfiguration; buildSettings = {
+    ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; ENABLE_HARDENED_RUNTIME = YES;
+    MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; SWIFT_EMIT_LOC_STRINGS = YES;
+    DEVELOPMENT_TEAM = 9NMHR9YX9B; CODE_SIGN_STYLE = Automatic; CODE_SIGN_IDENTITY = "Apple Development"; ENABLE_USER_SCRIPT_SANDBOXING = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0;
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+    PRODUCT_BUNDLE_IDENTIFIER = com.cromulentlabs.diamondmetrics; PRODUCT_NAME = "Diamond Metrics"; GENERATE_INFOPLIST_FILE = YES;
+    INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.sports"; INFOPLIST_KEY_NSHumanReadableCopyright = "";
+    CODE_SIGN_ENTITLEMENTS = DiamondMetrics/App/DiamondMetrics.entitlements; COMBINE_HIDPI_IMAGES = YES;
+    LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks"); DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+		5505F9AF814A7F0992DE2402 = {isa = XCConfigurationList; buildConfigurations = (91B8F6FB95707A0AB87A87F1, BB071F776B40F4837F61A6A3, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		B42163DECE77CBD0EADC3954 = {isa = XCBuildConfiguration; buildSettings = {
+    ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; ENABLE_HARDENED_RUNTIME = YES;
+    MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; SWIFT_EMIT_LOC_STRINGS = YES;
+    DEVELOPMENT_TEAM = 9NMHR9YX9B; CODE_SIGN_STYLE = Automatic; CODE_SIGN_IDENTITY = "Apple Development"; ENABLE_USER_SCRIPT_SANDBOXING = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0;
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+    PRODUCT_BUNDLE_IDENTIFIER = com.cromulentlabs.diamondmetrics.widgets; PRODUCT_NAME = DiamondWidgets; INFOPLIST_FILE = DiamondMetrics/Widgets/Info.plist;
+    GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Diamond Metrics";
+    INFOPLIST_KEY_NSHumanReadableCopyright = ""; SKIP_INSTALL = YES;
+    CODE_SIGN_ENTITLEMENTS = DiamondMetrics/Widgets/DiamondWidgets.entitlements;
+    LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks"); DEBUG_INFORMATION_FORMAT = dwarf; ONLY_ACTIVE_ARCH = YES; SWIFT_OPTIMIZATION_LEVEL = "-Onone"; SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG; GCC_OPTIMIZATION_LEVEL = 0; }; name = Debug; };
+		A6CB7D0C1CF106E260C49D55 = {isa = XCBuildConfiguration; buildSettings = {
+    ALWAYS_SEARCH_USER_PATHS = NO; CLANG_ENABLE_MODULES = YES; ENABLE_HARDENED_RUNTIME = YES;
+    MACOSX_DEPLOYMENT_TARGET = 14.0; SDKROOT = macosx; SWIFT_VERSION = 5.0; SWIFT_EMIT_LOC_STRINGS = YES;
+    DEVELOPMENT_TEAM = 9NMHR9YX9B; CODE_SIGN_STYLE = Automatic; CODE_SIGN_IDENTITY = "Apple Development"; ENABLE_USER_SCRIPT_SANDBOXING = YES; CURRENT_PROJECT_VERSION = 1; MARKETING_VERSION = 1.0;
+    ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+    PRODUCT_BUNDLE_IDENTIFIER = com.cromulentlabs.diamondmetrics.widgets; PRODUCT_NAME = DiamondWidgets; INFOPLIST_FILE = DiamondMetrics/Widgets/Info.plist;
+    GENERATE_INFOPLIST_FILE = YES; INFOPLIST_KEY_CFBundleDisplayName = "Diamond Metrics";
+    INFOPLIST_KEY_NSHumanReadableCopyright = ""; SKIP_INSTALL = YES;
+    CODE_SIGN_ENTITLEMENTS = DiamondMetrics/Widgets/DiamondWidgets.entitlements;
+    LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/../Frameworks", "@executable_path/../../../../Frameworks"); DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym"; SWIFT_OPTIMIZATION_LEVEL = "-O"; SWIFT_COMPILATION_MODE = wholemodule; }; name = Release; };
+		8EB251B5FEF9F9B925BE1907 = {isa = XCConfigurationList; buildConfigurations = (B42163DECE77CBD0EADC3954, A6CB7D0C1CF106E260C49D55, ); defaultConfigurationIsVisible = 0; defaultConfigurationName = Release; };
+		0661F517A86C8F5C87C0EDBA = {isa = PBXNativeTarget; buildConfigurationList = 8EB251B5FEF9F9B925BE1907; buildPhases = (37A859133C5B7A49CE597D35, 11EF39465FB5B37CF41E367D, B56E96530BC9DC2EBA288692, ); buildRules = (); dependencies = (); name = DiamondWidgets; productName = DiamondWidgets; productReference = 1B442E42980596EBCD246D51; productType = "com.apple.product-type.app-extension"; };
+		99E6A51DA0B86FE48AEB34ED = {isa = PBXContainerItemProxy; containerPortal = 46F86FAA6BBF9AC94A7E4595; proxyType = 1; remoteGlobalIDString = 0661F517A86C8F5C87C0EDBA; remoteInfo = DiamondWidgets; };
+		EE1DEC3FECAFB049B3EB4C70 = {isa = PBXTargetDependency; target = 0661F517A86C8F5C87C0EDBA; targetProxy = 99E6A51DA0B86FE48AEB34ED; };
+		E3435DDA2687639586BF0B70 = {isa = PBXNativeTarget; buildConfigurationList = 5505F9AF814A7F0992DE2402; buildPhases = (4821909E9BF9E73E471FEA84, 6EFAB1ECC0D092E20FE51FCD, F667297ED3AB90EAC07798D4, 496AF46EC2762DDF91F78F13, ); buildRules = (); dependencies = (EE1DEC3FECAFB049B3EB4C70, ); name = DiamondMetrics; productName = DiamondMetrics; productReference = 84337AD8D27FCD69AF2C4FC2; productType = "com.apple.product-type.application"; };
+		46F86FAA6BBF9AC94A7E4595 = {isa = PBXProject; attributes = {BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 1640; LastUpgradeCheck = 1640; TargetAttributes = {E3435DDA2687639586BF0B70 = {CreatedOnToolsVersion = 16.4; }; 0661F517A86C8F5C87C0EDBA = {CreatedOnToolsVersion = 16.4; }; }; }; buildConfigurationList = 7EF2517A8FE63F4681EC5EEA; compatibilityVersion = "Xcode 15.0"; developmentRegion = en; hasScannedForEncodings = 0; knownRegions = (en, Base, ); mainGroup = 518DA81DB9B99529C0C0AEBE; productRefGroup = 547D009064F7C3F13BEF3460; projectDirPath = ""; projectRoot = ""; targets = (E3435DDA2687639586BF0B70, 0661F517A86C8F5C87C0EDBA, ); };
+	};
+	rootObject = 46F86FAA6BBF9AC94A7E4595;
+}

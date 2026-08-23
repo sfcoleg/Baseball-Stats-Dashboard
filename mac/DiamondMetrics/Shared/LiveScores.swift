@@ -11,6 +11,12 @@ struct LiveGame: Identifiable {
     let isLive: Bool
     let isFinal: Bool
     let start: Date?
+
+    // MLB in-game situation (nil/false for NHL, or when not live).
+    var inning: Int? = nil
+    var inningHalf: String? = nil   // "Top", "Bottom", "Mid", "End"
+    var outs: Int? = nil
+    var onFirst = false, onSecond = false, onThird = false
 }
 
 enum LiveScores {
@@ -53,6 +59,7 @@ enum LiveScores {
             let state = ((g["status"] as? [String: Any])?["abstractGameState"] as? String) ?? ""
             let detailed = ((g["status"] as? [String: Any])?["detailedState"] as? String) ?? ""
             let line = g["linescore"] as? [String: Any]
+            let isLive = state == "Live"
             var status: String
             let (t, start) = shortTime(g["gameDate"] as? String)
             switch state {
@@ -62,11 +69,16 @@ enum LiveScores {
             case "Final": status = detailed == "Final" ? "Final" : detailed
             default: status = t
             }
+            let offense = isLive ? line?["offense"] as? [String: Any] : nil
             return LiveGame(
                 id: "mlb-\(g["gamePk"] as? Int ?? 0)",
                 away: awayTeam["abbreviation"] as? String ?? "", home: homeTeam["abbreviation"] as? String ?? "",
                 awayScore: away["score"] as? Int, homeScore: home["score"] as? Int,
-                status: status, isLive: state == "Live", isFinal: state == "Final", start: start)
+                status: status, isLive: isLive, isFinal: state == "Final", start: start,
+                inning: isLive ? line?["currentInning"] as? Int : nil,
+                inningHalf: isLive ? line?["inningState"] as? String : nil,
+                outs: isLive ? line?["outs"] as? Int : nil,
+                onFirst: offense?["first"] != nil, onSecond: offense?["second"] != nil, onThird: offense?["third"] != nil)
         }
     }
 

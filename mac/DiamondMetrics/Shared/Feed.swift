@@ -119,13 +119,7 @@ struct NHLGoalie: Codable, Identifiable {
 enum FeedClient {
     static let url = URL(string: "https://raw.githubusercontent.com/sfcoleg/Baseball-Stats-Dashboard/main/data/widget_feed.json")!
 
-    /// App Group container so the app and the widget share one cache.
-    /// Falls back to the caches dir if the group isn't configured yet.
-    static var cacheURL: URL {
-        let base = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: AppConfig.appGroup)
-            ?? FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("widget_feed.json")
-    }
+    static var cacheURL: URL { SharedStore.directory.appendingPathComponent("widget_feed.json") }
 
     static func cached() -> Feed? {
         guard let data = try? Data(contentsOf: cacheURL) else { return nil }
@@ -147,18 +141,52 @@ enum FeedClient {
     }
 }
 
-enum AppConfig {
-    /// Shared between the app and widget targets (set the same group on
-    /// both in Xcode > Signing & Capabilities > App Groups).
+/// The app and the widget extension are both sandboxed (required for
+/// WidgetKit extensions to register at all) and share one App Group
+/// container for the cached feed + settings JSON files.
+enum SharedStore {
     static let appGroup = "group.com.cromulentlabs.diamondmetrics"
-    static var defaults: UserDefaults { UserDefaults(suiteName: appGroup) ?? .standard }
+
+    static var directory: URL {
+        guard let dir = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else {
+            // Missing App Groups entitlement (e.g. a dev build without a
+            // signing team) — falls back to a per-process directory so the
+            // app still runs standalone, just without cross-process sharing.
+            let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("DiamondMetrics", isDirectory: true)
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            return dir
+        }
+        return dir
+    }
+}
+
+struct AppSettings: Codable {
+    var sport: Sport = .mlb
+    var favoriteTeam: String = ""
+}
+
+enum AppConfig {
+    private static var url: URL { SharedStore.directory.appendingPathComponent("settings.json") }
+
+    private static func load() -> AppSettings {
+        guard let data = try? Data(contentsOf: url), let s = try? JSONDecoder().decode(AppSettings.self, from: data) else {
+            return AppSettings()
+        }
+        return s
+    }
+
+    private static func save(_ s: AppSettings) {
+        guard let data = try? JSONEncoder().encode(s) else { return }
+        try? data.write(to: url, options: .atomic)
+    }
 
     static var sport: Sport {
-        get { Sport(rawValue: defaults.string(forKey: "sport") ?? "") ?? .mlb }
-        set { defaults.set(newValue.rawValue, forKey: "sport") }
+        get { load().sport }
+        set { var s = load(); s.sport = newValue; save(s) }
     }
     static var favoriteTeam: String {
-        get { defaults.string(forKey: "favoriteTeam") ?? "" }
-        set { defaults.set(newValue, forKey: "favoriteTeam") }
+        get { load().favoriteTeam }
+        set { var s = load(); s.favoriteTeam = newValue; save(s) }
     }
 }
