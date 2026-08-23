@@ -8,3 +8,8 @@ data/refresh.log
 .streamlit/secrets.toml
 ingest/wp_cache/
 ingest/park_cache/
+
+# Xcode per-user state and stray SQLite journals
+*.xcuserdatad/
+*.xcuserstate
+data/*.db-journal
