@@ -3,6 +3,7 @@ separate since headshot/logo CDNs, routes, and chart shapes are all
 different from the MLB side."""
 import math
 
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
@@ -143,42 +144,51 @@ def _corner_clip_y(x: float) -> float:
     return (hy - r) + math.sqrt(max(r * r - dx * dx, 0))
 
 
-def rink_outline(fig: "go.Figure") -> "go.Figure":
+def rink_outline(fig: "go.Figure", line_layer: str = "below") -> "go.Figure":
     """Draws a regulation NHL rink (to scale, in feet, center ice at 0,0)
     as plotly shapes: white ice with rounded boards, center red line, blue
     lines, goal lines, center + four faceoff circles with dots, the
     neutral-zone dots, both creases, goal frames, and the goalie
     trapezoids. Plot axes should be hidden with scaleanchor so 1 ft = 1 ft
-    in both directions."""
+    in both directions.
+
+    line_layer="above" puts the markings on top of traces, which is what a
+    heat map needs: the colored surface then sits ON the ice but UNDER the
+    lines, instead of burying the whole rink. The ice fill always stays
+    below so the surface can paint over it."""
     hy = RINK_WID / 2
     # Ice surface
     fig.add_shape(type="path", path=_path(_rink_outline_points()), fillcolor=ICE,
                   line=dict(color=BOARDS, width=3), layer="below")
+    if line_layer == "above":
+        # Re-draw the boards (outline only) so they aren't buried by the surface.
+        fig.add_shape(type="path", path=_path(_rink_outline_points()),
+                      line=dict(color=BOARDS, width=3), layer="above")
     # Blue lines (1 ft wide) and center red line
     for x in (-BLUE_LINE_X, BLUE_LINE_X):
-        fig.add_shape(type="rect", x0=x - 0.5, x1=x + 0.5, y0=-hy, y1=hy, fillcolor=BLUE, line_width=0, layer="below")
-    fig.add_shape(type="rect", x0=-0.5, x1=0.5, y0=-hy, y1=hy, fillcolor=RED, line_width=0, layer="below")
+        fig.add_shape(type="rect", x0=x - 0.5, x1=x + 0.5, y0=-hy, y1=hy, fillcolor=BLUE, line_width=0, layer=line_layer)
+    fig.add_shape(type="rect", x0=-0.5, x1=0.5, y0=-hy, y1=hy, fillcolor=RED, line_width=0, layer=line_layer)
     # Goal lines, clipped to the boards' corner radius
     gy = _corner_clip_y(GOAL_LINE_X)
     for x in (-GOAL_LINE_X, GOAL_LINE_X):
-        fig.add_shape(type="line", x0=x, x1=x, y0=-gy, y1=gy, line=dict(color=RED, width=2), layer="below")
+        fig.add_shape(type="line", x0=x, x1=x, y0=-gy, y1=gy, line=dict(color=RED, width=2), layer=line_layer)
     # Center circle + dot
-    fig.add_shape(type="circle", x0=-15, x1=15, y0=-15, y1=15, line=dict(color=BLUE, width=2), layer="below")
-    fig.add_shape(type="circle", x0=-1, x1=1, y0=-1, y1=1, fillcolor=BLUE, line_width=0, layer="below")
+    fig.add_shape(type="circle", x0=-15, x1=15, y0=-15, y1=15, line=dict(color=BLUE, width=2), layer=line_layer)
+    fig.add_shape(type="circle", x0=-1, x1=1, y0=-1, y1=1, fillcolor=BLUE, line_width=0, layer=line_layer)
     # End-zone faceoff circles + dots, and the neutral-zone dots
     for x in (-69, 69):
         for y in (-22, 22):
             fig.add_shape(type="circle", x0=x - 15, x1=x + 15, y0=y - 15, y1=y + 15,
-                          line=dict(color=RED, width=2), layer="below")
-            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer="below")
+                          line=dict(color=RED, width=2), layer=line_layer)
+            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer=line_layer)
             # Hash marks on each circle (2 ft long, 5.67 ft apart)
             for sx in (-1, 1):
                 for sy in (-1, 1):
                     fig.add_shape(type="line", x0=x + sx * 2.83, x1=x + sx * 2.83,
-                                  y0=y + sy * 15, y1=y + sy * 17, line=dict(color=RED, width=1.5), layer="below")
+                                  y0=y + sy * 15, y1=y + sy * 17, line=dict(color=RED, width=1.5), layer=line_layer)
     for x in (-20, 20):
         for y in (-22, 22):
-            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer="below")
+            fig.add_shape(type="circle", x0=x - 1, x1=x + 1, y0=y - 1, y1=y + 1, fillcolor=RED, line_width=0, layer=line_layer)
     # Creases (6-ft radius semicircles, 8 ft wide at the goal line), goal
     # frames (6 x 3.33 ft) and trapezoids — both ends
     for sign in (-1, 1):
@@ -190,11 +200,11 @@ def rink_outline(fig: "go.Figure") -> "go.Figure":
         crease = [(gx, -4.0)] + [(gx - sign * 6 * math.cos(math.radians(t)), 6 * math.sin(math.radians(t)))
                                  for t in [-half + 2 * half * i / 20 for i in range(21)]] + [(gx, 4.0)]
         fig.add_shape(type="path", path=_path(crease), fillcolor=CREASE_FILL,
-                      line=dict(color=RED, width=1.5), layer="below")
+                      line=dict(color=RED, width=1.5), layer=line_layer)
         fig.add_shape(type="rect", x0=gx, x1=gx + sign * 3.33, y0=-3, y1=3,
-                      fillcolor="rgba(214,59,59,0.15)", line=dict(color=RED, width=2), layer="below")
-        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=11, y1=14, line=dict(color=RED, width=1.5), layer="below")
-        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=-11, y1=-14, line=dict(color=RED, width=1.5), layer="below")
+                      fillcolor="rgba(214,59,59,0.15)", line=dict(color=RED, width=2), layer=line_layer)
+        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=11, y1=14, line=dict(color=RED, width=1.5), layer=line_layer)
+        fig.add_shape(type="line", x0=gx, x1=sign * 100, y0=-11, y1=-14, line=dict(color=RED, width=1.5), layer=line_layer)
     return fig
 
 
@@ -232,4 +242,99 @@ def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
         ))
     rink_layout(fig, height=470, top=40, title=dict(text=name, x=0.5, xanchor="center"),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.06, x=0))
+    return fig
+
+
+# --- SLOT expected-goals surfaces --------------------------------------------
+# Shot maps answer "where did the shots come from"; a surface answers "where
+# does this team generate (or concede) DANGER", which is a rate per game
+# spread smoothly over the ice rather than a pile of dots. Built with numpy
+# only — scipy isn't in requirements.txt and the deployed app shouldn't need
+# it just to blur a 100x42 grid.
+
+GRID_BIN = 2.0        # feet per cell
+SMOOTH_SIGMA = 2.6    # cells, so ~5 ft — enough to read as a surface without
+                      # smearing the slot into the point
+
+# Transparent where there's nothing, so the ice and its markings show through.
+SURFACE_SCALE = [
+    [0.00, "rgba(255,255,255,0)"], [0.12, "rgba(255,241,170,0.30)"],
+    [0.35, "rgba(255,206,86,0.60)"], [0.60, "rgba(249,146,48,0.78)"],
+    [0.82, "rgba(226,74,42,0.88)"], [1.00, "rgba(150,18,28,0.95)"],
+]
+# Diverging, transparent at zero: red = more than league average, blue = less.
+DIFF_SCALE = [
+    [0.00, "rgba(29,78,216,0.90)"], [0.30, "rgba(59,130,246,0.42)"],
+    [0.47, "rgba(255,255,255,0)"], [0.53, "rgba(255,255,255,0)"],
+    [0.70, "rgba(239,68,68,0.42)"], [1.00, "rgba(153,27,27,0.90)"],
+]
+
+
+def _gauss1d(sigma: float) -> "np.ndarray":
+    r = max(int(3 * sigma), 1)
+    k = np.exp(-0.5 * (np.arange(-r, r + 1) / sigma) ** 2)
+    return k / k.sum()
+
+
+def _smooth(grid: "np.ndarray", sigma: float) -> "np.ndarray":
+    """Separable Gaussian blur (two 1-D passes)."""
+    if sigma <= 0:
+        return grid
+    k = _gauss1d(sigma)
+    r = len(k) // 2
+    out = np.apply_along_axis(lambda m: np.convolve(m, k, mode="valid"), 0,
+                              np.pad(grid, ((r, r), (0, 0))))
+    return np.apply_along_axis(lambda m: np.convolve(m, k, mode="valid"), 1,
+                               np.pad(out, ((0, 0), (r, r))))
+
+
+def surface_grid(x, y, weights=None, games: int = 1, bin_size: float = GRID_BIN,
+                 sigma: float = SMOOTH_SIGMA):
+    """Bin shots into a rink-shaped grid, blur it, and express it per game.
+
+    Returns (x centers, y centers, Z) with Z indexed [y][x], which is what
+    plotly's Heatmap expects.
+    """
+    hx, hy = RINK_LEN / 2, RINK_WID / 2
+    xe = np.arange(-hx, hx + bin_size, bin_size)
+    ye = np.arange(-hy, hy + bin_size, bin_size)
+    z, _, _ = np.histogram2d(np.asarray(x, dtype=float), np.asarray(y, dtype=float),
+                             bins=[xe, ye], weights=weights)
+    z = _smooth(z, sigma) / max(games, 1)
+    return (xe[:-1] + xe[1:]) / 2, (ye[:-1] + ye[1:]) / 2, z.T
+
+
+def surface_chart(xc, yc, z, *, diverging: bool = False, zmax: float | None = None,
+                  unit: str = "xG per game", title: str = "", height: int = 470,
+                  x_range=(-6, 102)) -> "go.Figure":
+    """One SLOT surface on the regulation rink.
+
+    Cropped to the attacking half by default — every shot is normalized to
+    attack the right-hand goal (see ingest/nhl_shots.py), so the defensive
+    half is empty by construction and showing it would just shrink the part
+    that matters.
+    """
+    fig = go.Figure()
+    rink_outline(fig, line_layer="above")
+    if zmax is None:
+        # Scale to a high percentile, not the maximum. The cell right on the
+        # crease is worth several times any other spot on the ice, so keying
+        # the ramp to it flattens the entire rest of the surface into one
+        # pale wash with a single dark dot — the slot, the circles and the
+        # point all read as "nothing". Clipping the top of the ramp lets the
+        # actual danger gradient show; the crease simply saturates.
+        vals = np.abs(z)[np.abs(z) > 0]
+        zmax = float(np.percentile(vals, 99)) if vals.size else 1.0
+        zmax = zmax or float(np.nanmax(np.abs(z))) or 1.0
+    fig.add_trace(go.Heatmap(
+        x=xc, y=yc, z=z, zsmooth="best",
+        colorscale=DIFF_SCALE if diverging else SURFACE_SCALE,
+        zmin=-zmax if diverging else 0.0, zmax=zmax, zmid=0 if diverging else None,
+        colorbar=dict(title=dict(text=unit, side="right"), thickness=12, len=0.75,
+                      outlinewidth=0, tickfont=dict(size=10)),
+        hovertemplate="%{z:.4f} " + unit + "<extra></extra>",
+    ))
+    rink_layout(fig, height=height, top=40 if title else 10,
+                title=dict(text=title, x=0.5, xanchor="center") if title else None)
+    fig.update_xaxes(range=list(x_range))
     return fig

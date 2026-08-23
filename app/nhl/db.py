@@ -628,3 +628,76 @@ STAT_LABELS = {
     "goalsForAverage": "Team GF/GP", "shotsAgainstPer60": "SA/60", "xGA": "xGA",
     "xGA_high_danger": "HD xGA", "xGA_5v5": "xGA 5v5", "gsax": "GSAx", "gsax5v5": "GSAx 5v5",
 }
+
+
+# ---------------------------------------------------------------------------
+# SLOT expected goals (ingest/nhl_xg.py) — per-shot xG values plus the
+# game lookup they need. The app never loads the trained model itself; the
+# nightly ingest scores every shot into `shot_xg` and we just read numbers.
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_shot_xg(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Every SLOT-scored (unblocked) attempt for a season, with the shooting
+    team, the team it was against, and whether it went in.
+
+    Blocked shots never get an xG (see ingest/nhl_xg.py for why they're
+    excluded), so this is an inner join and returns Fenwick attempts only.
+    """
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                """SELECT s.gamePk, s.eventId, s.x, s.y, s.result, s.shotType,
+                          s.teamId, s.shooterId, s.goalieId, s.period,
+                          x.xg, g.homeTeamId, g.awayTeamId, g.date
+                   FROM shots s
+                   JOIN shot_xg x ON s.gamePk = x.gamePk AND s.eventId = x.eventId
+                   JOIN games g ON s.gamePk = g.gamePk
+                   WHERE s.season = ?""",
+                conn, params=(season,))
+        except (pd.errors.DatabaseError, sqlite3.OperationalError):
+            return pd.DataFrame()
+    if df.empty:
+        return df
+    from . import teams as _teams
+    df["is_goal"] = (df["result"] == "goal").astype(int)
+    # Who took it, and who it was against.
+    df["forTeamId"] = df["teamId"]
+    df["againstTeamId"] = df["awayTeamId"].where(df["teamId"] == df["homeTeamId"], df["homeTeamId"])
+    id_to_abbr = {tid: _teams.abbr_for_id(tid) for tid in
+                  pd.unique(pd.concat([df["forTeamId"], df["againstTeamId"]]))}
+    df["forTeam"] = df["forTeamId"].map(id_to_abbr)
+    df["againstTeam"] = df["againstTeamId"].map(id_to_abbr)
+    return df
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def team_games_played(season: int, db_mtime_val: float) -> dict:
+    """abbr -> games played, from the `games` table — the denominator for
+    every per-game rate on the Danger Zones page."""
+    if not NHL_DB_PATH.exists():
+        return {}
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            g = pd.read_sql("SELECT homeTeamId, awayTeamId FROM games WHERE season = ?",
+                            conn, params=(season,))
+        except (pd.errors.DatabaseError, sqlite3.OperationalError):
+            return {}
+    if g.empty:
+        return {}
+    from . import teams as _teams
+    counts = pd.concat([g["homeTeamId"], g["awayTeamId"]]).value_counts()
+    return {_teams.abbr_for_id(tid): int(n) for tid, n in counts.items() if _teams.abbr_for_id(tid)}
+
+
+def load_slot_metrics() -> dict:
+    """The SLOT model card — holdout metrics, calibration, feature list."""
+    path = Path(__file__).resolve().parent / "slot_model.json"
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text())
+    except Exception:  # noqa: BLE001
+        return {}
