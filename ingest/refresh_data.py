@@ -1381,6 +1381,15 @@ def fetch_and_store():
     else:
         print("nhl refresh skipped (offseason — resumes in October)")
 
+    # Widget feed (see widget_feed.py) — the compact JSON the native Mac
+    # app/widgets read from GitHub. Last, so it reflects everything above;
+    # non-fatal like the rest.
+    try:
+        from widget_feed import write as write_widget_feed
+        print(f"widget feed: {write_widget_feed()}")
+    except Exception as e:
+        print(f"widget feed failed (non-fatal): {e}")
+
     # Daily playoff-odds snapshot — the simulator's numbers are recomputed
     # nightly and were previously discarded, which made an "odds over time"
     # chart impossible to ever backfill. One row per team per day. Imports
