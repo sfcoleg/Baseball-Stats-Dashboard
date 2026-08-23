@@ -1,0 +1,8 @@
+# Extra packages the nightly ingest needs that the Streamlit app does NOT.
+# Kept out of requirements.txt on purpose: scikit-learn and its scipy
+# dependency add well over 100 MB to a deploy, and the app never imports
+# them — it reads SLOT expected-goals values from SQLite (see
+# ingest/nhl_xg.py::score_all) and win-model coefficients from JSON.
+-r requirements.txt
+scikit-learn==1.9.0
+joblib

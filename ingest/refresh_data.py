@@ -1378,6 +1378,22 @@ def fetch_and_store():
             nhl_geocode_run()
         except Exception as e:
             print(f"nhl geocode failed (non-fatal): {e}")
+        # Shot coordinates for the last few nights (see nhl_shots.py), then
+        # SLOT expected-goals values for them (see nhl_xg.py). Without this
+        # pair the shot maps and every xG number on the site freeze at
+        # whenever the last manual backfill ran. Scoring uses the shipped
+        # model artifact — it does NOT retrain, so published xG only changes
+        # when we deliberately retrain.
+        try:
+            from nhl_shots import update_recent as nhl_update_recent_shots
+            nhl_update_recent_shots()
+            try:
+                from nhl_xg import score_with_saved_model
+                score_with_saved_model()
+            except Exception as e:
+                print(f"nhl xg scoring failed (non-fatal): {e}")
+        except Exception as e:
+            print(f"nhl shots refresh failed (non-fatal): {e}")
     else:
         print("nhl refresh skipped (offseason — resumes in October)")
 

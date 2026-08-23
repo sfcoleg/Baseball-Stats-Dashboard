@@ -151,6 +151,68 @@ def update_latest() -> None:
     store_season(build_season(yr), yr)
 
 
+def recent_game_ids(days: int) -> list[int]:
+    """Regular-season game ids finished in the last `days` days."""
+    ids, cursor = [], (date.today() - timedelta(days=days)).isoformat()
+    stop = (date.today() + timedelta(days=1)).isoformat()
+    seen = set()
+    while cursor < stop:
+        payload = _with_retries(
+            lambda: requests.get(f"https://api-web.nhle.com/v1/schedule/{cursor}", timeout=20,
+                                 headers=HEADERS).json(),
+            f"schedule {cursor}")
+        if not payload:
+            break
+        for day in payload.get("gameWeek", []):
+            if day["date"] in seen or day["date"] >= stop:
+                continue
+            seen.add(day["date"])
+            for g in day.get("games", []):
+                if g.get("gameType") == 2 and g.get("gameState") in ("OFF", "FINAL"):
+                    ids.append(g["id"])
+        nxt = payload.get("nextStartDate")
+        if not nxt or nxt <= cursor:
+            break
+        cursor = nxt
+    return sorted(set(ids))
+
+
+def update_recent(days: int = 4) -> int:
+    """Re-pull just the last few days of games and upsert them.
+
+    The nightly refresh can't afford update_latest(), which re-fetches every
+    game of the season (~1,300 requests). A few days of overlap is enough to
+    catch last night's games plus anything the NHL corrected after the fact,
+    at a handful of requests.
+    """
+    yr = latest_season_start_year()
+    game_ids = recent_game_ids(days)
+    if not game_ids:
+        print(f"  no finished games in the last {days} days")
+        return 0
+    rows = []
+    for gid in game_ids:
+        rows.extend(fetch_game_shots(gid))
+    if not rows:
+        return 0
+    df = pd.DataFrame(rows)
+    df["season"] = yr
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        try:
+            existing = {r[1] for r in conn.execute("PRAGMA table_info(shots)")}
+        except sqlite3.OperationalError:
+            existing = set()
+        if existing and existing != set(df.columns):
+            print("  shots table schema differs — run a full backfill instead")
+            return 0
+        placeholders = ",".join("?" * len(game_ids))
+        conn.execute(f"DELETE FROM shots WHERE gamePk IN ({placeholders})", game_ids)
+        df.to_sql("shots", conn, if_exists="append", index=False)
+        conn.commit()
+    print(f"  {len(game_ids)} recent games, {len(df)} shots upserted")
+    return len(df)
+
+
 if __name__ == "__main__":
     if len(sys.argv) > 1:
         start = int(sys.argv[1])

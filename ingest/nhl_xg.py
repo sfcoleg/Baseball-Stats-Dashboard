@@ -353,6 +353,28 @@ def score_all(df: pd.DataFrame, model) -> None:
           f"(total {xg.sum():.1f} xG vs {int(df['is_goal'].sum()):,} actual goals)", flush=True)
 
 
+def score_with_saved_model() -> int:
+    """Re-score every attempt with the shipped model — no retraining.
+
+    This is the nightly path: new games arrive, and their shots need SLOT
+    values. Scoring the whole table rather than only the new rows keeps it
+    simple and costs seconds, and it means a corrected old game gets picked
+    up too. Retraining stays a deliberate, occasional act (run this module
+    directly) so the model behind published numbers doesn't quietly drift
+    night to night.
+    """
+    if not MODEL_PATH.exists():
+        print("  no SLOT model artifact — run `python ingest/nhl_xg.py` to train one first")
+        return 0
+    import joblib
+    model = joblib.load(MODEL_PATH)
+    df = load_attempts()
+    if df.empty:
+        return 0
+    score_all(df, model)
+    return len(df)
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-score", action="store_true", help="train and report only")

@@ -13,3 +13,6 @@ ingest/park_cache/
 *.xcuserdatad/
 *.xcuserstate
 data/*.db-journal
+
+# iCloud sync conflict copies ("nhl_xg 2.py")
+* [0-9].*
