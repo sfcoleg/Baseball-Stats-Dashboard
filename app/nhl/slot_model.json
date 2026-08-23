@@ -1,0 +1,113 @@
+{
+  "name": "SLOT",
+  "full_name": "Shot Location & Outcome Threat",
+  "trained_at": "2026-08-23T23:16:06+00:00",
+  "seasons": [
+    2025
+  ],
+  "n_attempts": 112091,
+  "n_goals": 8086,
+  "features": [
+    "dist",
+    "angle",
+    "x",
+    "abs_y",
+    "skater_diff",
+    "shooter_skaters",
+    "defender_skaters",
+    "empty_net",
+    "is_rebound",
+    "secs_since_last",
+    "period",
+    "is_ot",
+    "shot_type_code"
+  ],
+  "holdout": {
+    "first_game": 2025021050,
+    "first_date": "2026-03-14",
+    "n": 22313,
+    "n_goals": 1642,
+    "results": [
+      {
+        "model": "constant league rate",
+        "auc": 0.5,
+        "log_loss": 0.2628506092569573,
+        "brier": 0.06817727398819784
+      },
+      {
+        "model": "distance-only logistic",
+        "auc": 0.6799726219442457,
+        "log_loss": 0.2521078357798591,
+        "brier": 0.06648622469388277
+      },
+      {
+        "model": "SLOT",
+        "auc": 0.7804176427743246,
+        "log_loss": 0.223636887515792,
+        "brier": 0.06114296577781306
+      }
+    ],
+    "calibration": [
+      {
+        "bin": 1,
+        "n": 2232,
+        "predicted": 0.0053763964764596385,
+        "actual": 0.005376344086021506
+      },
+      {
+        "bin": 2,
+        "n": 2232,
+        "predicted": 0.011229853919701096,
+        "actual": 0.011200716845878136
+      },
+      {
+        "bin": 3,
+        "n": 2230,
+        "predicted": 0.019104249463763004,
+        "actual": 0.017040358744394617
+      },
+      {
+        "bin": 4,
+        "n": 2233,
+        "predicted": 0.028977361538511662,
+        "actual": 0.032691446484549934
+      },
+      {
+        "bin": 5,
+        "n": 2231,
+        "predicted": 0.041407178565599945,
+        "actual": 0.03989242492155984
+      },
+      {
+        "bin": 6,
+        "n": 2230,
+        "predicted": 0.056605383371221056,
+        "actual": 0.0484304932735426
+      },
+      {
+        "bin": 7,
+        "n": 2231,
+        "predicted": 0.07746134956435176,
+        "actual": 0.08068130883012102
+      },
+      {
+        "bin": 8,
+        "n": 2232,
+        "predicted": 0.10226690530085775,
+        "actual": 0.10259856630824372
+      },
+      {
+        "bin": 9,
+        "n": 2230,
+        "predicted": 0.14053832380573658,
+        "actual": 0.14035874439461885
+      },
+      {
+        "bin": 10,
+        "n": 2232,
+        "predicted": 0.24283724618059999,
+        "actual": 0.2576164874551971
+      }
+    ]
+  }
+}
