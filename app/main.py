@@ -72,36 +72,42 @@ localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 # could never be anything but dark. Those are now var(--dm-*) references
 # resolved here, so both themes come from one place.
 #
-# The dark values follow prefers-color-scheme, which is also how Streamlit
-# picks between [theme.light] and [theme.dark] in config.toml, so the two
-# stay in step. (A visitor who overrides the theme in Streamlit's own menu
-# rather than at the OS level is the one case where they can diverge.)
+# Which set to emit comes from st.context.theme, NOT a prefers-color-scheme
+# media query. Streamlit's active theme and the OS preference can disagree —
+# a visitor on a dark OS who picks Light in Streamlit's own menu was getting
+# a light page with dark cards on it, because the media query still matched.
+# st.context.theme.type reports the theme Streamlit actually painted.
+_THEME_TOKENS = {
+    "light": (
+        "--dm-text:#0C1725; --dm-dim:#71829A; --dm-line:#E4EAF3;"
+        "--dm-surface:#FFFFFF; --dm-surface-mute:#F4F7FB; --dm-card:#F5FAFF;"
+        "--dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
+        "--dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
+        "--dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
+        "--dm-green:#2E7D32; --dm-green-soft:#E6F4E7;"
+    ),
+    "dark": (
+        "--dm-text:#EFF3F9; --dm-dim:#9AA8BD; --dm-line:#2E3B4E;"
+        "--dm-surface:#1E2735; --dm-surface-mute:#151C28; --dm-card:#1E2735;"
+        "--dm-blue:#6FAFE8; --dm-blue-text:#9BCAF3; --dm-blue-soft:#22334A;"
+        "--dm-amber:#F5B942; --dm-amber-soft:#3A2F16;"
+        "--dm-red:#F87171; --dm-red-soft:#3A1F1F;"
+        "--dm-green:#7CFC9A; --dm-green-soft:#16301C;"
+    ),
+}
+_theme_obj = getattr(getattr(st, "context", None), "theme", None)
+_theme_type = getattr(_theme_obj, "type", None) or "light"
 st.markdown(
-    "<style>"
-    ":root{"
-    "  --dm-text:#0C1725; --dm-dim:#71829A; --dm-line:#E4EAF3;"
-    "  --dm-surface:#FFFFFF; --dm-surface-mute:#F4F7FB;"
-    "  --dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
-    "  --dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
-    "  --dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
-    "  --dm-green:#2E7D32; --dm-green-soft:#E6F4E7;"
-    "}"
-    "@media (prefers-color-scheme: dark){:root{"
-    "  --dm-text:#EFF3F9; --dm-dim:#9AA8BD; --dm-line:#2E3B4E;"
-    "  --dm-surface:#1E2735; --dm-surface-mute:#151C28;"
-    "  --dm-blue:#6FAFE8; --dm-blue-text:#9BCAF3; --dm-blue-soft:#22334A;"
-    "  --dm-amber:#F5B942; --dm-amber-soft:#3A2F16;"
-    "  --dm-red:#F87171; --dm-red-soft:#3A1F1F;"
-    "  --dm-green:#7CFC9A; --dm-green-soft:#16301C;"
-    "}}"
-    "</style>",
+    f"<style>:root{{{_THEME_TOKENS.get(_theme_type, _THEME_TOKENS['light'])}}}</style>",
     unsafe_allow_html=True,
 )
 
 # Component styling — the visual language from the design studies, applied
 # once here so every page inherits it rather than each re-inventing a card.
 # Streamlit's own containers/metrics are restyled in place; anything we hand-
-# write (section headings, game cards) gets a dm-* class.
+# write (section headings, game cards) gets a dm-* class. The raised-card
+# shadow is light-theme only — on a dark ground it just muddies the edge.
+_CARD_SHADOW = "box-shadow:0 1px 2px rgba(12,23,37,0.06);" if _theme_type == "light" else ""
 st.markdown(
     "<style>"
     # --- section headings: accent kicker + condensed uppercase title -------
@@ -115,14 +121,11 @@ st.markdown(
     "[data-testid='stMain']{font-variant-numeric:tabular-nums;}"
     # --- bordered containers read as cards, not outlines -------------------
     "[data-testid='stMain'] [data-testid='stVerticalBlockBorderWrapper']{"
-    "  background:var(--dm-surface);border-radius:12px;"
-    "  box-shadow:0 1px 2px rgba(12,23,37,0.06);}"
-    "@media (prefers-color-scheme: dark){"
-    "  [data-testid='stMain'] [data-testid='stVerticalBlockBorderWrapper']{box-shadow:none;}}"
+    f"  background:var(--dm-surface);border-radius:12px;{_CARD_SHADOW}}}"
     # --- game cards: left rail, condensed team names, big score ------------
-    ".dm-game{flex:0 0 auto;width:176px;background:var(--dm-surface);"
+    ".dm-game{flex:0 0 auto;width:176px;background:var(--dm-card);"
     "  border-left:4px solid var(--dm-blue);border-radius:0 10px 10px 0;"
-    "  padding:11px 14px;margin-right:10px;box-shadow:0 1px 2px rgba(12,23,37,0.06);}"
+    f"  padding:11px 14px;margin-right:10px;{_CARD_SHADOW}}}"
     ".dm-game .dm-stat{font-size:0.64rem;letter-spacing:1.1px;text-transform:uppercase;"
     "  color:var(--dm-dim);margin-bottom:8px;}"
     ".dm-game .dm-team{font-family:'Archivo Narrow',sans-serif;font-weight:600;"
@@ -155,7 +158,7 @@ st.markdown(
     "  line-height: 1.6rem !important;"
     "  letter-spacing: 1px;"
     "  margin: 0 !important;"
-    f"  color: {style.DIAMOND_COLOR} !important;"
+    f"  color: {'#9BCAF3' if _theme_type == 'dark' else style.DIAMOND_COLOR} !important;"
     "  text-shadow: none;"
     "}"
     ".diamond-header {"
@@ -163,7 +166,6 @@ st.markdown(
     "  display: flex; align-items: center; gap: 8px; padding-left: 4.5rem;"
     "  transition: left 0.2s ease, padding-left 0.2s ease;"
     "}"
-    "@media (prefers-color-scheme: dark){ .diamond-title { color: #9BCAF3 !important; } }"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
     f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
     # When the sidebar is collapsed, it stops reserving its 230px column
