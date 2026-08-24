@@ -30,13 +30,16 @@ Methodology:
     same discipline as train_win_model.py.
 """
 import json
+import sqlite3
 import sys
+from datetime import date
 from pathlib import Path
 
 import requests
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
 OUT_PATH = Path(__file__).resolve().parent.parent / "app" / "nhl" / "elo_model.json"
+NHL_DB_PATH = Path(__file__).resolve().parent.parent / "data" / "nhl.db"
 
 RELOCATIONS = {"UTA": "ARI"}  # new_abbr -> old_abbr, rating inherited on first appearance
 REGRESSION = 0.75
@@ -104,18 +107,26 @@ def expected_home_win(elo_home: float, elo_away: float, home_adv: float) -> floa
     return 1.0 / (1.0 + 10 ** (((elo_away) - (elo_home + home_adv)) / 400))
 
 
-def run_elo(all_season_games: list[list[dict]], k: float, home_adv: float):
-    """Processes seasons in order; returns (final_ratings, predictions) where
-    predictions is [(is_home_win, predicted_home_win_prob), ...] for every
-    game in the LAST season only (the held-out one)."""
+def run_elo(all_season_games: list[list[dict]], k: float, home_adv: float, record_history: bool = False):
+    """Processes seasons in order; returns (final_ratings, predictions, history)
+    where predictions is [(is_home_win, predicted_home_win_prob), ...] for
+    every game in the LAST season only (the held-out one), and history (only
+    populated if record_history) is [{date, season, team, rating}, ...] — one
+    row per team per game, its rating AFTER that result. Walking every game
+    to reach final ratings already computes this trajectory for free; the
+    only reason it wasn't kept before is that fit_and_write() only cared
+    about the endpoint. It's what powers a strength-over-time chart."""
     ratings: dict[str, float] = {}
-    predictions = []
+    predictions, history = [], []
     for season_idx, games in enumerate(all_season_games):
         if season_idx > 0:
             for team in list(ratings):
                 ratings[team] = START_RATING + REGRESSION * (ratings[team] - START_RATING)
         is_holdout = season_idx == len(all_season_games) - 1
+        season_year = None
         for g in games:
+            if season_year is None and g["date"]:
+                season_year = int(g["date"][:4]) if g["date"][5:7] >= "07" else int(g["date"][:4]) - 1
             elo_home, elo_away = _get_rating(ratings, g["home"]), _get_rating(ratings, g["away"])
             p_home = expected_home_win(elo_home, elo_away, home_adv)
             home_won = g["home_score"] > g["away_score"]
@@ -127,7 +138,10 @@ def run_elo(all_season_games: list[list[dict]], k: float, home_adv: float):
             delta = k * mov * (actual - p_home)
             ratings[g["home"]] = elo_home + delta
             ratings[g["away"]] = elo_away - delta
-    return ratings, predictions
+            if record_history:
+                history.append({"date": g["date"], "season": season_year, "team": g["home"], "rating": ratings[g["home"]]})
+                history.append({"date": g["date"], "season": season_year, "team": g["away"], "rating": ratings[g["away"]]})
+    return ratings, predictions, history
 
 
 def brier_and_accuracy(predictions: list[tuple[bool, float]]) -> tuple[float, float]:
@@ -163,7 +177,7 @@ def fit_and_write(start_year: int, end_year: int) -> None:
     for k in (3, 5, 7, 10, 15, 20, 25, 30):
         row = []
         for home_adv in (0, 15, 25, 40, 50, 65, 80):
-            _, preds = run_elo(validation_games, k, home_adv)
+            _, preds, _ = run_elo(validation_games, k, home_adv)
             brier, acc = brier_and_accuracy(preds)
             row.append(f"adv{home_adv}:{brier:.4f}/{acc:.3f}")
             if best is None or brier < best[0]:
@@ -173,7 +187,7 @@ def fit_and_write(start_year: int, end_year: int) -> None:
     print(f"  picked: K={best_k}, home_adv={best_home_adv} "
           f"(validation Brier={val_brier:.4f}, accuracy={val_acc:.3f})", flush=True)
 
-    final_ratings, test_preds = run_elo(all_games, best_k, best_home_adv)
+    final_ratings, test_preds, history = run_elo(all_games, best_k, best_home_adv, record_history=True)
     test_brier, test_acc = brier_and_accuracy(test_preds)
     print(f"  true holdout ({end_year}-{end_year + 1}): Brier={test_brier:.4f}, accuracy={test_acc:.3f}", flush=True)
 
@@ -186,12 +200,73 @@ def fit_and_write(start_year: int, end_year: int) -> None:
     OUT_PATH.write_text(json.dumps({
         "ratings": {k_: round(v, 1) for k_, v in sorted(final_ratings.items())},
         "k_factor": best_k, "home_advantage": best_home_adv,
+        "trained_from": start_year,
         "trained_through": f"{end_year}-{end_year + 1}",
+        "current_through": f"{end_year}-{end_year + 1}",
         "holdout_season": f"{end_year}-{end_year + 1}",
         "holdout_brier": round(test_brier, 4), "holdout_accuracy": round(test_acc, 4),
         "n_holdout_games": len(test_preds),
     }, indent=2))
     print(f"Wrote {OUT_PATH}")
+    _store_history(history)
+
+
+def _store_history(history: list[dict]) -> None:
+    """Every {date, season, team, rating} row from the most recent run_elo()
+    call, replacing whatever was there — this is a full replay each time
+    (see advance_ratings), not an incremental log, so overwrite rather than
+    append. Powers a team-strength-over-time chart."""
+    if not history:
+        return
+    NHL_DB_PATH.parent.mkdir(exist_ok=True)
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        conn.execute("DROP TABLE IF EXISTS elo_history")
+        conn.execute("CREATE TABLE elo_history (date TEXT, season INTEGER, team TEXT, rating REAL)")
+        conn.executemany("INSERT INTO elo_history VALUES (?,?,?,?)",
+                         [(h["date"], h["season"], h["team"], round(h["rating"], 1)) for h in history])
+        conn.execute("CREATE INDEX idx_elo_history_team ON elo_history(team, date)")
+        conn.commit()
+    print(f"  wrote {len(history):,} elo_history rows", flush=True)
+
+
+def latest_season_start_year() -> int:
+    today = date.today()
+    return today.year if today.month >= 10 else today.year - 1
+
+
+def advance_ratings() -> None:
+    """Nightly step: bring ratings current by replaying results through
+    today at the ALREADY-VALIDATED (K, home_advantage) — never retuned here,
+    since re-fitting nightly would let the model quietly drift out from
+    under its own reported holdout accuracy. A deliberate re-fit (running
+    this module directly) is a separate, occasional act.
+
+    This is a full replay from the model's original training start through
+    the current season, not an incremental update — season_results() is
+    already a handful of requests per season (the season's games, walked
+    week by week), so a full replay is cheap and, unlike trying to resume
+    from a partial state, can't drift from what fit_and_write() would
+    produce from scratch."""
+    if not OUT_PATH.exists():
+        print("  no elo_model.json — run this module directly to do the initial fit")
+        return
+    model = json.loads(OUT_PATH.read_text())
+    start_year = model.get("trained_from", 2021)
+    current = latest_season_start_year()
+
+    all_games = [season_results(yr) for yr in range(start_year, current + 1)]
+    n_games = sum(len(g) for g in all_games)
+    ratings, _, history = run_elo(all_games, model["k_factor"], model["home_advantage"], record_history=True)
+    for new_abbr, old_abbr in RELOCATIONS.items():
+        if new_abbr in ratings:
+            ratings.pop(old_abbr, None)
+
+    model["ratings"] = {k_: round(v, 1) for k_, v in sorted(ratings.items())}
+    model["current_through"] = f"{current}-{current + 1}"
+    OUT_PATH.write_text(json.dumps(model, indent=2))
+    print(f"  advanced ratings through {n_games:,} games ({start_year}-{current + 1}), "
+          f"wrote {OUT_PATH}", flush=True)
+    _store_history(history)
 
 
 if __name__ == "__main__":

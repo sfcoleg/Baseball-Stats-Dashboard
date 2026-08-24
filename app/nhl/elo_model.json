@@ -39,5 +39,6 @@
   "holdout_season": "2025-2026",
   "holdout_brier": 0.2507,
   "holdout_accuracy": 0.523,
-  "n_holdout_games": 1394
+  "n_holdout_games": 1394,
+  "current_through": "2025-2026"
 }

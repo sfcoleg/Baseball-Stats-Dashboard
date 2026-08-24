@@ -1360,6 +1360,18 @@ def fetch_and_store():
             nhl_update_latest()
         except Exception as e:
             print(f"nhl refresh failed (non-fatal): {e}")
+        # Bring Elo ratings current (see nhl_elo.py::advance_ratings) — the
+        # model's whole mechanism is updating rating game by game, so without
+        # this every NHL win probability on the site (Today's Games,
+        # Schedule, Standings, a team's upcoming slate) stays pinned to
+        # wherever the last manual training run left off, never reflecting a
+        # team getting hot or cold in-season. Replays results at the
+        # already-validated K/home-advantage; does not retune them.
+        try:
+            from nhl_elo import advance_ratings as nhl_advance_elo
+            nhl_advance_elo()
+        except Exception as e:
+            print(f"nhl elo advance failed (non-fatal): {e}")
         # Yesterday's per-game skater/goalie log (see nhl_daily_log.py) —
         # powers Home's daily Milestones and Headliners trending. Same
         # in-season gate and non-fatal guard as the season-stat refresh
