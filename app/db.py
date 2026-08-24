@@ -3959,3 +3959,35 @@ def db_mtime() -> float:
     return DB_PATH.stat().st_mtime if DB_PATH.exists() else 0.0
 
 
+
+
+# ---------------------------------------------------------------------------
+# P.R.O.P.+ (ingest/mlb_prop.py) — our pitch-quality model. Like the NHL's
+# SLOT, the app only ever reads scored values from SQLite; it never loads
+# the trained model, so scikit-learn stays out of the deployed app.
+# ---------------------------------------------------------------------------
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_pitcher_prop(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """One usage-weighted PROP+ per pitcher for a season."""
+    if not DB_PATH.exists():
+        return pd.DataFrame(columns=["mlbID", "prop_plus", "pitches", "pa"])
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT mlbID, prop_plus, pitches, pa FROM pitcher_prop "
+                               "WHERE season = ?", conn, params=(season,))
+        except (pd.errors.DatabaseError, sqlite3.OperationalError):
+            return pd.DataFrame(columns=["mlbID", "prop_plus", "pitches", "pa"])
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_pitch_prop(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Every individual pitch grade for a season — one row per pitcher per
+    pitch type, for the per-arsenal breakdown."""
+    if not DB_PATH.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql("SELECT * FROM pitch_prop WHERE season = ?", conn, params=(season,))
+        except (pd.errors.DatabaseError, sqlite3.OperationalError):
+            return pd.DataFrame()

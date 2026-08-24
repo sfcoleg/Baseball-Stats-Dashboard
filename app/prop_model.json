@@ -1,0 +1,62 @@
+{
+  "name": "PROP+",
+  "full_name": "Pitch Raw Output Profile",
+  "trained_at": "2026-08-24T03:00:20+00:00",
+  "seasons": [
+    2020,
+    2021,
+    2022,
+    2023,
+    2024,
+    2025,
+    2026
+  ],
+  "min_pa": 25,
+  "n": 11967,
+  "features": [
+    "velocity",
+    "vert_break",
+    "horz_break",
+    "d_vert",
+    "d_horz",
+    "spin_rate",
+    "velo_vs_fb",
+    "dvert_vs_fb",
+    "dhorz_vs_fb",
+    "pitch_type_code",
+    "hand_code"
+  ],
+  "holdout": {
+    "seasons": [
+      2025,
+      2026
+    ],
+    "n": 3642,
+    "results": [
+      {
+        "model": "league average",
+        "r2": -0.00029095913599830325,
+        "rmse": 1.433875332690741
+      },
+      {
+        "model": "pitch-type average",
+        "r2": -0.0033099979465696094,
+        "rmse": 1.436037535503496
+      },
+      {
+        "model": "PROP+",
+        "r2": 0.026997144109301652,
+        "rmse": 1.4141819156302444
+      }
+    ]
+  },
+  "stickiness": {
+    "pairs": 6594,
+    "prop_to_next": 0.2719527276309075,
+    "results_to_next": 0.18133770623062365
+  },
+  "scale": {
+    "mean": 0.13886555698308403,
+    "sd": 0.3678431667665378
+  }
+}

@@ -160,8 +160,22 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "xBA_against", "xSLG_against",
+    # PROP+ (our pitch-quality model, ingest/mlb_prop.py) rides here rather
+    # than in Advanced: it's built from the physical shape of a pitch, which
+    # is what the rest of this tab is about. Blank for seasons before 2020,
+    # where Statcast spin rate isn't available to grade with.
+    sc_rows = table_rows
+    prop = db.load_pitcher_prop(season, db.db_mtime())
+    if not prop.empty:
+        sc_rows = sc_rows.merge(
+            prop[["mlbID", "prop_plus"]].astype({"mlbID": sc_rows["mlbID"].dtype})
+            .rename(columns={"prop_plus": "PROP+"}),
+            on="mlbID", how="left")
+        sc_rows["PROP+"] = pd.to_numeric(sc_rows["PROP+"], errors="coerce")
+    else:
+        sc_rows = sc_rows.assign(**{"PROP+": float("nan")})
+    display = teams.add_team_abbr(sc_rows)[
+        ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "PROP+", "xBA_against", "xSLG_against",
          "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
          "fastball_velo", "induced_chase_pct"]
     ].rename(columns={
@@ -177,12 +191,13 @@ with statcast_tab:
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ERA diff", "Fastball Velo", "Induced Chase%"],
+            higher_better=["ERA diff", "PROP+", "Fastball Velo", "Induced Chase%"],
             lower_better=["ERA", "xERA", "xBA Against", "xSLG Against", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}", "xBA Against": "{:.3f}",
+                "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}", "PROP+": "{:.0f}",
+                "xBA Against": "{:.3f}",
                 "xSLG Against": "{:.3f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}",
                 "Barrel% Against": "{:.1f}", "Fastball Velo": "{:.1f}", "Induced Chase%": "{:.1f}",
             },

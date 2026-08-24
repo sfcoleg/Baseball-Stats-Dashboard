@@ -1397,6 +1397,22 @@ def fetch_and_store():
     else:
         print("nhl refresh skipped (offseason — resumes in October)")
 
+    # P.R.O.P.+ pitch grades (see mlb_prop.py) — re-scored from the shipped
+    # model artifact after the nightly pitch_arsenal refresh. Like the NHL's
+    # SLOT this does NOT retrain, so published grades only move when we
+    # deliberately retrain.
+    try:
+        from mlb_prop import load_arsenal, score, store
+        import joblib
+        from mlb_prop import MODEL_PATH as PROP_MODEL_PATH
+        if PROP_MODEL_PATH.exists():
+            scored, _ = score(load_arsenal(), joblib.load(PROP_MODEL_PATH))
+            store(scored)
+        else:
+            print("prop+ scoring skipped (no model artifact — run ingest/mlb_prop.py)")
+    except Exception as e:
+        print(f"prop+ scoring failed (non-fatal): {e}")
+
     # Widget feed (see widget_feed.py) — the compact JSON the native Mac
     # app/widgets read from GitHub. Last, so it reflects everything above;
     # non-fatal like the rest.
