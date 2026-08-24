@@ -23,6 +23,12 @@ if not seasons:
 
 season = st.selectbox("Season", seasons, format_func=ndb.season_label)
 skaters = ndb.load_skaters(season, mtime)
+# SLOT (our own expected-goals model, ingest/nhl_xg.py) — only present for
+# seasons whose shot coordinates have been backfilled and scored.
+slot = ndb.skater_slot(season, mtime)
+has_slot = not slot.empty
+if has_slot:
+    skaters = skaters.merge(slot, on="playerId", how="left")
 skaters["Tm"] = skaters["teamAbbrevs"].map(nteams._primary)
 # Age at the season's traditional Oct 1 reference date.
 skaters["Age"] = (
@@ -37,11 +43,13 @@ with c2:
 with c3:
     min_gp = st.slider("Minimum GP", 0, int(skaters["gamesPlayed"].max()), 20)
 with c4:
-    sort_by = st.selectbox(
-        "Sort by", ["points", "goals", "assists", "ixG", "xGF_pct_5v5", "satPercentage",
-                    "pointsPer605v5", "hits", "blockedShots", "timeOnIcePerGame"],
-        format_func=lambda c: ndb.STAT_LABELS.get(c, c),
-    )
+    sort_options = ["points", "goals", "assists", "ixG"]
+    if has_slot:
+        sort_options += ["slot_xg", "slot_above"]
+    sort_options += ["xGF_pct_5v5", "satPercentage", "pointsPer605v5", "hits",
+                     "blockedShots", "timeOnIcePerGame"]
+    sort_by = st.selectbox("Sort by", sort_options,
+                           format_func=lambda c: ndb.STAT_LABELS.get(c, c))
 
 filtered = skaters[skaters["gamesPlayed"] >= min_gp]
 if team != "All":
@@ -89,23 +97,30 @@ with adv_tab:
     st.caption(
         "Possession and expected goals. CF%/FF% and the per-60 rates are 5v5 from the NHL; "
         "xG (a skater's own expected goals) and xGF% (share of expected goals while on ice) are "
-        "from MoneyPuck's public model. G − xG = finishing above expectation. PDO = on-ice "
-        "shooting% + save% (luck gauge, regresses to ~100)."
+        "from MoneyPuck's public model. G − xG = finishing above expectation. "
+        + ("SLOT is our own expected-goals model (Shot Location & Outcome Threat) — it rates every "
+           "unblocked attempt from where and how it was taken, the strength state, and whether it "
+           "came off a rebound, with no player identity as an input, so G − SLOT is finishing "
+           "talent. It's a second opinion alongside MoneyPuck's, not a replacement. " if has_slot else "")
+        + "PDO = on-ice shooting% + save% (luck gauge, regresses to ~100)."
     )
     filtered["finishing"] = filtered["goals"] - filtered["ixG"]
     ndb.STAT_LABELS.setdefault("finishing", "G − xG")
+    slot_cols = ["slot_xg", "slot_above"] if has_slot else []
     _table(
         ["skaterFullName", "Tm", "positionCode", "gamesPlayed", "goals", "ixG", "finishing",
+         *slot_cols,
          "ixG_high_danger", "xGF_pct_5v5", "office_xGF_pct", "satPercentage", "satRelative",
          "usatPercentage", "skaterShootingPlusSavePct5v5", "zoneStartPct5v5", "goalsPer605v5",
          "pointsPer605v5", "primaryAssistsPer605v5", "hits", "blockedShots", "takeaways",
          "giveaways", "penaltiesDrawn", "netPenaltiesPer60"],
-        higher_better=["ixG", "finishing", "ixG_high_danger", "xGF_pct_5v5", "satPercentage",
+        higher_better=[*slot_cols, "ixG", "finishing", "ixG_high_danger", "xGF_pct_5v5", "satPercentage",
                        "satRelative", "usatPercentage", "goalsPer605v5", "pointsPer605v5",
                        "primaryAssistsPer605v5", "hits", "blockedShots", "takeaways",
                        "penaltiesDrawn", "netPenaltiesPer60"],
         lower_better=["giveaways"],
-        precision={"ixG": "{:.1f}", "finishing": "{:+.1f}", "ixG_high_danger": "{:.1f}",
+        precision={"ixG": "{:.1f}", "finishing": "{:+.1f}", "slot_xg": "{:.1f}",
+                   "slot_above": "{:+.1f}", "ixG_high_danger": "{:.1f}",
                    "xGF_pct_5v5": "{:.1f}", "office_xGF_pct": "{:.1f}", "satPercentage": "{:.1f}",
                    "satRelative": "{:+.1f}", "usatPercentage": "{:.1f}",
                    "skaterShootingPlusSavePct5v5": "{:.1f}", "zoneStartPct5v5": "{:.1f}",

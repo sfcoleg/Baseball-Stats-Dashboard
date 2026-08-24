@@ -326,7 +326,6 @@ NHL_PAGES = [
     st.Page("nhl/pages/schedule.py", title="NHL Schedule", url_path="nhl-schedule"),
     st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
-    st.Page("nhl/pages/danger.py", title="NHL Danger Zones", url_path="nhl-danger"),
     st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
     st.Page("nhl/pages/digest.py", title="NHL Daily Digest", url_path="nhl-digest"),
     st.Page("nhl/pages/game.py", title="NHL Game Center", url_path="nhl-game"),  # reached from Today's Games / Digest, not the nav

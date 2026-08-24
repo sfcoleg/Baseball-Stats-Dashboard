@@ -601,7 +601,7 @@ STAT_LABELS = {
     "penaltyMinutes": "PIM", "ppGoals": "PP G", "ppPoints": "PP P", "shGoals": "SH G", "shPoints": "SH P",
     "gameWinningGoals": "GWG", "otGoals": "OTG", "shots": "S", "shootingPct": "S%",
     "timeOnIcePerGame": "TOI/GP", "faceoffWinPct": "FO%",
-    "ixG": "xG", "ixG_5v5": "xG 5v5", "ixG_high_danger": "HD xG", "high_danger_shots": "HD Shots",
+    "ixG": "xG", "slot_xg": "SLOT", "slot_above": "G − SLOT", "ixG_5v5": "xG 5v5", "ixG_high_danger": "HD xG", "high_danger_shots": "HD Shots",
     "xGF_pct_5v5": "xGF% 5v5", "xGF_pct_all": "xGF%", "office_xGF_pct": "Off-ice xGF%",
     "onice_xGF": "On-ice xGF", "onice_xGA": "On-ice xGA",
     "satPercentage": "CF%", "satRelative": "CF% Rel", "usatPercentage": "FF%", "usatRelative": "FF% Rel",
@@ -671,33 +671,17 @@ def load_shot_xg(season: int, db_mtime_val: float) -> pd.DataFrame:
     df["forTeam"] = df["forTeamId"].map(id_to_abbr)
     df["againstTeam"] = df["againstTeamId"].map(id_to_abbr)
     return df
-
-
 @st.cache_data(show_spinner=False, max_entries=4)
-def team_games_played(season: int, db_mtime_val: float) -> dict:
-    """abbr -> games played, from the `games` table — the denominator for
-    every per-game rate on the Danger Zones page."""
-    if not NHL_DB_PATH.exists():
-        return {}
-    with sqlite3.connect(NHL_DB_PATH) as conn:
-        try:
-            g = pd.read_sql("SELECT homeTeamId, awayTeamId FROM games WHERE season = ?",
-                            conn, params=(season,))
-        except (pd.errors.DatabaseError, sqlite3.OperationalError):
-            return {}
-    if g.empty:
-        return {}
-    from . import teams as _teams
-    counts = pd.concat([g["homeTeamId"], g["awayTeamId"]]).value_counts()
-    return {_teams.abbr_for_id(tid): int(n) for tid, n in counts.items() if _teams.abbr_for_id(tid)}
-
-
-def load_slot_metrics() -> dict:
-    """The SLOT model card — holdout metrics, calibration, feature list."""
-    path = Path(__file__).resolve().parent / "slot_model.json"
-    if not path.exists():
-        return {}
-    try:
-        return json.loads(path.read_text())
-    except Exception:  # noqa: BLE001
-        return {}
+def skater_slot(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Per-skater SLOT totals, keyed by playerId so they merge onto the
+    skaters table: unblocked attempts, our expected goals, and goals above
+    expected (finishing). Empty for seasons with no shot coordinates yet."""
+    df = load_shot_xg(season, db_mtime_val)
+    cols = ["playerId", "slot_shots", "slot_xg", "slot_above"]
+    if df.empty:
+        return pd.DataFrame(columns=cols)
+    g = (df.groupby("shooterId")
+           .agg(slot_shots=("xg", "size"), slot_xg=("xg", "sum"), slot_goals=("is_goal", "sum"))
+           .reset_index())
+    g["slot_above"] = g["slot_goals"] - g["slot_xg"]
+    return g.rename(columns={"shooterId": "playerId"})[cols]
