@@ -248,4 +248,4 @@ def glossary_link():
         "</style>",
         unsafe_allow_html=True,
     )
-    st.page_link("nhl/pages/glossary.py", label="What do these stats mean?", use_container_width=False)
+    st.page_link("nhl/pages/glossary.py", label="ℹ️ What do these stats mean?", use_container_width=False)
