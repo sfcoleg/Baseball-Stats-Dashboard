@@ -330,6 +330,7 @@ NHL_PAGES = [
     st.Page("nhl/pages/digest.py", title="NHL Daily Digest", url_path="nhl-digest"),
     st.Page("nhl/pages/game.py", title="NHL Game Center", url_path="nhl-game"),  # reached from Today's Games / Digest, not the nav
     st.Page("nhl/pages/player.py", title="NHL Player", url_path="nhl-player"),  # deep-link only, not in nav loop
+    st.Page("nhl/pages/glossary.py", title="NHL Glossary", url_path="nhl-glossary"),  # linked from the stat pages, not the nav
 ]
 
 # Every page from both sports is registered (so every URL resolves), but
@@ -354,7 +355,7 @@ else:
     # but off the sidebar until the season starts — every section is
     # empty over the summer. Flip to True in October.
     SHOW_NHL_DIGEST = False
-    _nhl_hidden = {"NHL Player", "NHL Game Center"} | (set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"})
+    _nhl_hidden = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"})
     for p in NHL_PAGES:
         if p.title not in _nhl_hidden:
             st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))

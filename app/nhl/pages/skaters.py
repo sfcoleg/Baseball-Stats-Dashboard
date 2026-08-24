@@ -10,10 +10,12 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nhl import db as ndb
+from nhl import style as nstyle
 from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Skaters | Diamond Metrics", layout="wide")
 st.title("Skaters")
+nstyle.glossary_link()
 
 mtime = ndb.nhl_db_mtime()
 seasons = ndb.skater_seasons(mtime)
@@ -91,19 +93,8 @@ with std_tab:
         precision={"pointsPerGame": "{:.2f}", "shootingPct": "{:.1f}", "timeOnIcePerGame": "{:.0f}",
                    "faceoffWinPct": "{:.1f}"},
     )
-    st.caption("TOI/GP in seconds per game (e.g. 1200 = 20:00). FO% blank for non-centers.")
 
 with adv_tab:
-    st.caption(
-        "Possession and expected goals. CF%/FF% and the per-60 rates are 5v5 from the NHL; "
-        "xG (a skater's own expected goals) and xGF% (share of expected goals while on ice) are "
-        "from MoneyPuck's public model. G − xG = finishing above expectation. "
-        + ("SLOT is our own expected-goals model (Shot Location & Outcome Threat) — it rates every "
-           "unblocked attempt from where and how it was taken, the strength state, and whether it "
-           "came off a rebound, with no player identity as an input, so G − SLOT is finishing "
-           "talent. It's a second opinion alongside MoneyPuck's, not a replacement. " if has_slot else "")
-        + "PDO = on-ice shooting% + save% (luck gauge, regresses to ~100)."
-    )
     filtered["finishing"] = filtered["goals"] - filtered["ixG"]
     ndb.STAT_LABELS.setdefault("finishing", "G − xG")
     slot_cols = ["slot_xg", "slot_above"] if has_slot else []
@@ -129,7 +120,6 @@ with adv_tab:
     )
 
 with st_tab:
-    st.caption("Power play and penalty kill production, rates per 60, and each skater's share of the team's PP/PK time.")
     _table(
         ["skaterFullName", "Tm", "positionCode", "gamesPlayed", "ppGoals", "ppAssists", "ppPoints",
          "ppShots", "ppShootingPct", "ppGoalsPer60", "ppPointsPer60", "ppTimeOnIcePerGame",
@@ -146,7 +136,6 @@ with st_tab:
     )
 
 with shot_tab:
-    st.caption("Goals, shots on net, and shooting % by shot type — who lives on the wrister and who tips everything.")
     _table(
         ["skaterFullName", "Tm", "positionCode", "goals", "goalsWrist", "goalsSnap", "goalsSlap",
          "goalsBackhand", "goalsTipIn", "goalsDeflected", "goalsWrapAround", "shotsOnNetWrist",

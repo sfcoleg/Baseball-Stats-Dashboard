@@ -5,6 +5,7 @@ import math
 
 import pandas as pd
 import plotly.graph_objects as go
+import streamlit as st
 
 _CLINCH_LABELS = {"p": "Presidents' Trophy", "z": "Clinched conference", "y": "Clinched division", "x": "Clinched playoff berth"}
 
@@ -233,3 +234,18 @@ def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
     rink_layout(fig, height=470, top=40, title=dict(text=name, x=0.5, xanchor="center"),
                 legend=dict(orientation="h", yanchor="bottom", y=-0.06, x=0))
     return fig
+
+
+def glossary_link():
+    """Small, muted link to the NHL stat glossary — call near the top of a
+    stat-heavy page, the hockey analog of the MLB side's
+    style.glossary_link(). Styled via a href-matching CSS selector because
+    page_link renders as a DOM sibling, not a child of any wrapper."""
+    st.markdown(
+        "<style>"
+        "[data-testid='stMain'] a[href*='nhl-glossary'] { font-size: 0.8rem !important; opacity: 0.6; }"
+        "[data-testid='stMain'] a[href*='nhl-glossary']:hover { opacity: 1; }"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+    st.page_link("nhl/pages/glossary.py", label="What do these stats mean?", use_container_width=False)

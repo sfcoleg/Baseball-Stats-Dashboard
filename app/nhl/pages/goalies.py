@@ -10,10 +10,12 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nhl import db as ndb
+from nhl import style as nstyle
 from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Goalies | Diamond Metrics", layout="wide")
 st.title("Goalies")
+nstyle.glossary_link()
 
 mtime = ndb.nhl_db_mtime()
 seasons = ndb.goalie_seasons(mtime)
@@ -74,15 +76,8 @@ with std_tab:
         lower_better=["goalsAgainstAverage", "losses", "otLosses"],
         precision={"goalsAgainstAverage": "{:.2f}", "savePct": "{:.1f}"},
     )
-    st.caption("SV% and other rate stats shown ×100 (e.g. 91.2 = .912).")
 
 with adv_tab:
-    st.caption(
-        "Workload and shot quality. xGA (expected goals against) and HD xGA (high-danger xGA) are "
-        "from MoneyPuck's public model. GSAx = xGA − actual goals against — positive means the goalie "
-        "stopped more than expected. Quality Start% and Complete Game% measure game-to-game "
-        "consistency rather than one big total."
-    )
     _table(
         ["goalieFullName", "Tm", "gamesPlayed", "xGA", "gsax", "xGA_high_danger", "qualityStart",
          "qualityStartsPct", "completeGames", "completeGamePct", "regulationWins", "goalsFor",
