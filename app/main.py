@@ -98,6 +98,52 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# Component styling — the visual language from the design studies, applied
+# once here so every page inherits it rather than each re-inventing a card.
+# Streamlit's own containers/metrics are restyled in place; anything we hand-
+# write (section headings, game cards) gets a dm-* class.
+st.markdown(
+    "<style>"
+    # --- section headings: accent kicker + condensed uppercase title -------
+    ".dm-shead{display:flex;align-items:center;gap:12px;margin:2.1rem 0 1rem;}"
+    ".dm-kick{width:26px;height:4px;border-radius:2px;flex:0 0 auto;}"
+    ".dm-stitle{font-family:'Archivo Narrow',sans-serif;font-weight:700;"
+    "  font-size:1.5rem;letter-spacing:0.6px;text-transform:uppercase;line-height:1.1;}"
+    # --- headings + numerals: condensed, tight, tabular --------------------
+    "h1,h2,h3{font-family:'Archivo Narrow',sans-serif !important;letter-spacing:-0.2px;}"
+    "h1{text-transform:uppercase;letter-spacing:0.5px;}"
+    "[data-testid='stMain']{font-variant-numeric:tabular-nums;}"
+    # --- bordered containers read as cards, not outlines -------------------
+    "[data-testid='stMain'] [data-testid='stVerticalBlockBorderWrapper']{"
+    "  background:var(--dm-surface);border-radius:12px;"
+    "  box-shadow:0 1px 2px rgba(12,23,37,0.06);}"
+    "@media (prefers-color-scheme: dark){"
+    "  [data-testid='stMain'] [data-testid='stVerticalBlockBorderWrapper']{box-shadow:none;}}"
+    # --- game cards: left rail, condensed team names, big score ------------
+    ".dm-game{flex:0 0 auto;width:176px;background:var(--dm-surface);"
+    "  border-left:4px solid var(--dm-blue);border-radius:0 10px 10px 0;"
+    "  padding:11px 14px;margin-right:10px;box-shadow:0 1px 2px rgba(12,23,37,0.06);}"
+    ".dm-game .dm-stat{font-size:0.64rem;letter-spacing:1.1px;text-transform:uppercase;"
+    "  color:var(--dm-dim);margin-bottom:8px;}"
+    ".dm-game .dm-team{font-family:'Archivo Narrow',sans-serif;font-weight:600;"
+    "  font-size:0.95rem;color:var(--dm-dim);}"
+    ".dm-game .dm-row.win .dm-team{color:var(--dm-text);font-weight:700;}"
+    ".dm-game .dm-score{font-family:'Archivo Narrow',sans-serif;font-weight:700;"
+    "  font-size:1.35rem;color:var(--dm-dim);}"
+    ".dm-game .dm-row.win .dm-score{color:var(--dm-blue);}"
+    # --- metrics: the oversized-numeral treatment --------------------------
+    "[data-testid='stMetricValue']{font-family:'Archivo Narrow',sans-serif;"
+    "  font-weight:700;letter-spacing:-0.5px;}"
+    "[data-testid='stMetricLabel']{text-transform:uppercase;letter-spacing:0.9px;"
+    "  font-size:0.7rem !important;color:var(--dm-dim);}"
+    # --- tables ------------------------------------------------------------
+    "[data-testid='stMain'] table{border-collapse:collapse;}"
+    "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
+    "  text-transform:uppercase;letter-spacing:0.8px;font-size:0.7rem;color:var(--dm-dim);}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+
 HEADER_HEIGHT = "2.5rem"
 st.markdown(
     "<style>"

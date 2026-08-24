@@ -65,16 +65,17 @@ def _todays_games_strip():
         team_id = teams.team_id_for_abbr(teams.normalize_mlb_abbr(abbr))
         return style.team_logo_for_season(teams.normalize_mlb_abbr(abbr), team_id, logo_season) if team_id else None
 
-    def _team_row(logo, name, score):
+    def _team_row(logo, name, score, won=False):
         logo_html = (
-            f"<img src='{logo}' style='height:22px;width:22px;object-fit:contain;margin-right:6px;flex-shrink:0'>"
+            f"<img src='{logo}' style='height:20px;width:20px;object-fit:contain;margin-right:7px;flex-shrink:0'>"
             if logo else ""
         )
         return (
-            "<div style='display:flex;align-items:center;justify-content:space-between;padding:2px 0'>"
+            f"<div class='dm-row{" win" if won else ""}' "
+            "style='display:flex;align-items:center;justify-content:space-between;padding:2px 0'>"
             f"<div style='display:flex;align-items:center;overflow:hidden'>{logo_html}"
-            f"<span style='font-size:0.85rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{name}</span></div>"
-            f"<span style='font-weight:700;font-size:0.95rem;margin-left:8px;flex-shrink:0'>{score}</span>"
+            f"<span class='dm-team' style='white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>{name}</span></div>"
+            f"<span class='dm-score' style='margin-left:8px;flex-shrink:0'>{score}</span>"
             "</div>"
         )
 
@@ -100,12 +101,16 @@ def _todays_games_strip():
         else:
             status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Scheduled</span>"
 
+        # Winner is highlighted only once a game is final — mid-game the
+        # leader isn't a result yet.
+        final = started and not is_live and away_score is not None and home_score is not None
+        away_won = bool(final and away_score > home_score)
+        home_won = bool(final and home_score > away_score)
         card_html = (
-            "<div style='flex:0 0 auto;width:170px;background-color:var(--dm-surface-mute);border-radius:10px;"
-            "padding:10px 12px;margin-right:10px'>"
-            f"<div style='margin-bottom:4px'>{status_html}</div>"
-            + _team_row(_logo(row["away_abbr"]), row["away_team"], away_txt)
-            + _team_row(_logo(row["home_abbr"]), row["home_team"], home_txt)
+            "<div class='dm-game'>"
+            f"<div class='dm-stat'>{status_html}</div>"
+            + _team_row(_logo(row["away_abbr"]), row["away_team"], away_txt, away_won)
+            + _team_row(_logo(row["home_abbr"]), row["home_team"], home_txt, home_won)
             + "</div>"
         )
         # Live games first (leftmost, no scrolling needed to spot them),
