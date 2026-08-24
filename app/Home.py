@@ -91,17 +91,17 @@ def _todays_games_strip():
 
         if is_live:
             status_html = (
-                f"<span class='live-badge' style='background-color:#D32F2F;color:#FFFFFF;padding:1px 8px;"
+                f"<span class='live-badge' style='background-color:var(--dm-red);color:#FFFFFF;padding:1px 8px;"
                 f"border-radius:6px;font-weight:700;font-size:0.68rem'>LIVE</span>"
-                f"<span style='color:#9AA3B5;font-size:0.72rem;margin-left:6px'>{live.get('inning') or ''}</span>"
+                f"<span style='color:var(--dm-dim);font-size:0.72rem;margin-left:6px'>{live.get('inning') or ''}</span>"
             )
         elif started:
-            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Final</span>"
+            status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Final</span>"
         else:
-            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Scheduled</span>"
+            status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Scheduled</span>"
 
         card_html = (
-            "<div style='flex:0 0 auto;width:170px;background-color:#1B243866;border-radius:10px;"
+            "<div style='flex:0 0 auto;width:170px;background-color:var(--dm-surface-mute);border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
             f"<div style='margin-bottom:4px'>{status_html}</div>"
             + _team_row(_logo(row["away_abbr"]), row["away_team"], away_txt)
@@ -149,7 +149,7 @@ def _milestone_banner(kind, body_html):
     st.markdown(
         f"<div style='background-color:{color}22;border:1px solid {color}88;border-radius:10px;"
         "padding:12px 16px;margin-bottom:10px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>"
-        f"<span class='{badge_class}' style='background-color:{color};color:#12141C;padding:3px 10px;"
+        f"<span class='{badge_class}' style='background-color:{color};color:var(--dm-surface);padding:3px 10px;"
         f"border-radius:6px;font-weight:700;font-size:0.75rem;flex-shrink:0'>{_MILESTONE_LABELS[kind]}</span>"
         f"<div>{body_html}</div></div>",
         unsafe_allow_html=True,
@@ -174,8 +174,8 @@ def _milestone_banners():
         line_stats = f"{w['ip_display']} IP, 0 H" + (f", {w['walks']} BB" if w["walks"] else "")
         _milestone_banner(w["kind"], (
             f"<span style='font-weight:700'>{pitcher_text}</span>{combined_note} "
-            f"<span style='color:#9AA3B5'>({w['pitching_abbr']})</span> — {line_stats} vs {w['opponent']} "
-            f"<span style='color:#9AA3B5'>· {w['inning'] or 'Final'}</span>"
+            f"<span style='color:var(--dm-dim)'>({w['pitching_abbr']})</span> — {line_stats} vs {w['opponent']} "
+            f"<span style='color:var(--dm-dim)'>· {w['inning'] or 'Final'}</span>"
         ))
 
     for w in batting_watches:
@@ -189,8 +189,8 @@ def _milestone_banners():
             detail = f"hit {w['hr']} home runs"
         _milestone_banner(w["kind"], (
             f"<span style='font-weight:700'>{w['name']}</span> "
-            f"<span style='color:#9AA3B5'>({w['abbr']})</span> — {detail} vs {w['opponent']} "
-            f"<span style='color:#9AA3B5'>· {w['inning'] or 'Final'}</span>"
+            f"<span style='color:var(--dm-dim)'>({w['abbr']})</span> — {detail} vs {w['opponent']} "
+            f"<span style='color:var(--dm-dim)'>· {w['inning'] or 'Final'}</span>"
         ))
 
 
@@ -288,7 +288,7 @@ fig.update_layout(
     showlegend=False, coloraxis_showscale=False,
     height=400, margin=dict(l=0, r=0, t=10, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    font_color="#FAFAFA",
+    font_color=style.CHART_TEXT,
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -316,7 +316,7 @@ with tcol1:
     fig.update_layout(
         showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FAFAFA", xaxis_title=None,
+        font_color=style.CHART_TEXT, xaxis_title=None,
     )
     st.plotly_chart(fig, use_container_width=True)
 with tcol2:
@@ -328,7 +328,7 @@ with tcol2:
     fig.update_layout(
         showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FAFAFA", xaxis_title=None,
+        font_color=style.CHART_TEXT, xaxis_title=None,
     )
     st.plotly_chart(fig, use_container_width=True)
 

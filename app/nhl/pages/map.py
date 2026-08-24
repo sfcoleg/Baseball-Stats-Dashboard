@@ -209,7 +209,7 @@ else:
 
 tooltip = {
     "html": "<div style='font-family:sans-serif'><b style='font-size:14px'>{title}</b>"
-            "<div style='color:#9AA3B5;font-size:12px;margin-bottom:4px'>{country}</div>"
+            "<div style='color:var(--dm-dim);font-size:12px;margin-bottom:4px'>{country}</div>"
             "<div style='font-weight:600;margin-bottom:4px'>{headline}</div>"
             "<div style='font-size:12px;line-height:1.35'>{who}</div></div>",
     "style": {"backgroundColor": "#1B2438", "color": "#FAFAFA", "borderRadius": "8px", "padding": "10px 12px",
@@ -276,11 +276,11 @@ else:
         names_html = " · ".join(
             f"<a href='{nstyle.player_link(r.playerId, season)}' target='_self' "
             f"style='color:inherit;text-decoration:none;font-weight:600'>{r.name}</a>"
-            f"<span style='color:#9AA3B5'> ({r.Hometown}, {r.km} km)</span>"
+            f"<span style='color:var(--dm-dim)'> ({r.Hometown}, {r.km} km)</span>"
             for r in grp.itertuples()
         )
         st.markdown(
-            f"<div style='margin-bottom:8px'><span style='background-color:{color}66;color:#FAFAFA;"
+            f"<div style='margin-bottom:8px'><span style='background-color:{color}66;color:var(--dm-text);"
             f"padding:2px 9px;border-radius:6px;font-weight:700;margin-right:8px'>{team_abbr}</span>{names_html}</div>",
             unsafe_allow_html=True,
         )

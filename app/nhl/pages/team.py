@@ -87,7 +87,7 @@ if seasons:
                 st.markdown(
                     f"<a href='{nstyle.player_link(p['playerId'], stat_season)}' target='_self' "
                     f"style='color:inherit;text-decoration:none'>{p['skaterFullName']}</a> "
-                    f"<span style='color:#9AA3B5'>— {int(p[stat])}</span>",
+                    f"<span style='color:var(--dm-dim)'>— {int(p[stat])}</span>",
                     unsafe_allow_html=True,
                 )
     if not goalies_df.empty:
@@ -193,6 +193,6 @@ else:
                         "object-fit:cover' />"
                         f"<div><a href='{nstyle.player_link(p['id'])}' target='_self' style='color:inherit;"
                         f"text-decoration:none;font-weight:600'>{name}</a><br>"
-                        f"<span style='color:#9AA3B5;font-size:0.85rem'>#{num} · {p.get('positionCode', '')}</span>"
+                        f"<span style='color:var(--dm-dim);font-size:0.85rem'>#{num} · {p.get('positionCode', '')}</span>"
                         "</div></div>", unsafe_allow_html=True,
                     )

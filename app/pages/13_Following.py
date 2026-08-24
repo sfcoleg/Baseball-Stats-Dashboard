@@ -57,7 +57,7 @@ with st.expander("Manage who you follow", expanded=not (followed_teams or follow
             for t in list(followed_teams):
                 c1, c2 = st.columns([4, 1])
                 c1.markdown(
-                    f"<span style='background-color:{teams.color_for_abbr(t['abbr'])}66;color:#FAFAFA;"
+                    f"<span style='background-color:{teams.color_for_abbr(t['abbr'])}66;color:var(--dm-text);"
                     f"padding:3px 10px;border-radius:8px;font-weight:700'>{t['abbr']}</span> {t['nickname']}",
                     unsafe_allow_html=True,
                 )
@@ -131,7 +131,7 @@ else:
                 if status == "In Progress":
                     st.markdown(
                         "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"
-                        "<span style='background-color:#D32F2F;color:#FFFFFF;padding:3px 12px;"
+                        "<span style='background-color:var(--dm-red);color:#FFFFFF;padding:3px 12px;"
                         "border-radius:8px;font-weight:700;font-size:0.75rem;letter-spacing:0.5px' class='live-badge'>"
                         "LIVE</span></div>",
                         unsafe_allow_html=True,
@@ -139,7 +139,7 @@ else:
                 acol, mid, hcol = st.columns([3, 2, 3])
                 with acol:
                     st.markdown(
-                        f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
+                        f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:3px 10px;"
                         f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
                         f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span>",
                         unsafe_allow_html=True,
@@ -152,7 +152,7 @@ else:
                     if pred:
                         st.markdown(
                             f"<div style='font-size:1.2rem;font-weight:700'>{pred['away_odds']}</div>"
-                            f"<div style='color:#9AA3B5'>{pred['away_prob']*100:.0f}% win probability</div>",
+                            f"<div style='color:var(--dm-dim)'>{pred['away_prob']*100:.0f}% win probability</div>",
                             unsafe_allow_html=True,
                         )
                 with mid:
@@ -163,12 +163,12 @@ else:
                             unsafe_allow_html=True,
                         )
                     else:
-                        st.markdown("<div style='text-align:center;color:#9AA3B5;padding-top:8px'>@</div>", unsafe_allow_html=True)
+                        st.markdown("<div style='text-align:center;color:var(--dm-dim);padding-top:8px'>@</div>", unsafe_allow_html=True)
                     status_line = live.get("inning") if status == "In Progress" and live.get("inning") else status
                     st.caption(f"<div style='text-align:center'>{status_line}</div>", unsafe_allow_html=True)
                 with hcol:
                     st.markdown(
-                        f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
+                        f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:3px 10px;"
                         f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
                         f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span>",
                         unsafe_allow_html=True,
@@ -181,7 +181,7 @@ else:
                     if pred:
                         st.markdown(
                             f"<div style='font-size:1.2rem;font-weight:700'>{pred['home_odds']}</div>"
-                            f"<div style='color:#9AA3B5'>{pred['home_prob']*100:.0f}% win probability</div>",
+                            f"<div style='color:var(--dm-dim)'>{pred['home_prob']*100:.0f}% win probability</div>",
                             unsafe_allow_html=True,
                         )
 

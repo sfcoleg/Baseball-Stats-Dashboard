@@ -52,9 +52,9 @@ with h1:
         st.image(landing["headshot"], width=160)
 with h2:
     st.markdown(
-        f"<span style='background-color:{color}66;color:#FAFAFA;padding:3px 12px;border-radius:8px;"
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:3px 12px;border-radius:8px;"
         f"font-weight:700'>{abbr or 'Free Agent'}</span> "
-        f"<span style='color:#9AA3B5'>#{landing.get('sweaterNumber', '—')} · {landing.get('position', '')} · "
+        f"<span style='color:var(--dm-dim)'>#{landing.get('sweaterNumber', '—')} · {landing.get('position', '')} · "
         f"Shoots/Catches {landing.get('shootsCatches', '—')}</span>",
         unsafe_allow_html=True,
     )

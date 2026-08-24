@@ -138,12 +138,12 @@ if not framing.empty and not poptime.empty:
         ))
         fig.add_hline(y=0, line_color="rgba(154,163,181,0.5)", line_width=1, line_dash="dash")
         fig.add_vline(x=2.0, line_color="rgba(154,163,181,0.5)", line_width=1, line_dash="dash",
-                      annotation_text="league avg pop", annotation_font_color="#9AA3B5")
+                      annotation_text="league avg pop", annotation_font_color=style.CHART_DIM)
         fig.update_xaxes(title="Pop Time to 2B (s) — lower is better", autorange="reversed",
-                         gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
-        fig.update_yaxes(title="Framing Runs", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                         gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
+        fig.update_yaxes(title="Framing Runs", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
         fig.update_layout(
             height=520, margin=dict(l=10, r=10, t=10, b=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
         )
         st.plotly_chart(fig, use_container_width=True)

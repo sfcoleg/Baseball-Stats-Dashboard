@@ -66,14 +66,14 @@ if not duels.empty:
         away_color = teams.color_for_abbr(g["away_abbr"])
         home_color = teams.color_for_abbr(g["home_abbr"])
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #F5B942;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-amber);padding:8px 14px;"
             f"border-radius:6px;margin:5px 0'>"
-            f"<span style='color:#9AA3B5;font-size:0.85rem'>{g['date']}</span><br>"
-            f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+            f"<span style='color:var(--dm-dim);font-size:0.85rem'>{g['date']}</span><br>"
+            f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['away_abbr']}</span> "
             f"<b>{_sp_line(g['away_pitcher_name'], g['away_pitcher_mlbID'])}</b>"
-            f" <span style='color:#9AA3B5'>vs</span> "
-            f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+            f" <span style='color:var(--dm-dim)'>vs</span> "
+            f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['home_abbr']}</span> "
             f"<b>{_sp_line(g['home_pitcher_name'], g['home_pitcher_mlbID'])}</b>"
             f"</div>",
@@ -93,23 +93,23 @@ for date_str, day_games in upcoming.groupby("date", sort=True):
             fav_abbr = g["home_abbr"] if pred["home_prob"] >= 0.5 else g["away_abbr"]
             fav_prob = max(pred["home_prob"], pred["away_prob"])
             odds_bit = (
-                f"<span style='color:#9AA3B5;font-size:0.85rem;white-space:nowrap'>"
+                f"<span style='color:var(--dm-dim);font-size:0.85rem;white-space:nowrap'>"
                 f"{fav_abbr} {fav_prob * 100:.0f}%</span>"
             )
         st.markdown(
-            f"<div style='background-color:#1B243866;padding:8px 14px;border-radius:6px;margin:4px 0;"
+            f"<div style='background-color:var(--dm-surface-mute);padding:8px 14px;border-radius:6px;margin:4px 0;"
             f"display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap'>"
             f"<div style='min-width:0'>"
-            f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+            f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['away_abbr']}</span>"
-            f" <span style='color:#9AA3B5'>@</span> "
-            f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+            f" <span style='color:var(--dm-dim)'>@</span> "
+            f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['home_abbr']}</span>"
             f" <span class='game-time-local' data-utc='{g['game_time_utc']}' "
-            f"style='color:#9AA3B5;font-size:0.85rem'></span>"
-            f"<div style='color:#DCE1EA;font-size:0.88rem;margin-top:2px'>"
+            f"style='color:var(--dm-dim);font-size:0.85rem'></span>"
+            f"<div style='color:var(--dm-text);font-size:0.88rem;margin-top:2px'>"
             f"{_sp_line(g['away_pitcher_name'], g['away_pitcher_mlbID'])} "
-            f"<span style='color:#9AA3B5'>vs</span> "
+            f"<span style='color:var(--dm-dim)'>vs</span> "
             f"{_sp_line(g['home_pitcher_name'], g['home_pitcher_mlbID'])}</div>"
             f"</div>"
             f"{odds_bit}"

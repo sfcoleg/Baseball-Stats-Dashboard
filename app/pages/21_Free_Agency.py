@@ -60,7 +60,7 @@ def render_fa_card(row):
     team_abbr = row["last_team"] if isinstance(row["last_team"], str) else None
     team_color = teams.color_for_abbr(team_abbr) if team_abbr else "#666666"
     badge = (
-        f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
+        f"<span style='background-color:{team_color}66;color:var(--dm-text);padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
         if team_abbr else ""
     )
@@ -83,10 +83,10 @@ def render_fa_card(row):
         f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0' />"
         f"<div style='flex:1;min-width:0'>"
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{row['Name']} {badge}</div>"
-        f"<div style='color:#9AA3B5;font-size:0.85rem;margin-top:2px'>{meta_line}</div>"
-        f"<div style='margin-top:6px'><span style='background-color:#3B4A8244;color:#B9C4FF;padding:3px 10px;"
+        f"<div style='color:var(--dm-dim);font-size:0.85rem;margin-top:2px'>{meta_line}</div>"
+        f"<div style='margin-top:6px'><span style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);padding:3px 10px;"
         f"border-radius:8px;font-weight:600;font-size:0.9rem'>{stat_label}</span></div>"
-        f"<div style='color:#9AA3B5;font-size:0.8rem;margin-top:4px'>{row['fa_type']} · {row['fa_date']}</div>"
+        f"<div style='color:var(--dm-dim);font-size:0.8rem;margin-top:4px'>{row['fa_type']} · {row['fa_date']}</div>"
         f"</div></div>",
         unsafe_allow_html=True,
     )
@@ -106,14 +106,14 @@ else:
         team_abbr = row["new_team"] if isinstance(row["new_team"], str) else None
         color = teams.color_for_abbr(team_abbr) if team_abbr else "#666666"
         badge = (
-            f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;"
+            f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;"
             f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{team_abbr}</span>"
             if team_abbr else ""
         )
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>{badge}"
-            f"<span style='color:#9AA3B5;font-size:0.85rem'>{row['signed_date']}</span>"
-            f"<div style='color:#DCE1EA'>{row['description']}</div></div>",
+            f"<span style='color:var(--dm-dim);font-size:0.85rem'>{row['signed_date']}</span>"
+            f"<div style='color:var(--dm-text)'>{row['description']}</div></div>",
             unsafe_allow_html=True,
         )

@@ -181,7 +181,7 @@ if role_a == "Skater" and role_b == "Skater":
         fig.add_trace(go.Bar(x=labels, y=[row_b[c] for c in cols_a], name=name_b, marker_color=color_b))
         fig.update_layout(
             barmode="group", height=380, margin=dict(l=10, r=10, t=10, b=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
             yaxis=dict(gridcolor="rgba(74,82,102,0.25)"),
         )
@@ -208,7 +208,7 @@ if len(career_a) > 1 or len(career_b) > 1:
         ))
     layout = dict(
         height=380, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         xaxis=dict(gridcolor="rgba(74,82,102,0.25)"), yaxis=dict(gridcolor="rgba(74,82,102,0.25)"),
     )

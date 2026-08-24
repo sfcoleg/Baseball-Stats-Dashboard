@@ -72,7 +72,7 @@ def render_game_center():
         )
         st.markdown(
             f"<div style='display:flex;align-items:center'>{logo_html}"
-            f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:4px 12px;"
+            f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:4px 12px;"
             f"border-radius:8px;font-weight:700;font-size:1.1rem'>{away_abbr}</span>&nbsp;"
             f"<span style='font-weight:700;font-size:1.3rem'>{away_team}</span></div>",
             unsafe_allow_html=True,
@@ -85,7 +85,7 @@ def render_game_center():
         st.markdown(
             f"<div style='display:flex;align-items:center;justify-content:flex-end'>"
             f"<span style='font-weight:700;font-size:1.3rem'>{home_team}</span>&nbsp;"
-            f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:4px 12px;"
+            f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:4px 12px;"
             f"border-radius:8px;font-weight:700;font-size:1.1rem'>{home_abbr}</span>{logo_html}</div>",
             unsafe_allow_html=True,
         )
@@ -97,7 +97,7 @@ def render_game_center():
                 unsafe_allow_html=True,
             )
         else:
-            st.markdown("<div style='text-align:center;color:#9AA3B5;padding-top:12px'>@</div>", unsafe_allow_html=True)
+            st.markdown("<div style='text-align:center;color:var(--dm-dim);padding-top:12px'>@</div>", unsafe_allow_html=True)
         status_line = live.get("inning") if status == "In Progress" and live.get("inning") else status
         outs = live.get("outs") if status == "In Progress" else None
         st.markdown(style.game_state_html(status_line, live.get("bases", {}), outs, scale=2.2), unsafe_allow_html=True)
@@ -127,7 +127,7 @@ def render_game_center():
                 with col:
                     with st.container(border=True):
                         mound_tag = (
-                            "<span style='background-color:#D32F2F33;color:#FF8A80;padding:2px 8px;"
+                            "<span style='background-color:var(--dm-red-soft);color:#FF8A80;padding:2px 8px;"
                             "border-radius:6px;font-weight:700;font-size:0.7rem;margin-left:6px'>"
                             "ON THE MOUND</span>" if p["on_mound"] else ""
                         )
@@ -136,7 +136,7 @@ def render_game_center():
                             f"<img src='{style.headshot_url(p['mlbID'], width=120)}' "
                             f"style='width:56px;height:56px;border-radius:50%;object-fit:cover;"
                             f"object-position:center 25%'>"
-                            f"<div><span style='background-color:{p_color}66;color:#FAFAFA;padding:2px 8px;"
+                            f"<div><span style='background-color:{p_color}66;color:var(--dm-text);padding:2px 8px;"
                             f"border-radius:6px;font-weight:700;font-size:0.8rem'>{norm}</span>{mound_tag}"
                             f"<div style='font-weight:700;font-size:1.05rem;margin-top:2px'>"
                             f"<a href='{style.player_link(p['mlbID'], season)}' target='_self' "
@@ -186,7 +186,7 @@ def render_game_center():
                             f"<img src='{style.headshot_url(batter['mlbID'], width=100)}' "
                             f"style='width:44px;height:44px;border-radius:50%;object-fit:cover;"
                             f"object-position:center 25%'>"
-                            f"<div><div style='color:#9AA3B5;font-size:0.75rem;font-weight:700'>"
+                            f"<div><div style='color:var(--dm-dim);font-size:0.75rem;font-weight:700'>"
                             f"{batter['label'].upper()}</div>"
                             f"<div style='font-weight:700'><a href='{style.player_link(batter['mlbID'], season)}' "
                             f"target='_self' style='color:inherit;text-decoration:none;"
@@ -214,11 +214,11 @@ def render_game_center():
             lev = db.current_leverage(game_pk)
             if lev and lev["ratio"] >= 1.5:
                 st.markdown(
-                    f"<div style='background-color:#D32F2F22;border-left:4px solid #D32F2F;"
+                    f"<div style='background-color:var(--dm-red-soft);border-left:4px solid var(--dm-red);"
                     f"padding:8px 14px;border-radius:6px;margin:4px 0'>"
                     f"<b>High-leverage moment</b> — this at-bat can swing the game "
                     f"{lev['ratio']:.1f}× more than an average one "
-                    f"<span style='color:#9AA3B5'>(our win probability model)</span></div>",
+                    f"<span style='color:var(--dm-dim)'>(our win probability model)</span></div>",
                     unsafe_allow_html=True,
                 )
         st.plotly_chart(
@@ -232,10 +232,10 @@ def render_game_center():
             play = wp_df.loc[top_idx]
             if swing_pct > 0 and isinstance(play.get("description"), str):
                 st.markdown(
-                    f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
-                    f"border-radius:6px;margin:4px 0'><span style='color:#9AA3B5;font-size:0.85rem'>"
+                    f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
+                    f"border-radius:6px;margin:4px 0'><span style='color:var(--dm-dim);font-size:0.85rem'>"
                     f"Play of the Game — {swing_pct:.0f}% win-probability swing</span>"
-                    f"<div style='color:#DCE1EA'>{play['description']}</div></div>",
+                    f"<div style='color:var(--dm-text)'>{play['description']}</div></div>",
                     unsafe_allow_html=True,
                 )
 

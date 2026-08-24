@@ -25,14 +25,14 @@ mtime = db.db_mtime()
 
 _LINE_LAYOUT = dict(
     height=360, margin=dict(l=10, r=10, t=10, b=10),
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
     legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
 )
 
 
 def _axes(fig, y_title, suffix=""):
-    fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
-    fig.update_yaxes(title=y_title, ticksuffix=suffix, gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+    fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
+    fig.update_yaxes(title=y_title, ticksuffix=suffix, gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
     fig.update_layout(**_LINE_LAYOUT)
     return fig
 
@@ -70,16 +70,16 @@ style.colored_header("The Offensive Environment", "batting")
 st.caption("League batting average and isolated power — contact quality vs. raw power, by season.")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=env["season"], y=env["AVG"], mode="lines+markers", name="League AVG",
-                         line=dict(color="#3B82F6", width=2.5)))
+                         line=dict(color=style.CHART_BLUE, width=2.5)))
 fig.add_trace(go.Scatter(x=env["season"], y=env["ISO"], mode="lines+markers", name="League ISO",
-                         line=dict(color="#F5B942", width=2.5)))
+                         line=dict(color=style.CHART_AMBER, width=2.5)))
 st.plotly_chart(_axes(fig, "Rate"), use_container_width=True)
 
 style.colored_header("Strikeouts & Walks", "pitching")
 st.caption("Share of all plate appearances ending in a strikeout or a walk.")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=env["season"], y=env["K%"], mode="lines+markers", name="K%",
-                         line=dict(color="#D32F2F", width=2.5)))
+                         line=dict(color=style.CHART_RED, width=2.5)))
 fig.add_trace(go.Scatter(x=env["season"], y=env["BB%"], mode="lines+markers", name="BB%",
                          line=dict(color="#7CB342", width=2.5)))
 st.plotly_chart(_axes(fig, "% of PA", "%"), use_container_width=True)
@@ -88,7 +88,7 @@ style.colored_header("Power & Speed", "headliners")
 st.caption("Home runs and stolen bases per 600 plate appearances — watch the 2023 rule changes juice the running game.")
 fig = go.Figure()
 fig.add_trace(go.Scatter(x=env["season"], y=env["HR/600"], mode="lines+markers", name="HR per 600 PA",
-                         line=dict(color="#F5B942", width=2.5)))
+                         line=dict(color=style.CHART_AMBER, width=2.5)))
 fig.add_trace(go.Scatter(x=env["season"], y=env["SB/600"], mode="lines+markers", name="SB per 600 PA",
                          line=dict(color="#26A69A", width=2.5)))
 st.plotly_chart(_axes(fig, "Per 600 PA"), use_container_width=True)
@@ -106,7 +106,7 @@ if not arsenal_all.empty:
         lambda g: (g["velocity"] * g["pa"]).sum() / g["pa"].sum(), include_groups=False
     ).rename("velo").reset_index()
     fig = go.Figure(go.Scatter(x=velo["season"], y=velo["velo"], mode="lines+markers",
-                               line=dict(color="#D32F2F", width=2.5)))
+                               line=dict(color=style.CHART_RED, width=2.5)))
     st.plotly_chart(_axes(fig, "Avg 4-Seam Velo (mph)"), use_container_width=True)
 
     style.colored_header("Pitch Mix Evolution", "chart")
@@ -124,7 +124,7 @@ if not arsenal_all.empty:
         seg = mix[mix["pitch_name"] == pname].sort_values("season")
         fig.add_trace(go.Scatter(
             x=seg["season"], y=seg["share"], mode="lines+markers", name=pname,
-            line=dict(color=style.PITCH_COLORS.get(pname, "#9AA3B5"), width=2.5),
+            line=dict(color=style.PITCH_COLORS.get(pname, style.CHART_DIM), width=2.5),
         ))
     fig = _axes(fig, "Share of PA", "%")
     fig.update_layout(height=460)
@@ -231,9 +231,9 @@ if framing_rows:
     frd = pd.DataFrame(framing_rows)
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=frd["season"], y=frd["spread"], mode="lines+markers", name="League spread (std)",
-                             line=dict(color="#3B82F6", width=2.5)))
+                             line=dict(color=style.CHART_BLUE, width=2.5)))
     fig.add_trace(go.Scatter(x=frd["season"], y=frd["best"], mode="lines+markers", name="Best framer's runs",
-                             line=dict(color="#F5B942", width=2.5)))
+                             line=dict(color=style.CHART_AMBER, width=2.5)))
     st.plotly_chart(_axes(fig, "Framing Runs"), use_container_width=True)
 
 _custom_trend_section()

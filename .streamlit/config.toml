@@ -1,14 +1,48 @@
-[theme]
-base = "dark"
-primaryColor = "#3B82F6"
-backgroundColor = "#33405F"
-secondaryBackgroundColor = "#4A6FA5"
-textColor = "#FAFAFA"
-baseRadius = "large"
-font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap, sans-serif"
+# Diamond Metrics theme.
+#
+# Two designed variants rather than one: Streamlit picks by the visitor's
+# system colour scheme, and if only a light theme were defined, everyone on
+# dark mode would drop to Streamlit's built-in near-black default instead of
+# anything we designed.
+#   [theme.light] = "Arena Light"    — cool blue-grey paper, azure accent
+#   [theme.dark]  = "The Columnist"  — slate panels, sky-blue accent
+# Shared below: Archivo (body) / Archivo Narrow (headings), the condensed
+# grotesque pairing sports typography actually lives in, and generous radii.
+#
+# app/style.py's PALETTE mirrors these values on the Python side for plotly
+# figures, which render to SVG and can't read CSS custom properties.
 
-[theme.sidebar]
-backgroundColor = "#33405F"
+[theme]
+base = "light"
+font = "Archivo:https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&display=swap, sans-serif"
+headingFont = "Archivo Narrow:https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@600;700&display=swap, sans-serif"
+baseRadius = "large"
+buttonRadius = "large"
+linkUnderline = false
+
+[theme.light]
+primaryColor = "#2E86DE"
+backgroundColor = "#F4F7FB"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#0C1725"
+borderColor = "#E4EAF3"
+linkColor = "#1B5FA8"
+
+[theme.light.sidebar]
+backgroundColor = "#FFFFFF"
+borderColor = "#E4EAF3"
+
+[theme.dark]
+primaryColor = "#6FAFE8"
+backgroundColor = "#151C28"
+secondaryBackgroundColor = "#1E2735"
+textColor = "#EFF3F9"
+borderColor = "#2E3B4E"
+linkColor = "#9BCAF3"
+
+[theme.dark.sidebar]
+backgroundColor = "#1E2735"
+borderColor = "#2E3B4E"
 
 [browser]
 gatherUsageStats = false

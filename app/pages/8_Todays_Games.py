@@ -105,7 +105,7 @@ def render_games():
             if status == "In Progress":
                 st.markdown(
                     "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"
-                    "<span style='background-color:#D32F2F;color:#FFFFFF;padding:3px 12px;"
+                    "<span style='background-color:var(--dm-red);color:#FFFFFF;padding:3px 12px;"
                     "border-radius:8px;font-weight:700;font-size:0.75rem;letter-spacing:0.5px' class='live-badge'>"
                     "LIVE</span></div>",
                     unsafe_allow_html=True,
@@ -119,7 +119,7 @@ def render_games():
                 )
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
-                    f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
+                    f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:3px 10px;"
                     f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span></div>",
                     unsafe_allow_html=True,
@@ -136,7 +136,7 @@ def render_games():
                 if pred:
                     st.markdown(
                         f"<div style='font-size:1.3rem;font-weight:700'>{pred['away_odds']}</div>"
-                        f"<div style='color:#9AA3B5'>{pred['away_prob']*100:.0f}% win probability</div>",
+                        f"<div style='color:var(--dm-dim)'>{pred['away_prob']*100:.0f}% win probability</div>",
                         unsafe_allow_html=True,
                     )
 
@@ -161,7 +161,7 @@ def render_games():
                     )
                 else:
                     st.markdown(
-                        "<div style='text-align:center;color:#9AA3B5;padding-top:8px'>@</div>",
+                        "<div style='text-align:center;color:var(--dm-dim);padding-top:8px'>@</div>",
                         unsafe_allow_html=True,
                     )
                 status_line = status
@@ -176,7 +176,7 @@ def render_games():
                 if row.get("game_time") and not started:
                     st.markdown(
                         f"<div class='game-time-local' data-utc='{row['game_time']}' "
-                        f"style='text-align:center;color:#9AA3B5;font-size:0.85rem'>{row['game_time']}</div>",
+                        f"style='text-align:center;color:var(--dm-dim);font-size:0.85rem'>{row['game_time']}</div>",
                         unsafe_allow_html=True,
                     )
                 if row.get("venue"):
@@ -199,7 +199,7 @@ def render_games():
                 )
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
-                    f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
+                    f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:3px 10px;"
                     f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
                     f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span></div>",
                     unsafe_allow_html=True,
@@ -216,7 +216,7 @@ def render_games():
                 if pred:
                     st.markdown(
                         f"<div style='font-size:1.3rem;font-weight:700'>{pred['home_odds']}</div>"
-                        f"<div style='color:#9AA3B5'>{pred['home_prob']*100:.0f}% win probability</div>",
+                        f"<div style='color:var(--dm-dim)'>{pred['home_prob']*100:.0f}% win probability</div>",
                         unsafe_allow_html=True,
                     )
 

@@ -50,7 +50,7 @@ for _, row in games.iterrows():
         acol, mid, hcol = st.columns([3, 1, 3])
         with acol:
             st.markdown(
-                f"<span style='background-color:{away_color}66;color:#FAFAFA;padding:3px 10px;"
+                f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:3px 10px;"
                 f"border-radius:8px;font-weight:700'>{row['away_abbr']}</span> &nbsp;"
                 f"<span style='font-weight:700;font-size:1.1rem'>{row['away_team']}</span>",
                 unsafe_allow_html=True,
@@ -63,11 +63,11 @@ for _, row in games.iterrows():
                     unsafe_allow_html=True,
                 )
             else:
-                st.markdown("<div style='text-align:center;color:#9AA3B5'>@</div>", unsafe_allow_html=True)
+                st.markdown("<div style='text-align:center;color:var(--dm-dim)'>@</div>", unsafe_allow_html=True)
             st.caption(f"<div style='text-align:center'>{row['status']}</div>", unsafe_allow_html=True)
         with hcol:
             st.markdown(
-                f"<span style='background-color:{home_color}66;color:#FAFAFA;padding:3px 10px;"
+                f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:3px 10px;"
                 f"border-radius:8px;font-weight:700'>{row['home_abbr']}</span> &nbsp;"
                 f"<span style='font-weight:700;font-size:1.1rem'>{row['home_team']}</span>",
                 unsafe_allow_html=True,

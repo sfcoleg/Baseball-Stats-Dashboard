@@ -124,7 +124,7 @@ if color_b == color_a:
 
 def team_badge(abbr, color):
     return (
-        f"<span style='background-color:{color}66;color:#FAFAFA;padding:3px 10px;"
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:3px 10px;"
         f"border-radius:10px;font-weight:600'>{abbr}</span>"
     )
 
@@ -353,7 +353,7 @@ if pitching_role_a is not None and pitching_role_b is not None:
             cloud = league_arsenal.dropna(subset=["vert_break", "horz_break"])
             fig.add_trace(go.Scatter(
                 x=cloud["horz_break"], y=cloud["vert_break"], mode="markers",
-                marker=dict(size=4, color="#9AA3B5", opacity=0.10), hoverinfo="skip", showlegend=False,
+                marker=dict(size=4, color=style.CHART_DIM, opacity=0.10), hoverinfo="skip", showlegend=False,
             ))
         for arsenal, pname, pcolor in [(arsenal_a, name_a, color_a), (arsenal_b, name_b, color_b)]:
             mv = arsenal.dropna(subset=["vert_break", "horz_break"])
@@ -361,7 +361,7 @@ if pitching_role_a is not None and pitching_role_b is not None:
                 x=mv["horz_break"], y=mv["vert_break"], mode="markers+text", name=pname,
                 text=mv["pitch_name"], textposition="top center",
                 textfont=dict(size=10, color=pcolor),
-                marker=dict(size=13, color=pcolor, line=dict(width=1.5, color="#FAFAFA")),
+                marker=dict(size=13, color=pcolor, line=dict(width=1.5, color=style.CHART_TEXT)),
                 hovertext=[
                     f"{pname} — {r['pitch_name']}: {r['usage_pct']:.0f}% usage, "
                     f"{r['velocity']:.1f} mph" if pd.notna(r["velocity"]) else f"{pname} — {r['pitch_name']}"
@@ -371,11 +371,11 @@ if pitching_role_a is not None and pitching_role_b is not None:
             ))
         fig.add_hline(y=0, line_color="rgba(154,163,181,0.4)", line_width=1)
         fig.add_vline(x=0, line_color="rgba(154,163,181,0.4)", line_width=1)
-        fig.update_xaxes(title="Horizontal Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
-        fig.update_yaxes(title="Induced Vertical Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+        fig.update_xaxes(title="Horizontal Break (in)", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
+        fig.update_yaxes(title="Induced Vertical Break (in)", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
         fig.update_layout(
             height=500, margin=dict(l=10, r=10, t=10, b=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -419,12 +419,12 @@ if both_batters or both_pitchers:
                     x=arc["season"], y=arc["stat"], mode="lines+markers", name=pname,
                     line=dict(color=pcolor, width=2.5), marker=dict(size=7),
                 ))
-        fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+        fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
         fig.update_yaxes(title=db.STAT_DISPLAY_LABELS.get(arc_stat, arc_stat),
-                         gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                         gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
         fig.update_layout(
             height=380, margin=dict(l=10, r=10, t=10, b=10),
-            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
             legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         )
         st.plotly_chart(fig, use_container_width=True)

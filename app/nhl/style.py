@@ -7,6 +7,14 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import sys as _sys
+from pathlib import Path as _Path
+_sys.path.append(str(_Path(__file__).resolve().parent.parent))
+# Chart colours live in the MLB-side style module; re-exported here so NHL
+# pages can reach them through nstyle.* like everything else.
+from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
+                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN)
+
 _CLINCH_LABELS = {"p": "Presidents' Trophy", "z": "Clinched conference", "y": "Clinched division", "x": "Clinched playoff berth"}
 
 
@@ -40,12 +48,12 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
         clinch = row.get("Clinch")
         clinch_title = _CLINCH_LABELS.get(clinch, "")
         symbol_html = (
-            f"<sup style='color:#9AA3B5;font-weight:700;margin-left:2px' title='{clinch_title}'>{clinch}</sup>"
+            f"<sup style='color:var(--dm-dim);font-weight:700;margin-left:2px' title='{clinch_title}'>{clinch}</sup>"
             if isinstance(clinch, str) and clinch else ""
         )
         team_cell = (
             f"<td style='padding:5px 10px'><a href='{team_link(row['Team'])}' target='_self' "
-            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:6px;"
             f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
         )
         streak = row["Streak"] if pd.notna(row.get("Streak")) else "—"
@@ -57,7 +65,7 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
             elo_str = f"{elo:.0f}" if elo is not None else "—"
             odds_cell = f"<td style='padding:5px 10px;text-align:center'>{elo_str}</td>"
         rows += (
-            "<tr style='border-top:1px solid #4A5266'>"
+            "<tr style='border-top:1px solid var(--dm-line)'>"
             f"{team_cell}"
             f"<td style='padding:5px 10px;text-align:center'>{row['GP']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
@@ -79,7 +87,7 @@ def standings_table(div_standings: pd.DataFrame, team_color_fn, elo_fn=None) -> 
         # to be, and only THEN does the wrapper's horizontal scroll kick in
         # on narrow/mobile screens.
         "<table style='border-collapse:collapse;font-size:0.9rem;white-space:nowrap'>"
-        "<thead><tr style='color:#9AA3B5;text-align:center'>"
+        "<thead><tr style='color:var(--dm-dim);text-align:center'>"
         "<th style='padding:5px 10px;text-align:left'>Team</th>"
         "<th style='padding:5px 10px'>GP</th><th style='padding:5px 10px'>W</th>"
         "<th style='padding:5px 10px'>L</th><th style='padding:5px 10px'>OTL</th>"

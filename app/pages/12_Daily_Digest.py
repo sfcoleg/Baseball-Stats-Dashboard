@@ -66,16 +66,16 @@ if notable:
     for g in shown_games:
         tag = "Blowout" if g["blowout"] else None
         tag_html = (
-            f"<span style='background-color:#3B82F666;color:#FAFAFA;padding:2px 8px;"
+            f"<span style='background-color:var(--dm-blue-soft);color:var(--dm-text);padding:2px 8px;"
             f"border-radius:6px;font-weight:700;font-size:0.75rem;margin-left:8px'>{tag}</span>"
             if tag else ""
         )
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>"
-            f"<span style='color:#9AA3B5;font-size:0.85rem'>{g['years_ago']} year{'s' if g['years_ago'] != 1 else ''} ago ({g['year']})</span>"
+            f"<span style='color:var(--dm-dim);font-size:0.85rem'>{g['years_ago']} year{'s' if g['years_ago'] != 1 else ''} ago ({g['year']})</span>"
             f"{tag_html}"
-            f"<div style='color:#DCE1EA'>{g['away_team']} {g['away_score']} @ {g['home_team']} {g['home_score']}</div></div>",
+            f"<div style='color:var(--dm-text)'>{g['away_team']} {g['away_score']} @ {g['home_team']} {g['home_score']}</div></div>",
             unsafe_allow_html=True,
         )
 
@@ -175,12 +175,12 @@ if plays_yday is not None and not plays_yday.empty:
         before, after = p["wp_before"] * 100, p["wp_after"] * 100
         desc = p["des"] if isinstance(p["des"], str) and p["des"] else p["events"]
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #F5B942;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-amber);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>"
-            f"<span style='color:#F5B942;font-weight:700'>{swing:.0f}% swing</span> "
-            f"<span style='color:#9AA3B5;font-size:0.85rem'>home win probability {before:.0f}% → {after:.0f}%"
+            f"<span style='color:var(--dm-amber);font-weight:700'>{swing:.0f}% swing</span> "
+            f"<span style='color:var(--dm-dim);font-size:0.85rem'>home win probability {before:.0f}% → {after:.0f}%"
             + (f" · {batter_name}" if batter_name else "") + "</span>"
-            f"<div style='color:#DCE1EA'>{desc}</div></div>",
+            f"<div style='color:var(--dm-text)'>{desc}</div></div>",
             unsafe_allow_html=True,
         )
 
@@ -216,14 +216,14 @@ else:
             if isinstance(tabbr, str):
                 color = teams.color_for_abbr(tabbr)
                 badges += (
-                    f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;"
+                    f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;"
                     f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{tabbr}</span>"
                 )
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #3B82F6;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>{badges}"
-            f"<span style='color:#9AA3B5;font-size:0.85rem'>{row['type']}</span>"
-            f"<div style='color:#DCE1EA'>{row['description']}</div></div>",
+            f"<span style='color:var(--dm-dim);font-size:0.85rem'>{row['type']}</span>"
+            f"<div style='color:var(--dm-text)'>{row['description']}</div></div>",
             unsafe_allow_html=True,
         )
 
@@ -235,7 +235,7 @@ else:
         abbr = row["to_abbr"] if isinstance(row["to_abbr"], str) else row["from_abbr"]
         color = teams.color_for_abbr(abbr) if isinstance(abbr, str) else "#666666"
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #D32F2F;padding:8px 14px;"
-            f"border-radius:6px;margin:4px 0;color:#DCE1EA'>{row['description']}</div>",
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-red);padding:8px 14px;"
+            f"border-radius:6px;margin:4px 0;color:var(--dm-text)'>{row['description']}</div>",
             unsafe_allow_html=True,
         )

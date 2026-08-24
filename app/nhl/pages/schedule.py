@@ -48,7 +48,7 @@ ratings = (elo or {}).get("ratings", {})
 
 def _badge(abbr: str) -> str:
     color = nteams.color_for_abbr(abbr)
-    return (f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+    return (f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{abbr}</span>")
 
 
@@ -92,13 +92,13 @@ if ratings and not watch.empty and team_filter == "All teams":
         o = _odds(r["game"])
         odds_txt = f"{o[0]} {o[1] * 100:.0f}%" if o else ""
         st.markdown(
-            f"<div style='background-color:#1B243866;border-left:4px solid #F5B942;padding:8px 14px;"
+            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-amber);padding:8px 14px;"
             f"border-radius:6px;margin:5px 0;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px'>"
-            f"<div><span style='color:#9AA3B5;font-size:0.85rem'>{pd.to_datetime(r['date']).strftime('%a %b %-d')}</span><br>"
-            f"{_badge(r['away'])} <span style='color:#9AA3B5;font-size:0.85rem'>Elo {r['elo_a']:.0f}</span>"
-            f" <span style='color:#9AA3B5'>@</span> "
-            f"{_badge(r['home'])} <span style='color:#9AA3B5;font-size:0.85rem'>Elo {r['elo_h']:.0f}</span></div>"
-            f"<span style='color:#DCE1EA;font-weight:700;white-space:nowrap'>{odds_txt}</span></div>",
+            f"<div><span style='color:var(--dm-dim);font-size:0.85rem'>{pd.to_datetime(r['date']).strftime('%a %b %-d')}</span><br>"
+            f"{_badge(r['away'])} <span style='color:var(--dm-dim);font-size:0.85rem'>Elo {r['elo_a']:.0f}</span>"
+            f" <span style='color:var(--dm-dim)'>@</span> "
+            f"{_badge(r['home'])} <span style='color:var(--dm-dim);font-size:0.85rem'>Elo {r['elo_h']:.0f}</span></div>"
+            f"<span style='color:var(--dm-text);font-weight:700;white-space:nowrap'>{odds_txt}</span></div>",
             unsafe_allow_html=True,
         )
 
@@ -125,7 +125,7 @@ if b2b:
     b2b.sort(key=lambda x: (x[1], x[0]))
     chips = " ".join(
         f"<span style='display:inline-block;margin:3px 6px 3px 0'>{_badge(abbr)} "
-        f"<span style='color:#9AA3B5;font-size:0.85rem'>{d1.strftime('%a')} → {d2.strftime('%a')}</span></span>"
+        f"<span style='color:var(--dm-dim);font-size:0.85rem'>{d1.strftime('%a')} → {d2.strftime('%a')}</span></span>"
         for abbr, d1, d2 in b2b
     )
     st.markdown(chips, unsafe_allow_html=True)
@@ -137,24 +137,24 @@ for date_str, day_games in sched.groupby("date", sort=True):
         g = r["game"]
         tag = ""
         if r["type"] == 1:
-            tag = "<span style='color:#9AA3B5;font-size:0.75rem;border:1px solid #4A5266;padding:1px 6px;border-radius:6px;margin-left:6px'>PRESEASON</span>"
+            tag = "<span style='color:var(--dm-dim);font-size:0.75rem;border:1px solid var(--dm-line);padding:1px 6px;border-radius:6px;margin-left:6px'>PRESEASON</span>"
         elif r["type"] == 3:
-            tag = "<span style='color:#F5B942;font-size:0.75rem;border:1px solid #F5B942;padding:1px 6px;border-radius:6px;margin-left:6px'>PLAYOFFS</span>"
+            tag = "<span style='color:var(--dm-amber);font-size:0.75rem;border:1px solid var(--dm-amber);padding:1px 6px;border-radius:6px;margin-left:6px'>PLAYOFFS</span>"
         if r["state"] in ("OFF", "FINAL"):
-            right = (f"<span style='color:#DCE1EA;font-weight:700'>{g['awayTeam'].get('score', '')} – {g['homeTeam'].get('score', '')}</span>"
-                     f" <span style='color:#9AA3B5;font-size:0.85rem'>Final</span>")
+            right = (f"<span style='color:var(--dm-text);font-weight:700'>{g['awayTeam'].get('score', '')} – {g['homeTeam'].get('score', '')}</span>"
+                     f" <span style='color:var(--dm-dim);font-size:0.85rem'>Final</span>")
         elif r["state"] in ("LIVE", "CRIT"):
-            right = "<span style='background-color:#D32F2F;color:#FFF;padding:2px 8px;border-radius:6px;font-weight:700;font-size:0.75rem'>LIVE</span>"
+            right = "<span style='background-color:var(--dm-red);color:#FFF;padding:2px 8px;border-radius:6px;font-weight:700;font-size:0.75rem'>LIVE</span>"
         else:
             o = _odds(g) if r["type"] != 1 else None
-            right = f"<span style='color:#9AA3B5;font-size:0.85rem;white-space:nowrap'>{o[0]} {o[1] * 100:.0f}%</span>" if o else ""
+            right = f"<span style='color:var(--dm-dim);font-size:0.85rem;white-space:nowrap'>{o[0]} {o[1] * 100:.0f}%</span>" if o else ""
         venue = (g.get("venue") or {}).get("default", "")
         st.markdown(
-            f"<div style='background-color:#1B243866;padding:8px 14px;border-radius:6px;margin:4px 0;"
+            f"<div style='background-color:var(--dm-surface-mute);padding:8px 14px;border-radius:6px;margin:4px 0;"
             f"display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap'>"
-            f"<div style='min-width:0'>{_badge(r['away'])} <span style='color:#9AA3B5'>@</span> {_badge(r['home'])}"
-            f" <span class='game-time-local' data-utc='{r['utc']}' style='color:#9AA3B5;font-size:0.85rem'></span>{tag}"
-            f"<div style='color:#9AA3B5;font-size:0.8rem;margin-top:2px'>{venue}</div></div>"
+            f"<div style='min-width:0'>{_badge(r['away'])} <span style='color:var(--dm-dim)'>@</span> {_badge(r['home'])}"
+            f" <span class='game-time-local' data-utc='{r['utc']}' style='color:var(--dm-dim);font-size:0.85rem'></span>{tag}"
+            f"<div style='color:var(--dm-dim);font-size:0.8rem;margin-top:2px'>{venue}</div></div>"
             f"{right}</div>",
             unsafe_allow_html=True,
         )

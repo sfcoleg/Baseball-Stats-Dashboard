@@ -159,7 +159,7 @@ if not ump_games.empty:
     fig = go.Figure()
     fig.add_trace(go.Scatter(
         x=mine["date"], y=mine["acc"], mode="markers", name="Game accuracy",
-        marker=dict(size=6, color="#3B82F6", opacity=0.55),
+        marker=dict(size=6, color=style.CHART_BLUE, opacity=0.55),
         hovertext=[
             f"{r['date']} — {r['away_abbr']} @ {r['home_abbr']}: {r['acc']:.1f}%"
             for _, r in mine.iterrows()
@@ -169,13 +169,13 @@ if not ump_games.empty:
     rolling = mine["acc"].rolling(7, min_periods=3).mean()
     fig.add_trace(go.Scatter(
         x=mine["date"], y=rolling, mode="lines", name="7-game average",
-        line=dict(color="#F5B942", width=2.5),
+        line=dict(color=style.CHART_AMBER, width=2.5),
     ))
-    fig.update_yaxes(ticksuffix="%", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+    fig.update_yaxes(ticksuffix="%", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
     fig.update_xaxes(color="#9AA3B5")
     fig.update_layout(
         height=320, margin=dict(l=10, r=10, t=10, b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
     )
     st.plotly_chart(fig, use_container_width=True)

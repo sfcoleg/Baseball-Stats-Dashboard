@@ -174,28 +174,28 @@ with photo_col:
     st.image(style.headshot_url(mlbID, width=180), width=120)
 with header_col:
     retired_badge = (
-        "<span style='background-color:#66666666;color:#DCE1EA;padding:4px 12px;"
+        "<span style='background-color:var(--dm-line);color:var(--dm-text);padding:4px 12px;"
         "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600;margin-left:6px'>RETIRED</span>"
         if is_retired else ""
     )
     hof_badge = (
-        "<span style='background-color:#FFD70066;color:#3A2F00;padding:4px 12px;"
+        "<span style='background-color:var(--dm-amber-soft);color:#3A2F00;padding:4px 12px;"
         "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:700;margin-left:6px'>HOF</span>"
         if mlbID in db.HALL_OF_FAME_MLBIDS else ""
     )
     st.markdown(
         f"# {selected_name} "
-        f"<span style='background-color:{color}66;color:#FAFAFA;padding:4px 12px;"
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:4px 12px;"
         f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>"
         f"{retired_badge}{hof_badge}",
         unsafe_allow_html=True,
     )
     st.caption(f"{nickname} · Age {age} · {selected_roles}")
     st.markdown(
-        "<button id='share-link-btn' style='background-color:#3B4A8244;color:#B9C4FF;"
-        "border:1px solid #3B4A8288;border-radius:8px;padding:3px 12px;font-size:0.8rem;"
+        "<button id='share-link-btn' style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);"
+        "border:1px solid var(--dm-blue-soft);border-radius:8px;padding:3px 12px;font-size:0.8rem;"
         "cursor:pointer;margin-top:4px'>\U0001F517 Copy share link</button>"
-        "<span id='share-link-copied' style='display:none;color:#7CFC9A;font-size:0.8rem;"
+        "<span id='share-link-copied' style='display:none;color:var(--dm-green);font-size:0.8rem;"
         "margin-left:8px'>Copied!</span>",
         unsafe_allow_html=True,
     )
@@ -242,7 +242,7 @@ if pitching is not None and is_pitcher_role:
         streak_badges.append(f"{scoreless_streak}-Outing Scoreless Streak")
 if streak_badges:
     badges_html = "".join(
-        f"<span style='background-color:#2e7d3244;color:#7CFC9A;padding:3px 10px;"
+        f"<span style='background-color:var(--dm-green-soft);color:var(--dm-green);padding:3px 10px;"
         f"border-radius:8px;font-weight:600;font-size:0.85rem;margin-right:8px'>{b}</span>"
         for b in streak_badges
     )
@@ -491,7 +491,7 @@ if pitching is not None and is_pitcher_role:
                     for pname, seg in cloud.groupby("pitch_name"):
                         fig.add_trace(go.Scatter(
                             x=seg["horz_break"], y=seg["vert_break"], mode="markers",
-                            marker=dict(size=5, color=style.PITCH_COLORS.get(pname, "#9AA3B5"), opacity=0.15),
+                            marker=dict(size=5, color=style.PITCH_COLORS.get(pname, style.CHART_DIM), opacity=0.15),
                             hoverinfo="skip", showlegend=False,
                         ))
                     mine_mv = arsenal.dropna(subset=["vert_break", "horz_break"])
@@ -500,17 +500,17 @@ if pitching is not None and is_pitcher_role:
                             x=[prow["horz_break"]], y=[prow["vert_break"]], mode="markers+text",
                             name=prow["pitch_name"], text=[prow["pitch_name"]], textposition="top center",
                             textfont=dict(size=11, color="#FAFAFA"),
-                            marker=dict(size=14, color=style.PITCH_COLORS.get(prow["pitch_name"], "#FAFAFA"),
-                                        line=dict(width=2, color="#FAFAFA")),
+                            marker=dict(size=14, color=style.PITCH_COLORS.get(prow["pitch_name"], style.CHART_TEXT),
+                                        line=dict(width=2, color=style.CHART_TEXT)),
                             showlegend=False,
                         ))
                     fig.add_hline(y=0, line_color="rgba(154,163,181,0.4)", line_width=1)
                     fig.add_vline(x=0, line_color="rgba(154,163,181,0.4)", line_width=1)
-                    fig.update_xaxes(title="Horizontal Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
-                    fig.update_yaxes(title="Induced Vertical Break (in)", gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                    fig.update_xaxes(title="Horizontal Break (in)", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
+                    fig.update_yaxes(title="Induced Vertical Break (in)", gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
                     fig.update_layout(
                         height=440, margin=dict(l=10, r=10, t=10, b=10),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
@@ -530,17 +530,17 @@ if pitching is not None and is_pitcher_role:
                         seg = seg.sort_values("season")
                         fig.add_trace(go.Scatter(
                             x=seg["season"], y=seg[metric_col], mode="lines+markers", name=pname,
-                            line=dict(color=style.PITCH_COLORS.get(pname, "#9AA3B5"), width=2.5),
+                            line=dict(color=style.PITCH_COLORS.get(pname, style.CHART_DIM), width=2.5),
                             marker=dict(size=7),
                         ))
-                    fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5")
+                    fig.update_xaxes(dtick=1, gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM)
                     fig.update_yaxes(
                         title="Usage %" if metric_col == "usage_pct" else "Velo (mph)",
-                        gridcolor="rgba(74,82,102,0.25)", color="#9AA3B5",
+                        gridcolor="rgba(74,82,102,0.25)", color=style.CHART_DIM,
                     )
                     fig.update_layout(
                         height=380, margin=dict(l=10, r=10, t=10, b=10),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
                         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -560,13 +560,13 @@ if pitching is not None and is_pitcher_role:
                     )
                     fig.add_shape(
                         type="rect", x0=-0.83, x1=0.83, y0=1.5, y1=3.5,
-                        line=dict(color="#FAFAFA", width=2),
+                        line=dict(color=style.CHART_TEXT, width=2),
                     )
                     fig.update_yaxes(range=[0, 5], scaleanchor="x", scaleratio=1)
                     fig.update_xaxes(range=[-2.5, 2.5])
                     fig.update_layout(
                         height=460, margin=dict(l=0, r=0, t=10, b=0),
-                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
                         xaxis_title="Horizontal — catcher's view (ft)", yaxis_title="Height (ft)",
                     )
                     st.plotly_chart(fig, use_container_width=True)
@@ -654,7 +654,7 @@ if pitching is not None and is_pitcher_role:
                             count_fig.update_layout(
                                 shapes=shapes, annotations=annotations,
                                 height=800, margin=dict(l=0, r=0, t=10, b=0),
-                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+                                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
                                 legend=dict(orientation="h", yanchor="bottom", y=-0.03),
                             )
                             st.plotly_chart(count_fig, use_container_width=True)
@@ -721,11 +721,11 @@ if not is_retired and (batting is not None or pitching is not None):
     trend = history[(history["role"] == role_filter) & history[stat_col].notna()]
     if len(trend) >= 2:
         fig = px.line(trend, x="date", y=stat_col, markers=True, labels={"date": "Date", stat_col: stat_label})
-        fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
+        fig.update_traces(line_color=style.CHART_BLUE, marker_color=style.CHART_BLUE)
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#FAFAFA",
+            font_color=style.CHART_TEXT,
         )
         st.plotly_chart(fig, use_container_width=True)
     else:
@@ -750,11 +750,11 @@ if batting is not None or pitching is not None:
             fig = px.line(
                 arc_df, x="season", y="stat", markers=True, labels={"season": "Season", "stat": arc_stat_label},
             )
-            fig.update_traces(line_color="#3B82F6", marker_color="#3B82F6")
+            fig.update_traces(line_color=style.CHART_BLUE, marker_color=style.CHART_BLUE)
             fig.update_layout(
                 height=320, margin=dict(l=0, r=0, t=10, b=0),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#FAFAFA", xaxis=dict(dtick=1),
+                font_color=style.CHART_TEXT, xaxis=dict(dtick=1),
             )
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -770,16 +770,16 @@ if batting is not None or pitching is not None:
             fig = go.Figure()
             fig.add_trace(go.Scatter(
                 x=league_curve["Age"], y=league_curve["stat"], mode="lines",
-                name="League average", line=dict(color="#9AA3B5", width=2, dash="dot"),
+                name="League average", line=dict(color=style.CHART_DIM, width=2, dash="dot"),
             ))
             fig.add_trace(go.Scatter(
                 x=player_points["Age"], y=player_points["stat"], mode="lines+markers",
-                name=selected_name, line=dict(color="#3B82F6", width=3), marker=dict(size=8),
+                name=selected_name, line=dict(color=style.CHART_BLUE, width=3), marker=dict(size=8),
             ))
             fig.update_layout(
                 height=340, margin=dict(l=0, r=0, t=10, b=0),
                 paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                font_color="#FAFAFA", xaxis_title="Age", yaxis_title=arc_stat_label,
+                font_color=style.CHART_TEXT, xaxis_title="Age", yaxis_title=arc_stat_label,
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
             )
             st.plotly_chart(fig, use_container_width=True)
@@ -795,7 +795,7 @@ if batting is not None or pitching is not None:
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#FAFAFA", showlegend=False,
+            font_color=style.CHART_TEXT, showlegend=False,
         )
         st.caption(f"Blue line = {selected_name}'s OPS against all qualified batters.")
         st.plotly_chart(fig, use_container_width=True)
@@ -806,7 +806,7 @@ if batting is not None or pitching is not None:
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-            font_color="#FAFAFA", showlegend=False,
+            font_color=style.CHART_TEXT, showlegend=False,
         )
         st.caption(f"Blue line = {selected_name}'s ERA against all qualified pitchers.")
         st.plotly_chart(fig, use_container_width=True)
@@ -893,7 +893,7 @@ if similarity_is_batter or (pitching is not None and is_pitcher_role):
                     f"<img src='{style.headshot_url(row['mlbID'], width=140)}' style='width:72px;height:72px;"
                     "border-radius:10px;object-fit:cover;object-position:center 25%' />"
                     f"<div style='margin-top:6px;font-weight:700;overflow-wrap:break-word'>{row['Name']}</div></a>"
-                    f"<div style='margin-top:4px'><span style='background-color:{sim_color}66;color:#FAFAFA;"
+                    f"<div style='margin-top:4px'><span style='background-color:{sim_color}66;color:var(--dm-text);"
                     f"padding:2px 9px;border-radius:8px;font-size:0.75rem;font-weight:600'>{sim_abbr}</span></div>"
                     "</div>",
                     unsafe_allow_html=True,
@@ -940,7 +940,7 @@ if awards and awards["marquee"]:
         )
         season_html.append(
             f"<div style='margin-bottom:6px'>"
-            f"<span style='color:#9AA3B5;font-weight:600;margin-right:10px'>{yr}</span>{badges}</div>"
+            f"<span style='color:var(--dm-dim);font-weight:600;margin-right:10px'>{yr}</span>{badges}</div>"
         )
     st.markdown("".join(season_html), unsafe_allow_html=True)
     if awards["other_count"]:

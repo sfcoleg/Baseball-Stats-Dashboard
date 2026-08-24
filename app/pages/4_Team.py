@@ -202,7 +202,7 @@ with logo_col:
         )
 with header_col:
     st.markdown(
-        f"<h2><span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
+        f"<h2><span style='background-color:{color}66;color:var(--dm-text);padding:4px 14px;"
         f"border-radius:10px'>{selected_abbr}</span> {teams.franchise_display_name(selected_abbr, season)}</h2>",
         unsafe_allow_html=True,
     )

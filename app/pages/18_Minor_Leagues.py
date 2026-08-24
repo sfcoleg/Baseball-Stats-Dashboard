@@ -187,17 +187,17 @@ with callup_tab:
             if isinstance(abbr, str):
                 color = teams.color_for_abbr(abbr)
                 team_bit = (
-                    f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;"
+                    f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;"
                     f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{abbr}</span>"
                 )
             st.markdown(
-                f"<div style='background-color:#1B243866;border-left:4px solid {accent};padding:8px 14px;"
+                f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid {accent};padding:8px 14px;"
                 f"border-radius:6px;margin:5px 0'>"
                 f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:2px'>"
-                f"<div>{arrow} {team_bit}<span style='color:#9AA3B5;font-size:0.85rem'>{row['type']}</span></div>"
-                f"<span style='color:#9AA3B5;font-size:0.85rem'>{row['date']}</span>"
+                f"<div>{arrow} {team_bit}<span style='color:var(--dm-dim);font-size:0.85rem'>{row['type']}</span></div>"
+                f"<span style='color:var(--dm-dim);font-size:0.85rem'>{row['date']}</span>"
                 f"</div>"
-                f"<div style='color:#DCE1EA'>{row['description']}</div>"
+                f"<div style='color:var(--dm-text)'>{row['description']}</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )

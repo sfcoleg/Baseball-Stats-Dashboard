@@ -57,12 +57,27 @@ def team_logo_for_season(abbr: str, team_id: int, season: int | None) -> str:
     return team_logo_url(team_id)
 
 
-ACCENT = "#3B82F6"
+ACCENT = "#2E86DE"
 
 # The gemstone-diamond logo's main facet color — also used to color the
 # Home page title text (see Home.py), so the two stay in sync if this ever
 # changes rather than needing the hex repeated in two places.
-DIAMOND_COLOR = "#93C5FD"
+# Deep enough to read on the light theme; the dark theme lifts it via
+# the .diamond-title rule in main.py.
+DIAMOND_COLOR = "#2E86DE"
+
+# Chart palette. Plotly renders to SVG and can't read the --dm-* CSS custom
+# properties the hand-written HTML uses, so the same colours are repeated here
+# as literals. Light-theme values: charts sit on white cards.
+CHART_TEXT = "#0C1725"
+CHART_DIM = "#71829A"
+CHART_GRID = "#E4EAF3"
+CHART_SURFACE = "#FFFFFF"
+CHART_BLUE = "#2E86DE"
+CHART_AMBER = "#B7791F"
+CHART_RED = "#C0453F"
+CHART_GREEN = "#2E7D32"
+
 
 
 def diamond_logo(size=64):
@@ -104,7 +119,7 @@ PITCH_COLORS = {
     "Slider": "#7CB342", "Sweeper": "#26A69A", "Slurve": "#4DB6AC",
     "Curveball": "#3B82F6", "Knuckle Curve": "#5C6BC0", "Changeup": "#AB47BC",
     "Splitter": "#EC407A", "Split-Finger": "#EC407A", "Knuckleball": "#8D6E63",
-    "Screwball": "#78909C", "Forkball": "#EC407A", "Eephus": "#9AA3B5",
+    "Screwball": "#78909C", "Forkball": "#EC407A", "Eephus": "var(--dm-dim)",
 }
 
 CATEGORY_COLORS = {
@@ -186,12 +201,12 @@ def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
     st.caption(label)
     name_html = (
         f"<div style='font-size:1.4rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
-        f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
+        f"<span style='background-color:{team_color}66;color:var(--dm-text);padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
     )
     stat_html = (
-        f"<div style='margin-top:6px;margin-bottom:12px'><span style='background-color:#2e7d3244;"
-        f"color:#7CFC9A;padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
+        f"<div style='margin-top:6px;margin-bottom:12px'><span style='background-color:var(--dm-green-soft);"
+        f"color:var(--dm-green);padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
         f"&uarr; {stat_line}</span></div>"
     )
     if mlbID is not None:
@@ -229,11 +244,11 @@ def milestone_card(mlbID, name, team_abbr, team_color, text, season=None):
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>"
         f"<a href='{player_link(mlbID, season)}' target='_self' style='color:inherit;"
         f"text-decoration:none'>{name}</a> "
-        f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
+        f"<span style='background-color:{team_color}66;color:var(--dm-text);padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
         f"</div>"
-        f"<div style='margin-top:6px;'><span style='background-color:#3B4A8244;"
-        f"color:#B9C4FF;padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
+        f"<div style='margin-top:6px;'><span style='background-color:var(--dm-blue-soft);"
+        f"color:var(--dm-blue-text);padding:3px 10px;border-radius:8px;font-weight:600;font-size:0.9rem'>"
         f"{text}</span></div>"
         f"</div>"
         f"</div>",
@@ -247,17 +262,17 @@ def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
     actually crossed a milestone recently (see db.recent_milestone_achievers),
     as opposed to one who's just getting close."""
     st.markdown(
-        f"<div style='display:flex;align-items:flex-start;gap:12px;background-color:#F5B94214;"
-        f"border:1px solid #F5B94266;border-radius:12px;padding:10px;margin-bottom:20px'>"
+        f"<div style='display:flex;align-items:flex-start;gap:12px;background-color:var(--dm-amber-soft);"
+        f"border:1px solid var(--dm-amber-soft);border-radius:12px;padding:10px;margin-bottom:20px'>"
         f"<img src='{headshot_url(mlbID, width=180)}' style='width:80px;height:80px;"
-        f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0;border:2px solid #F5B942' />"
+        f"border-radius:10px;object-fit:cover;object-position:center 25%;flex-shrink:0;border:2px solid var(--dm-amber)' />"
         f"<div style='flex:1;min-width:0'>"
         f"<div style='font-size:1.1rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
-        f"<span style='background-color:{team_color}66;color:#FAFAFA;padding:2px 9px;"
+        f"<span style='background-color:{team_color}66;color:var(--dm-text);padding:2px 9px;"
         f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
         f"</div>"
-        f"<div style='margin-top:6px;'><span style='background-color:#F5B94233;"
-        f"color:#F5B942;padding:3px 10px;border-radius:8px;font-weight:700;font-size:0.9rem'>"
+        f"<div style='margin-top:6px;'><span style='background-color:var(--dm-amber-soft);"
+        f"color:var(--dm-amber);padding:3px 10px;border-radius:8px;font-weight:700;font-size:0.9rem'>"
         f"\U0001f389 {text}</span></div>"
         f"</div>"
         f"</div>",
@@ -284,14 +299,14 @@ def on_this_day_highlight_card(h: dict) -> str:
         if h.get("mlbID") else ""
     )
     return (
-        f"<div style='display:flex;align-items:center;background-color:#1B243866;"
+        f"<div style='display:flex;align-items:center;background-color:var(--dm-surface-mute);"
         f"border-left:4px solid {color};padding:8px 14px;border-radius:6px;margin:4px 0'>"
         f"{photo_html}"
         f"<div style='flex:1;min-width:0'>"
-        f"<span style='color:#9AA3B5;font-size:0.85rem'>{h['years_ago']} year{'s' if h['years_ago'] != 1 else ''} ago ({h['year']})</span>"
+        f"<span style='color:var(--dm-dim);font-size:0.85rem'>{h['years_ago']} year{'s' if h['years_ago'] != 1 else ''} ago ({h['year']})</span>"
         f"<span style='background-color:{color}33;color:{color};padding:2px 8px;border-radius:6px;"
         f"font-weight:700;font-size:0.75rem;margin-left:8px'>{h['kind']}</span>"
-        f"<div style='color:#DCE1EA'><b>{h['player']}</b> ({h['team']}) — {h['text']}</div>"
+        f"<div style='color:var(--dm-text)'><b>{h['player']}</b> ({h['team']}) — {h['text']}</div>"
         f"</div></div>"
     )
 
@@ -316,23 +331,23 @@ def box_score_table(linescore: dict, away_abbr: str, home_abbr: str, away_color:
         )
         totals_cells = "".join(
             f"<td style='padding:5px 14px;text-align:center;font-weight:700;font-variant-numeric:tabular-nums;"
-            f"{'border-left:2px solid #4A5266;' if stat == 'runs' else ''}'>{side_totals.get(stat, '—')}</td>"
+            f"{'border-left:2px solid var(--dm-line);' if stat == 'runs' else ''}'>{side_totals.get(stat, '—')}</td>"
             for stat in ("runs", "hits", "errors")
         )
         return (
-            "<tr style='border-top:1px solid #4A5266'>"
+            "<tr style='border-top:1px solid var(--dm-line)'>"
             f"<td style='padding:5px 10px;white-space:nowrap'><span style='background-color:{color}66;"
-            f"color:#FAFAFA;padding:2px 9px;border-radius:6px;font-weight:700'>{abbr}</span></td>"
+            f"color:var(--dm-text);padding:2px 9px;border-radius:6px;font-weight:700'>{abbr}</span></td>"
             f"{cells}{totals_cells}</tr>"
         )
 
     inning_headers = "".join(
-        f"<th style='padding:5px 12px;text-align:center;color:#9AA3B5;font-weight:600'>{i['num']}</th>"
+        f"<th style='padding:5px 12px;text-align:center;color:var(--dm-dim);font-weight:600'>{i['num']}</th>"
         for i in innings
     )
     totals_headers = "".join(
-        f"<th style='padding:5px 14px;text-align:center;color:#9AA3B5;font-weight:600;"
-        f"{'border-left:2px solid #4A5266;' if h == 'R' else ''}'>{h}</th>"
+        f"<th style='padding:5px 14px;text-align:center;color:var(--dm-dim);font-weight:600;"
+        f"{'border-left:2px solid var(--dm-line);' if h == 'R' else ''}'>{h}</th>"
         for h in ("R", "H", "E")
     )
     return (
@@ -362,12 +377,12 @@ def game_state_html(status_line: str, bases: dict, outs, scale: float = 1.0) -> 
     exposing separate width/gap/etc. parameters callers would have to keep
     proportional themselves."""
     gap = round(6 * scale)
-    status_html = f"<div style='color:#9AA3B5;font-size:{0.85 * scale:.2f}rem'>{status_line}</div>"
+    status_html = f"<div style='color:var(--dm-dim);font-size:{0.85 * scale:.2f}rem'>{status_line}</div>"
     if outs is None:
         return f"<div style='display:flex;flex-direction:column;align-items:center;gap:{gap}px'>{status_html}</div>"
 
     on = "#F5B942"
-    off = "#4A5266"
+    off = "var(--dm-line)"
     corner_size = round(10 * scale)
 
     def corner(top, left, runner_name):
@@ -393,7 +408,7 @@ def game_state_html(status_line: str, bases: dict, outs, scale: float = 1.0) -> 
         ".diamond-corner-runner { cursor: pointer; }"
         ".diamond-corner-runner:hover::after {"
         "  content: attr(data-tooltip); position: absolute; bottom: 130%; left: 50%;"
-        "  transform: translateX(-50%); background-color: #12141C; color: #FAFAFA;"
+        "  transform: translateX(-50%); background-color: var(--dm-surface); color: var(--dm-text);"
         "  padding: 3px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 600;"
         "  white-space: nowrap; z-index: 1000; pointer-events: none;"
         "  box-shadow: 0 2px 6px rgba(0,0,0,0.4);"
@@ -497,15 +512,15 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
     for _, row in div_standings.iterrows():
         color = team_color_fn(row["Team"])
         symbol = clinch_symbols.get(row["Team"])
-        symbol_html = f"<sup style='color:#9AA3B5;font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
+        symbol_html = f"<sup style='color:var(--dm-dim);font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
         team_cell = (
             f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
-            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:6px;"
             f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
         )
         if compact:
             rows += (
-                "<tr style='border-top:1px solid #4A5266'>"
+                "<tr style='border-top:1px solid var(--dm-line)'>"
                 f"{team_cell}"
                 f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
                 f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
@@ -520,14 +535,14 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
         if has_playoff_pct:
             pct = row["Playoff%"]
             pct_str = f"{pct:.1f}%" if pd.notna(pct) else "—"
-            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "#4A5266"
+            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "var(--dm-line)"
             playoff_cell = (
                 "<td style='padding:5px 10px;text-align:center'>"
                 f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
                 f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
             )
         rows += (
-            "<tr style='border-top:1px solid #4A5266'>"
+            "<tr style='border-top:1px solid var(--dm-line)'>"
             f"{team_cell}"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
@@ -545,7 +560,7 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
         header_cols.append("Playoff%")
     headers = "".join(
         f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
-        f"color:#9AA3B5;font-weight:600'>{'Playoff Odds' if h == 'Playoff%' else h}</th>"
+        f"color:var(--dm-dim);font-weight:600'>{'Playoff Odds' if h == 'Playoff%' else h}</th>"
         for h in header_cols
     )
     return (
@@ -566,7 +581,7 @@ def playoff_odds_table(df, team_color_fn) -> str:
         def _pct_cell(col):
             pct = row[col]
             pct_str = f"{pct:.1f}%" if pd.notna(pct) else "—"
-            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "#4A5266"
+            bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "var(--dm-line)"
             return (
                 "<td style='padding:5px 10px;text-align:center'>"
                 f"<span style='background-color:{bar_color}40;color:{bar_color};padding:2px 8px;"
@@ -574,9 +589,9 @@ def playoff_odds_table(df, team_color_fn) -> str:
             )
 
         rows += (
-            "<tr style='border-top:1px solid #4A5266'>"
+            "<tr style='border-top:1px solid var(--dm-line)'>"
             f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
-            f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+            f"style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:6px;"
             f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a></td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}-{row['L']}</td>"
             f"{_pct_cell('Playoff%')}{_pct_cell('Division%')}{_pct_cell('Wildcard%')}{_pct_cell('WS%')}"
@@ -584,7 +599,7 @@ def playoff_odds_table(df, team_color_fn) -> str:
         )
     headers = "".join(
         f"<th style='padding:5px 10px;text-align:{'left' if h == 'Team' else 'center'};"
-        f"color:#9AA3B5;font-weight:600'>{h}</th>"
+        f"color:var(--dm-dim);font-weight:600'>{h}</th>"
         for h in ("Team", "W-L", "Playoff%", "Division%", "Wildcard%", "WS%")
     )
     return (
@@ -613,36 +628,36 @@ PLAYOFF_BRACKET_CSS = """
 .bracket-row { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:0; }
 .br-pair { display:flex; flex-direction:column; position:relative; }
 .br-pair::after {
-  content:''; position:absolute; right:0; top:25%; bottom:25%; width:1px; background:#4A5266;
+  content:''; position:absolute; right:0; top:25%; bottom:25%; width:1px; background:var(--dm-line);
 }
 .br-pair.mirror::after { right:auto; left:0; }
 .br-slot { flex:1; display:flex; align-items:center; position:relative; padding-right:18px; min-height:36px; }
 .br-slot::after {
-  content:''; position:absolute; right:0; top:50%; width:18px; height:1px; background:#4A5266;
+  content:''; position:absolute; right:0; top:50%; width:18px; height:1px; background:var(--dm-line);
 }
 .br-slot.mirror { padding-right:0; padding-left:18px; justify-content:flex-end; }
 .br-slot.mirror::after { right:auto; left:0; }
 .br-bye-shift { margin-left:88px; }
 .br-bye-shift.mirror { margin-left:0; margin-right:88px; }
 .br-team {
-  display:flex; align-items:center; gap:6px; background-color:#1B243866; border-radius:6px;
+  display:flex; align-items:center; gap:6px; background-color:var(--dm-surface-mute); border-radius:6px;
   padding:4px 10px; white-space:nowrap; font-size:0.8rem;
 }
-.br-seed { color:#9AA3B5; font-weight:700; font-size:0.75rem; }
+.br-seed { color:var(--dm-dim); font-weight:700; font-size:0.75rem; }
 .br-badge {
-  background-color:var(--br-color) !important; color:#FAFAFA !important; padding:1px 7px; border-radius:5px;
+  background-color:var(--br-color) !important; color:var(--dm-text) !important; padding:1px 7px; border-radius:5px;
   font-weight:700; text-decoration:none !important; font-size:0.8rem;
 }
-.br-rec { color:#9AA3B5; font-size:0.75rem; }
+.br-rec { color:var(--dm-dim); font-size:0.75rem; }
 .br-tag { color:#F5B942; font-size:0.7rem; font-weight:700; }
 .br-matchbox { display:flex; flex-direction:column; gap:3px; }
 .br-ws-box {
-  display:flex; flex-direction:column; align-items:center; gap:6px; background-color:#1B243866;
-  border:1px solid #4A5266; border-radius:8px; padding:14px 22px; font-size:0.85rem; color:#9AA3B5;
+  display:flex; flex-direction:column; align-items:center; gap:6px; background-color:var(--dm-surface-mute);
+  border:1px solid var(--dm-line); border-radius:8px; padding:14px 22px; font-size:0.85rem; color:var(--dm-dim);
   position:relative; margin:0 24px;
 }
 .br-ws-box::before, .br-ws-box::after {
-  content:''; position:absolute; top:50%; width:24px; height:1px; background:#4A5266;
+  content:''; position:absolute; top:50%; width:24px; height:1px; background:var(--dm-line);
 }
 .br-ws-box::before { left:-24px; }
 .br-ws-box::after { right:-24px; }
@@ -665,7 +680,7 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
     `seeded` needs seed/team_abbr/wins/losses, seed 1-6."""
     by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
     if len(by_seed) < 6:
-        return "<div style='color:#9AA3B5'>Not enough teams to seed a bracket yet.</div>"
+        return "<div style='color:var(--dm-dim)'>Not enough teams to seed a bracket yet.</div>"
 
     mirror_cls = " mirror" if mirror else ""
 
@@ -741,7 +756,7 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
         opp_color = team_color_fn(row["opponent"])
         vs_at = "vs" if row["home"] else "@"
         matchup = (
-            f"{vs_at} <span style='background-color:{opp_color}66;color:#FAFAFA;padding:2px 8px;"
+            f"{vs_at} <span style='background-color:{opp_color}66;color:var(--dm-text);padding:2px 8px;"
             f"border-radius:6px;font-weight:700'>{row['opponent']}</span>"
         )
         if row["result"] == "W":
@@ -756,23 +771,23 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
             )
         else:
             label = _SCHEDULE_STATUS_LABELS.get(row["status"], row["status"])
-            score_cell = f"<span style='color:#9AA3B5'>{label}</span>"
+            score_cell = f"<span style='color:var(--dm-dim)'>{label}</span>"
         time_cell = (
             f"<span class='game-time-local' data-utc='{row['game_time']}'>&nbsp;</span>"
             if pd.notna(row.get("game_time")) else "—"
         )
         row_id = " id='sched-anchor'" if i == anchor_idx else ""
         rows += (
-            f"<tr{row_id} style='border-top:1px solid #4A5266'>"
+            f"<tr{row_id} style='border-top:1px solid var(--dm-line)'>"
             f"<td style='padding:5px 10px'>{row['date']}</td>"
-            f"<td style='padding:5px 10px;color:#9AA3B5;font-size:0.85rem'>{time_cell}</td>"
+            f"<td style='padding:5px 10px;color:var(--dm-dim);font-size:0.85rem'>{time_cell}</td>"
             f"<td style='padding:5px 10px'>{matchup}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{score_cell}</td>"
             "</tr>"
         )
     headers = "".join(
         f"<th style='padding:5px 10px;text-align:{'left' if h != 'Result' else 'center'};"
-        f"color:#9AA3B5;font-weight:600'>{h}</th>"
+        f"color:var(--dm-dim);font-weight:600'>{h}</th>"
         for h in ("Date", "Time", "Opponent", "Result")
     )
     return (
@@ -810,7 +825,7 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     if team_col and team_col in df.columns and team_color_fn:
         def _team_bg(val):
             color = team_color_fn(val)
-            return f"background-color: {color}66; color: #FAFAFA; font-weight: 600"
+            return f"background-color: {color}66; color: var(--dm-text); font-weight: 600"
 
         styler = styler.map(_team_bg, subset=[team_col])
         if team_abbr_fn:
@@ -876,12 +891,12 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             name = "TBD"
             note = None
             photo_html = (
-                f"<div style='width:56px;height:56px;border-radius:50%;background:#4A5266;"
+                f"<div style='width:56px;height:56px;border-radius:50%;background:var(--dm-line);"
                 f"border:2px solid {team_color};display:flex;align-items:center;justify-content:center;"
                 f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
             )
         note_html = (
-            f"<div style='font-size:0.6rem;color:#F5B942;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{note}</div>"
+            f"<div style='font-size:0.6rem;color:var(--dm-amber);text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{note}</div>"
             if note else ""
         )
         cards.append(
@@ -889,7 +904,7 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             f"transform:translate(-50%,-{_DIAMOND_PHOTO_SIZE / 2:.0f}px);"
             f"text-align:center;z-index:1;width:90px'>"
             f"{photo_html}"
-            f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:#FAFAFA;"
+            f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:var(--dm-text);"
             f"text-shadow:0 1px 3px rgba(0,0,0,0.8);overflow-wrap:break-word'>{name}</div>"
             f"<div style='font-size:0.65rem;color:#D8DEE9;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{label}</div>"
             f"{note_html}"
@@ -916,7 +931,7 @@ def style_comparison(df, higher_better=None, lower_better=None):
     Highlights whichever cell in each row is the better value."""
     higher_better = set(higher_better or [])
     lower_better = set(lower_better or [])
-    win_style = "background-color: #2e7d3244; color: #7CFC9A; font-weight: 700"
+    win_style = "background-color: var(--dm-green-soft); color: var(--dm-green); font-weight: 700"
 
     def highlight_row(row):
         stat = row.name
@@ -955,7 +970,7 @@ def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, 
     ))
     fig.update_layout(
         polar=dict(
-            radialaxis=dict(visible=True, range=[0, 100], color="#FAFAFA", gridcolor=_hex_to_rgba("#4A5266", 0.2)),
+            radialaxis=dict(visible=True, range=[0, 100], color=CHART_TEXT, gridcolor=_hex_to_rgba(CHART_GRID, 0.6)),
             angularaxis=dict(color="#FAFAFA"),
             bgcolor="rgba(0,0,0,0)",
         ),
@@ -1005,7 +1020,7 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     fig.add_shape(
         type="path",
         path="M -0.708 0.62 L 0.708 0.62 L 0.708 0.44 L 0 0.25 L -0.708 0.44 Z",
-        line=dict(color="#9AA3B5", width=1.5), fillcolor="rgba(154,163,181,0.18)",
+        line=dict(color=CHART_DIM, width=1.5), fillcolor="rgba(154,163,181,0.18)",
     )
     for i, p in enumerate(pitches):
         kind = "in_play" if p["is_in_play"] else ("strike" if p["is_strike"] else "ball")
@@ -1057,7 +1072,7 @@ def ump_zone_plot(pitches: list[dict]) -> "go.Figure":
     fig.add_shape(
         type="path",
         path="M -0.708 0.95 L 0.708 0.95 L 0.708 0.78 L 0 0.6 L -0.708 0.78 Z",
-        line=dict(color="#9AA3B5", width=1.5), fillcolor="rgba(154,163,181,0.18)",
+        line=dict(color=CHART_DIM, width=1.5), fillcolor="rgba(154,163,181,0.18)",
     )
 
     def norm_z(p):
@@ -1120,8 +1135,8 @@ def batter_zone_heatmap_chart(spray: pd.DataFrame) -> "go.Figure":
         xbins=dict(start=-2.5, end=2.5, size=0.5), ybins=dict(start=0.5, end=4.5, size=0.5),
         colorscale=[[0, "#3B82F6"], [0.5, "#FAFAFA"], [1, "#D32F2F"]],
         colorbar=dict(
-            title=dict(text="Avg EV", font=dict(color="#9AA3B5")),
-            tickfont=dict(color="#9AA3B5"),
+            title=dict(text="Avg EV", font=dict(color="var(--dm-dim)")),
+            tickfont=dict(color=CHART_DIM),
         ),
         hovertemplate="Avg exit velo: %{z:.1f} mph<extra></extra>",
     ))
@@ -1153,7 +1168,7 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
     fig = go.Figure()
     fig.add_hline(
         y=50, line=dict(color=_hex_to_rgba(away_color, 0.5), width=1, dash="dot"),
-        annotation_text=f"{away_abbr} favored below", annotation_font_color="#9AA3B5", annotation_font_size=10,
+        annotation_text=f"{away_abbr} favored below", annotation_font_color=CHART_DIM, annotation_font_size=10,
     )
     fig.add_trace(go.Scatter(
         x=wp_df["atBatIndex"], y=wp_df["home_win_pct"], mode="lines",
@@ -1182,7 +1197,7 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
                 hovertemplate="%{text}<extra></extra>" if has_desc else "Scoring play<extra></extra>",
                 showlegend=False,
             ))
-    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba("#4A5266", 0.25), color="#9AA3B5", ticksuffix="%")
+    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba(CHART_GRID, 0.25), color=CHART_DIM, ticksuffix="%")
     fig.update_xaxes(visible=False)
     fig.update_layout(
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
@@ -1423,10 +1438,10 @@ def matchup_preview_html(profile_a: dict, profile_b: dict, team_color_fn) -> str
         gaps.append((abs(va - vb) / denom, label))
         winner_color = color_a if a_wins else color_b
         rows.append(
-            "<tr style='border-top:1px solid #4A5266'>"
+            "<tr style='border-top:1px solid var(--dm-line)'>"
             f"<td style='padding:6px 10px;text-align:right;font-weight:{700 if a_wins else 400};"
             f"color:{'#FAFAFA' if a_wins else '#9AA3B5'}'>{fmt.format(va)}</td>"
-            f"<td style='padding:6px 14px;text-align:center;color:#9AA3B5;white-space:nowrap'>{label}</td>"
+            f"<td style='padding:6px 14px;text-align:center;color:var(--dm-dim);white-space:nowrap'>{label}</td>"
             f"<td style='padding:6px 10px;text-align:left;font-weight:{700 if not a_wins else 400};"
             f"color:{'#FAFAFA' if not a_wins else '#9AA3B5'}'>{fmt.format(vb)}</td>"
             "</tr>"
@@ -1442,7 +1457,7 @@ def matchup_preview_html(profile_a: dict, profile_b: dict, team_color_fn) -> str
     )
     top_gaps = [label for _, label in sorted(gaps, reverse=True)[:2]]
     focus = (
-        f"<p style='color:#9AA3B5;margin-top:10px'>Biggest mismatches: {', '.join(top_gaps)}.</p>"
+        f"<p style='color:var(--dm-dim);margin-top:10px'>Biggest mismatches: {', '.join(top_gaps)}.</p>"
         if top_gaps else ""
     )
     return table + focus

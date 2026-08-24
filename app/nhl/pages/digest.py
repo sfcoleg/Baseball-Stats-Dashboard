@@ -53,13 +53,13 @@ def _player_card(label, name, player_id, team_abbr, stat_line):
         f"<img src='{_headshot(player_id, team_abbr)}' style='width:64px;height:64px;border-radius:10px;"
         f"object-fit:cover;object-position:center 15%;flex-shrink:0;background:#1A1F2E' />"
         f"<div style='flex:1;min-width:0'>"
-        f"<div style='color:#9AA3B5;font-size:0.85rem'>{label}</div>"
+        f"<div style='color:var(--dm-dim);font-size:0.85rem'>{label}</div>"
         f"<div style='font-size:1.15rem;font-weight:700;line-height:1.3'>"
         f"<a href='{nstyle.player_link(player_id, season)}' target='_self' style='color:inherit;"
         f"text-decoration:none'>{name}</a> "
-        f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:8px;"
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:8px;"
         f"font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
-        f"<div style='margin-top:6px'><span style='background-color:#3B4A8244;color:#93C5FD;padding:3px 10px;"
+        f"<div style='margin-top:6px'><span style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);padding:3px 10px;"
         f"border-radius:8px;font-weight:600;font-size:0.9rem'>{stat_line}</span></div>"
         "</div></div>",
         unsafe_allow_html=True,
@@ -107,14 +107,14 @@ else:
                             "<div style='display:flex;align-items:center;justify-content:space-between;padding:3px 0'>"
                             f"<div style='display:flex;align-items:center;gap:8px'>"
                             f"<img src='{team.get('logo', '')}' style='height:26px;width:26px;object-fit:contain'>"
-                            f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;"
+                            f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
                             f"font-weight:700;font-size:0.8rem'>{team['abbrev']}</span>"
                             f"<span style='font-weight:{weight}'>{nteams.nickname_for_abbr(team['abbrev'])}</span></div>"
                             f"<span style='font-size:1.3rem;font-weight:{weight}'>{score}</span></div>"
                         )
                     st.markdown(
                         _row(away, a_s, winner == away["abbrev"]) + _row(home, h_s, winner == home["abbrev"])
-                        + f"<div style='color:#9AA3B5;font-size:0.8rem;margin-top:4px'>Final{suffix}"
+                        + f"<div style='color:var(--dm-dim);font-size:0.8rem;margin-top:4px'>Final{suffix}"
                         + (" · " + " · ".join(notes) if notes else "") + "</div>",
                         unsafe_allow_html=True,
                     )
@@ -178,9 +178,9 @@ if not standings.empty:
                     color = nteams.color_for_abbr(abbr)
                     st.markdown(
                         f"<div style='margin-bottom:6px'><a href='{nstyle.team_link(abbr)}' target='_self' "
-                        f"style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:6px;"
+                        f"style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:6px;"
                         f"font-weight:700;text-decoration:none'>{abbr}</a> "
                         f"<b>{int(r['streakCount'])} straight</b> "
-                        f"<span style='color:#9AA3B5'>({int(r['wins'])}-{int(r['losses'])}-{int(r['otLosses'])}, {int(r['points'])} pts)</span></div>",
+                        f"<span style='color:var(--dm-dim)'>({int(r['wins'])}-{int(r['losses'])}-{int(r['otLosses'])}, {int(r['points'])} pts)</span></div>",
                         unsafe_allow_html=True,
                     )

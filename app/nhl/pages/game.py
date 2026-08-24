@@ -89,18 +89,18 @@ def _render():
         return (
             f"<div style='text-align:{align};flex:1'>"
             f"<img src='{team.get('logo', '')}' style='height:64px;width:64px;object-fit:contain'>"
-            f"<div style='margin-top:4px'><span style='background-color:{color}66;color:#FAFAFA;padding:2px 10px;"
+            f"<div style='margin-top:4px'><span style='background-color:{color}66;color:var(--dm-text);padding:2px 10px;"
             f"border-radius:8px;font-weight:700'>{team['abbrev']}</span></div>"
             f"<div style='font-weight:700;font-size:1.1rem;margin-top:4px'>{nteams.nickname_for_abbr(team['abbrev'])}</div>"
-            f"<div style='color:#9AA3B5;font-size:0.85rem'>SOG {team.get('sog', '—')}</div></div>"
+            f"<div style='color:var(--dm-dim);font-size:0.85rem'>SOG {team.get('sog', '—')}</div></div>"
         )
 
     score_html = (
         f"<div style='font-size:3rem;font-weight:800'>{away.get('score', 0)} – {home.get('score', 0)}</div>"
-        if started else "<div style='font-size:2rem;color:#9AA3B5'>@</div>"
+        if started else "<div style='font-size:2rem;color:var(--dm-dim)'>@</div>"
     )
     live_badge = (
-        "<span style='background-color:#D32F2F;color:#FFF;padding:3px 12px;border-radius:8px;"
+        "<span style='background-color:var(--dm-red);color:#FFF;padding:3px 12px;border-radius:8px;"
         "font-weight:700;font-size:0.75rem;letter-spacing:0.5px'>LIVE</span> " if is_live else ""
     )
     venue = (landing.get("venue") or {}).get("default", "")
@@ -108,8 +108,8 @@ def _render():
         "<div style='display:flex;align-items:center;gap:16px;padding:12px 0'>"
         + _side(away, a_color, "right")
         + f"<div style='text-align:center;flex:0 0 200px'>{score_html}"
-        f"<div style='margin-top:4px'>{live_badge}<span style='color:#9AA3B5'>{_status_line()}</span></div>"
-        f"<div style='color:#9AA3B5;font-size:0.8rem'>{venue}</div></div>"
+        f"<div style='margin-top:4px'>{live_badge}<span style='color:var(--dm-dim)'>{_status_line()}</span></div>"
+        f"<div style='color:var(--dm-dim);font-size:0.8rem'>{venue}</div></div>"
         + _side(home, h_color, "left") + "</div>",
         unsafe_allow_html=True,
     )
@@ -140,11 +140,11 @@ def _render():
                         f"<div style='display:flex;align-items:center;gap:12px'>"
                         f"<img src='{s.get('headshot', '')}' style='width:64px;height:64px;border-radius:10px;object-fit:cover;"
                         f"object-position:center 15%;background:#1A1F2E'>"
-                        f"<div><div style='color:#F5B942;font-weight:700;font-size:0.8rem'>{'★' * int(s.get('star', 1))} STAR {s.get('star')}</div>"
+                        f"<div><div style='color:var(--dm-amber);font-weight:700;font-size:0.8rem'>{'★' * int(s.get('star', 1))} STAR {s.get('star')}</div>"
                         f"<div style='font-size:1.1rem;font-weight:700'><a href='{nstyle.player_link(s['playerId'], season)}' target='_self' "
                         f"style='color:inherit;text-decoration:none'>{_name(s.get('name'))}</a> "
-                        f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;font-size:0.7em;font-weight:600'>{tm}</span></div>"
-                        f"<div style='color:#93C5FD;font-weight:600;font-size:0.9rem'>{line}</div></div></div>",
+                        f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;font-size:0.7em;font-weight:600'>{tm}</span></div>"
+                        f"<div style='color:var(--dm-blue-text);font-weight:600;font-size:0.9rem'>{line}</div></div></div>",
                         unsafe_allow_html=True,
                     )
 
@@ -169,19 +169,19 @@ def _render():
             strength = {"pp": "PP", "sh": "SH"}.get(g.get("strength"), "")
             modifier = g.get("goalModifier", "")
             tags = " ".join(
-                f"<span style='background-color:#3B4A8244;color:#93C5FD;padding:1px 7px;border-radius:6px;font-size:0.75rem;font-weight:700'>{t}</span>"
+                f"<span style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);padding:1px 7px;border-radius:6px;font-size:0.75rem;font-weight:700'>{t}</span>"
                 for t in (strength, "EN" if modifier == "empty-net" else "", "PS" if modifier == "penalty-shot" else "") if t
             )
             clip = g.get("highlightClipSharingUrl")
-            clip_html = f" <a href='{clip}' target='_blank' style='color:#9AA3B5;font-size:0.8rem'>▶ clip</a>" if clip else ""
+            clip_html = f" <a href='{clip}' target='_blank' style='color:var(--dm-dim);font-size:0.8rem'>▶ clip</a>" if clip else ""
             st.markdown(
                 f"<div style='display:flex;align-items:center;gap:10px;padding:4px 0;border-top:1px solid #2A3347'>"
-                f"<span style='color:#9AA3B5;width:48px;flex-shrink:0'>{g.get('timeInPeriod', '')}</span>"
-                f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 8px;border-radius:6px;font-weight:700;flex-shrink:0'>{tm}</span>"
-                f"<img src='{g.get('headshot', '')}' style='width:32px;height:32px;border-radius:6px;object-fit:cover;object-position:center 15%;background:#1A1F2E'>"
+                f"<span style='color:var(--dm-dim);width:48px;flex-shrink:0'>{g.get('timeInPeriod', '')}</span>"
+                f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;font-weight:700;flex-shrink:0'>{tm}</span>"
+                f"<img src='{g.get('headshot', '')}' style='width:32px;height:32px;border-radius:6px;object-fit:cover;object-position:center 15%;background:var(--dm-surface)'>"
                 f"<div style='flex:1'><a href='{nstyle.player_link(g['playerId'], season)}' target='_self' style='color:inherit;text-decoration:none;font-weight:700'>"
-                f"{_name(g)}</a> <span style='color:#9AA3B5'>({g.get('goalsToDate', '')})</span> {tags}{clip_html}"
-                f"<div style='color:#9AA3B5;font-size:0.85rem'>{assists}</div></div>"
+                f"{_name(g)}</a> <span style='color:var(--dm-dim)'>({g.get('goalsToDate', '')})</span> {tags}{clip_html}"
+                f"<div style='color:var(--dm-dim);font-size:0.85rem'>{assists}</div></div>"
                 f"<span style='font-weight:700;flex-shrink:0'>{g.get('awayScore', '')} – {g.get('homeScore', '')}</span></div>",
                 unsafe_allow_html=True,
             )

@@ -67,6 +67,37 @@ localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 # header below it (leaving it lower than the toolbar's own icons), this
 # places the logo/title INSIDE that same top strip via position:fixed, at
 # the same height as the Deploy button and the sidebar's Player Search box.
+# Design tokens. Every hand-written bit of HTML on the site (badges, cards,
+# tables, stat lines) used to hardcode dark-theme hexes, which meant the app
+# could never be anything but dark. Those are now var(--dm-*) references
+# resolved here, so both themes come from one place.
+#
+# The dark values follow prefers-color-scheme, which is also how Streamlit
+# picks between [theme.light] and [theme.dark] in config.toml, so the two
+# stay in step. (A visitor who overrides the theme in Streamlit's own menu
+# rather than at the OS level is the one case where they can diverge.)
+st.markdown(
+    "<style>"
+    ":root{"
+    "  --dm-text:#0C1725; --dm-dim:#71829A; --dm-line:#E4EAF3;"
+    "  --dm-surface:#FFFFFF; --dm-surface-mute:#F4F7FB;"
+    "  --dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
+    "  --dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
+    "  --dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
+    "  --dm-green:#2E7D32; --dm-green-soft:#E6F4E7;"
+    "}"
+    "@media (prefers-color-scheme: dark){:root{"
+    "  --dm-text:#EFF3F9; --dm-dim:#9AA8BD; --dm-line:#2E3B4E;"
+    "  --dm-surface:#1E2735; --dm-surface-mute:#151C28;"
+    "  --dm-blue:#6FAFE8; --dm-blue-text:#9BCAF3; --dm-blue-soft:#22334A;"
+    "  --dm-amber:#F5B942; --dm-amber-soft:#3A2F16;"
+    "  --dm-red:#F87171; --dm-red-soft:#3A1F1F;"
+    "  --dm-green:#7CFC9A; --dm-green-soft:#16301C;"
+    "}}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+
 HEADER_HEIGHT = "2.5rem"
 st.markdown(
     "<style>"
@@ -79,13 +110,14 @@ st.markdown(
     "  letter-spacing: 1px;"
     "  margin: 0 !important;"
     f"  color: {style.DIAMOND_COLOR} !important;"
-    "  text-shadow: 1px 1px 0 #1E3A66, 2px 2px 0 #14294D, 4px 4px 8px rgba(0,0,0,0.45);"
+    "  text-shadow: none;"
     "}"
     ".diamond-header {"
     f"  position: fixed; top: 0; left: 230px; height: {HEADER_HEIGHT}; z-index: 1000000;"
     "  display: flex; align-items: center; gap: 8px; padding-left: 4.5rem;"
     "  transition: left 0.2s ease, padding-left 0.2s ease;"
     "}"
+    "@media (prefers-color-scheme: dark){ .diamond-title { color: #9BCAF3 !important; } }"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
     f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
     # When the sidebar is collapsed, it stops reserving its 230px column

@@ -49,7 +49,7 @@ with logo_col:
         )
 with header_col:
     st.markdown(
-        f"<h2>Home of the <span style='background-color:{color}66;color:#FAFAFA;padding:4px 14px;"
+        f"<h2>Home of the <span style='background-color:{color}66;color:var(--dm-text);padding:4px 14px;"
         f"border-radius:10px'>{teams.franchise_display_name(abbr, db.get_seasons('batting')[0])}</span></h2>",
         unsafe_allow_html=True,
     )
@@ -119,12 +119,12 @@ else:
             batter = name_by_id.get(int(r["batter"]), "")
             desc = r["des"] if isinstance(r["des"], str) else ""
             st.markdown(
-                f"<div style='background-color:#1B243866;border-left:4px solid {color};padding:6px 14px;"
+                f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid {color};padding:6px 14px;"
                 f"border-radius:6px;margin:4px 0'>"
                 f"<b>{r['hit_distance_sc']:.0f} ft</b> "
-                f"<span style='color:#9AA3B5;font-size:0.85rem'>· {r['game_date'][:10]}"
+                f"<span style='color:var(--dm-dim);font-size:0.85rem'>· {r['game_date'][:10]}"
                 + (f" · {batter}" if batter else "") + "</span>"
-                f"<div style='color:#DCE1EA;font-size:0.9rem'>{desc}</div></div>",
+                f"<div style='color:var(--dm-text);font-size:0.9rem'>{desc}</div></div>",
                 unsafe_allow_html=True,
             )
 

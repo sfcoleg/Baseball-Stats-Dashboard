@@ -216,7 +216,7 @@ with statcast_tab:
     fig.update_layout(
         height=450, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FAFAFA",
+        font_color=style.CHART_TEXT,
     )
     st.plotly_chart(fig, use_container_width=True)
 
@@ -287,6 +287,6 @@ with explore_tab:
     fig.update_layout(
         height=500, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color="#FAFAFA",
+        font_color=style.CHART_TEXT,
     )
     st.plotly_chart(fig, use_container_width=True)

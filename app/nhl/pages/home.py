@@ -57,16 +57,16 @@ def _todays_games_strip():
         if is_live:
             period = (g.get("periodDescriptor") or {}).get("number")
             status_html = (
-                "<span style='background-color:#D32F2F;color:#FFFFFF;padding:1px 8px;"
+                "<span style='background-color:var(--dm-red);color:#FFFFFF;padding:1px 8px;"
                 f"border-radius:6px;font-weight:700;font-size:0.68rem'>LIVE</span>"
-                f"<span style='color:#9AA3B5;font-size:0.72rem;margin-left:6px'>{'Period ' + str(period) if period else ''}</span>"
+                f"<span style='color:var(--dm-dim);font-size:0.72rem;margin-left:6px'>{'Period ' + str(period) if period else ''}</span>"
             )
         elif started:
-            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Final</span>"
+            status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Final</span>"
         else:
-            status_html = "<span style='color:#9AA3B5;font-size:0.72rem'>Scheduled</span>"
+            status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Scheduled</span>"
         card_html = (
-            "<div style='flex:0 0 auto;width:160px;background-color:#1B243866;border-radius:10px;"
+            "<div style='flex:0 0 auto;width:160px;background-color:var(--dm-surface-mute);border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
             f"<div style='margin-bottom:4px'>{status_html}</div>"
             + _team_row(away.get("logo"), away["abbrev"], away_txt)
@@ -105,13 +105,13 @@ def _headliner_card(label, name, player_id, team_abbr, stat_line):
         f"<img src='{_headshot(player_id, team_abbr)}' style='width:64px;height:64px;border-radius:10px;"
         f"object-fit:cover;object-position:center 15%;flex-shrink:0;background:#1A1F2E' />"
         f"<div style='flex:1;min-width:0'>"
-        f"<div style='color:#9AA3B5;font-size:0.85rem'>{label}</div>"
+        f"<div style='color:var(--dm-dim);font-size:0.85rem'>{label}</div>"
         f"<div style='font-size:1.15rem;font-weight:700;line-height:1.3'>"
         f"<a href='{nstyle.player_link(player_id, season)}' target='_self' style='color:inherit;"
         f"text-decoration:none'>{name}</a> "
-        f"<span style='background-color:{color}66;color:#FAFAFA;padding:2px 9px;border-radius:8px;"
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:8px;"
         f"font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
-        f"<div style='margin-top:6px'><span style='background-color:#3B4A8244;color:#93C5FD;padding:3px 10px;"
+        f"<div style='margin-top:6px'><span style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);padding:3px 10px;"
         f"border-radius:8px;font-weight:600;font-size:0.9rem'>{stat_line}</span></div>"
         "</div></div>",
         unsafe_allow_html=True,
@@ -200,7 +200,7 @@ fig = px.bar(
 )
 fig.update_layout(
     showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=0, t=10, b=0),
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -220,7 +220,7 @@ with tcol1:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_cf["Tm"]},
                  labels={"satPercentage": "CF%"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA", xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 with tcol2:
     st.caption("Average goalie SV% by team (20+ GP)")
@@ -228,7 +228,7 @@ with tcol2:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_svpct["Tm"]},
                  labels={"savePct": "SV%"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA", xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
@@ -249,9 +249,9 @@ if season == latest_season:
                     columns={"teamAbbrev": "Team", "wins": "W", "losses": "L"}
                 )
                 rows = "".join(
-                    f"<tr style='border-top:1px solid #4A5266'>"
+                    f"<tr style='border-top:1px solid var(--dm-line)'>"
                     f"<td style='padding:4px 8px'><span style='background-color:{nteams.color_for_abbr(r.Team)}66;"
-                    f"color:#FAFAFA;padding:2px 8px;border-radius:6px;font-weight:700'>{r.Team}</span></td>"
+                    f"color:var(--dm-text);padding:2px 8px;border-radius:6px;font-weight:700'>{r.Team}</span></td>"
                     f"<td style='padding:4px 8px;text-align:center'>{r.W}</td>"
                     f"<td style='padding:4px 8px;text-align:center'>{r.L}</td></tr>"
                     for r in display.itertuples()
@@ -282,11 +282,11 @@ for i, (_, p) in enumerate(top.iterrows()):
         f"object-position:center 15%;border:2px solid {color};background:#1A1F2E' />"
         f"<div style='margin-top:8px;font-weight:700;font-size:0.92rem;line-height:1.2'>"
         f"<a href='{nstyle.player_link(p['playerId'], season)}' target='_self' "
-        f"style='color:#FAFAFA;text-decoration:none'>{p['skaterFullName']}</a></div>"
-        f"<span style='display:inline-block;margin-top:4px;background-color:{color}66;color:#FAFAFA;"
+        f"style='color:var(--dm-text);text-decoration:none'>{p['skaterFullName']}</a></div>"
+        f"<span style='display:inline-block;margin-top:4px;background-color:{color}66;color:var(--dm-text);"
         f"padding:1px 8px;border-radius:6px;font-size:0.75rem;font-weight:700'>{tm}</span>"
         f"<div style='margin-top:6px;font-size:1.4rem;font-weight:800;color:{color}'>{int(p['points'])}"
-        f"<span style='font-size:0.7rem;font-weight:600;color:#9AA3B5'> PTS</span></div>"
+        f"<span style='font-size:0.7rem;font-weight:600;color:var(--dm-dim)'> PTS</span></div>"
         "</div>"
     )
 st.markdown(
