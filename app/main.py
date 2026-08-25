@@ -189,12 +189,16 @@ st.markdown(
     "  font-weight:600;font-size:0.92rem;letter-spacing:0.4px;text-transform:uppercase;"
     "  color:var(--dm-dim);margin:0;white-space:nowrap;}"
     ".st-key-dm_nav [data-testid='stPageLink'] a:hover p{color:var(--dm-text);}"
-    # Search sits permanently in the banner's right end.
-    ".st-key-dm_search{position:fixed;top:0.42rem;right:14px;width:280px;z-index:999995;"
-    "  background:transparent;}"
-    ".st-key-dm_search [data-testid='stTextInput'] input{height:2.15rem;font-size:0.86rem;"
-    "  background:var(--dm-surface);}"
-    ".st-key-dm_search [data-testid='stButton'] button{font-size:0.8rem;padding:2px 8px;}"
+    # Search sits permanently in the banner's right end. It's a
+    # st.container() like any other, so the bordered-container bubble rule
+    # above would otherwise wrap it in a full padded card — override that
+    # back to a bare, compact box that just holds the input.
+    ".st-key-dm_search{position:fixed;top:0.5rem;right:14px;width:200px;z-index:999995;"
+    "  background:transparent !important;padding:0 !important;border:none !important;"
+    "  box-shadow:none !important;}"
+    ".st-key-dm_search [data-testid='stTextInput'] input{height:1.9rem;font-size:0.8rem;"
+    "  padding:2px 10px;background:var(--dm-surface);}"
+    ".st-key-dm_search [data-testid='stButton'] button{font-size:0.75rem;padding:1px 7px;}"
     # --- content sits on a panel, with the grey page visible around it ------
     # The page itself is grey; content sits on it as separate bubbles rather
     # than one long sheet. Section headings stay bare on the grey so each

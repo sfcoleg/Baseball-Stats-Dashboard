@@ -55,12 +55,17 @@ style.colored_header("On This Day", "headliners")
 otd = db.load_on_this_day(today.month, today.day)
 otd_games, otd_highlights = otd["games"], otd["highlights"]
 
+notable = [g for g in otd_games if g["blowout"]]
+
+# One markdown call for the whole section — each row is still its own
+# inline-styled div, but rendering them all through a single st.markdown
+# gives them one stElementContainer, and so one bubble, instead of a
+# bubble per row.
+otd_rows_html = []
 if otd_highlights:
     shown_highlights = sorted(otd_highlights, key=lambda h: h["years_ago"])[:8]
-    for h in shown_highlights:
-        st.markdown(style.on_this_day_highlight_card(h), unsafe_allow_html=True)
+    otd_rows_html += [style.on_this_day_highlight_card(h) for h in shown_highlights]
 
-notable = [g for g in otd_games if g["blowout"]]
 if notable:
     shown_games = sorted(notable, key=lambda g: g["years_ago"])[:6]
     for g in shown_games:
@@ -70,14 +75,16 @@ if notable:
             f"border-radius:6px;font-weight:700;font-size:0.75rem;margin-left:8px'>{tag}</span>"
             if tag else ""
         )
-        st.markdown(
+        otd_rows_html.append(
             f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>"
             f"<span style='color:var(--dm-dim);font-size:0.85rem'>{g['years_ago']} year{'s' if g['years_ago'] != 1 else ''} ago ({g['year']})</span>"
             f"{tag_html}"
-            f"<div style='color:var(--dm-text)'>{g['away_team']} {g['away_score']} @ {g['home_team']} {g['home_score']}</div></div>",
-            unsafe_allow_html=True,
+            f"<div style='color:var(--dm-text)'>{g['away_team']} {g['away_score']} @ {g['home_team']} {g['home_score']}</div></div>"
         )
+
+if otd_rows_html:
+    st.markdown("<div>" + "".join(otd_rows_html) + "</div>", unsafe_allow_html=True)
 
 if not otd_highlights and not notable:
     # Without this, a date with nothing notable in the past 15 years just
@@ -210,6 +217,7 @@ style.colored_header("Transactions", "fielding")
 if txs_yesterday.empty:
     st.caption("No transactions logged for this date.")
 else:
+    tx_rows_html = []
     for _, row in txs_yesterday.iterrows():
         badges = ""
         for tabbr in [row["to_abbr"], row["from_abbr"]]:
@@ -219,23 +227,25 @@ else:
                     f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 8px;"
                     f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{tabbr}</span>"
                 )
-        st.markdown(
+        tx_rows_html.append(
             f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:8px 14px;"
             f"border-radius:6px;margin:4px 0'>{badges}"
             f"<span style='color:var(--dm-dim);font-size:0.85rem'>{row['type']}</span>"
-            f"<div style='color:var(--dm-text)'>{row['description']}</div></div>",
-            unsafe_allow_html=True,
+            f"<div style='color:var(--dm-text)'>{row['description']}</div></div>"
         )
+    # One markdown call for all rows — one bubble for the section instead
+    # of one per transaction.
+    st.markdown("<div>" + "".join(tx_rows_html) + "</div>", unsafe_allow_html=True)
 
 style.colored_header("New Injured List Moves", "pitching")
 if il_moves.empty:
     st.caption("No new injured-list placements for this date.")
 else:
-    for _, row in il_moves.iterrows():
-        abbr = row["to_abbr"] if isinstance(row["to_abbr"], str) else row["from_abbr"]
-        color = teams.color_for_abbr(abbr) if isinstance(abbr, str) else "#666666"
-        st.markdown(
-            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-red);padding:8px 14px;"
-            f"border-radius:6px;margin:4px 0;color:var(--dm-text)'>{row['description']}</div>",
-            unsafe_allow_html=True,
-        )
+    il_rows_html = [
+        f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-red);padding:8px 14px;"
+        f"border-radius:6px;margin:4px 0;color:var(--dm-text)'>{row['description']}</div>"
+        for _, row in il_moves.iterrows()
+    ]
+    # One markdown call for all rows — one bubble for the section instead
+    # of one per move.
+    st.markdown("<div>" + "".join(il_rows_html) + "</div>", unsafe_allow_html=True)
