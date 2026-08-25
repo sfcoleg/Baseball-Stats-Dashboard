@@ -150,6 +150,41 @@ for abbr, (arena, city, lat, lon) in nteams.ARENAS.items():
 arenas = pd.DataFrame(arena_rows)
 
 # --- Map ---------------------------------------------------------------
+# Countries that produced a player in the current filter are filled with that
+# country's own colour; everywhere else stays a flat grey, so the map itself
+# shows where the league comes from instead of being a neutral backdrop. The
+# basemap is dropped entirely (no Carto tiles) and the ocean is just the
+# container's own blue showing through deck.gl's transparent canvas.
+_GEOJSON_PATH = Path(__file__).resolve().parent.parent / "assets" / "world_countries.geojson"
+_source_countries = set(filtered["birthCountryCode"].dropna().unique()) if not filtered.empty else set()
+
+
+@st.cache_data(show_spinner=False)
+def _world(source: tuple, colors: dict):
+    """World polygons tagged with a fill colour. Cached on the set of source
+    countries so panning and filtering don't re-read 250 KB of geometry."""
+    import json
+    data = json.loads(_GEOJSON_PATH.read_text())
+    for feat in data["features"]:
+        iso = feat["properties"].get("iso")
+        if iso in source:
+            feat["properties"]["fill"] = list(colors.get(iso, OTHER_COLOR)) + [205]
+        else:
+            feat["properties"]["fill"] = [88, 96, 110, 165]
+    return data
+
+
+country_layer = pdk.Layer(
+    "GeoJsonLayer",
+    data=_world(tuple(sorted(_source_countries)), COUNTRY_COLORS),
+    stroked=True,
+    filled=True,
+    get_fill_color="properties.fill",
+    get_line_color=[255, 255, 255, 45],
+    line_width_min_pixels=0.5,
+    pickable=False,
+)
+
 bubble_layer = pdk.Layer(
     "ScatterplotLayer",
     data=cities[["city_label", "country", "lat", "lon", "n", "color", "radius", "who", "headline"]].rename(
@@ -216,12 +251,17 @@ tooltip = {
               "border": "1px solid #4A5266"},
 }
 
+st.markdown(
+    "<style>[data-testid='stDeckGlJsonChart'],[data-testid='stDeckGlJsonChart'] canvas{"
+    "background:#123A63 !important;border-radius:12px;}</style>",
+    unsafe_allow_html=True,
+)
 st.pydeck_chart(
     pdk.Deck(
-        layers=[bubble_layer, arena_glow, arena_icons],
+        layers=[country_layer, bubble_layer, arena_glow, arena_icons],
         initial_view_state=view,
-        map_provider="carto",
-        map_style="dark",
+        map_provider=None,
+        map_style=None,
         tooltip=tooltip,
     ),
     use_container_width=True, height=620,

@@ -171,8 +171,7 @@ st.markdown(
     # The tab strip. .st-key-dm_nav IS Streamlit's vertical block, so the row
     # direction goes on the element itself, not a descendant.
     ".st-key-dm_nav{position:fixed;top:3.05rem;left:0;right:0;z-index:999989;"
-    "  background:var(--dm-surface);border-bottom:2px solid var(--dm-blue);"
-    "  padding:0 14px;height:2.85rem;"
+    "  background:var(--dm-surface);padding:0 14px;height:2.85rem;"
     "  flex-direction:row !important;align-items:center;gap:2px !important;"
     "  flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;box-shadow:none !important;}"
     ".st-key-dm_nav::-webkit-scrollbar{display:none;}"
