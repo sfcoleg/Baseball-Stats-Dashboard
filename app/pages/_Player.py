@@ -9,6 +9,8 @@ import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
+import following
+import localstorage_bridge
 import style
 import teams
 
@@ -17,6 +19,18 @@ st.set_page_config(page_title="Player | Diamond Metrics", layout="wide")
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
+
+# Normally seeded by following.bootstrap() in main.py, but Streamlit's
+# legacy pages/-folder auto-discovery can route a shared ?mlbid= link
+# straight to this script (bypassing main.py entirely) — so bootstrap
+# defensively here too. It also has to run on EVERY rerun, not just the
+# first: bootstrap() is what flips _following_safe_to_save on after the
+# initial render, which is what lets the Follow button below actually
+# persist. The localStorage->query-param redirect has to be fired from
+# this page's own script rather than main.py — see localstorage_bridge.
+following.bootstrap()
+localstorage_bridge.register("following", following.STORAGE_KEY)
+localstorage_bridge.redirect()
 
 # Hydrates a shared link (?mlbid=...&season=...) into session_state — the
 # normal path only ever gets here via the sidebar search setting
@@ -136,6 +150,23 @@ def _splits_table(splits: dict, columns: list):
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
 
+def _stat_table(row, spec):
+    """One-row stat table from a season row. `spec` is [(column, label)];
+    a column this season's row doesn't carry is skipped rather than raising,
+    so a stat that only exists for recent seasons (bat tracking, the x-stats)
+    just drops out on older ones instead of breaking the whole tab."""
+    present = [(c, lbl) for c, lbl in spec if c in row.index]
+    if not present:
+        st.caption("No data for this season.")
+        return
+    frame = (
+        row[[c for c, _ in present]]
+        .rename({c: lbl for c, lbl in present})
+        .to_frame().T
+    )
+    st.dataframe(frame, use_container_width=True, hide_index=True)
+
+
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
 qualified_batting = all_batting[all_batting["PA"] >= 50]
@@ -191,6 +222,31 @@ with header_col:
         unsafe_allow_html=True,
     )
     st.caption(f"{nickname} · Age {age} · {selected_roles}")
+
+    # Follow/unfollow, mirroring the Following page's own list (same
+    # session_state keys, same localStorage payload) so the two stay in
+    # sync — following here shows up there and vice versa.
+    _followed = st.session_state.setdefault("followed_players", [])
+    _is_following = any(int(p.get("mlbID", -1)) == int(mlbID) for p in _followed)
+    _follow_col, _ = st.columns([1, 3])
+    with _follow_col:
+        # Mutate then rerun, and let the single following.save() at the
+        # bottom of this script do the persisting. Calling save() here
+        # instead would queue its localStorage <script> and then have
+        # st.rerun() throw the render away before the browser ever ran it.
+        if _is_following:
+            if st.button("Following", key=f"follow_btn_{mlbID}", type="primary",
+                         help="Click to unfollow", use_container_width=True):
+                st.session_state["followed_players"] = [
+                    p for p in _followed if int(p.get("mlbID", -1)) != int(mlbID)
+                ]
+                st.rerun()
+        else:
+            if st.button("Follow", key=f"follow_btn_{mlbID}",
+                         help="Track this player on the Following page", use_container_width=True):
+                _followed.append({"mlbID": int(mlbID), "name": selected_name})
+                st.rerun()
+
     st.markdown(
         "<button id='share-link-btn' style='background-color:var(--dm-blue-soft);color:var(--dm-blue-text);"
         "border:1px solid var(--dm-blue-soft);border-radius:8px;padding:3px 12px;font-size:0.8rem;"
@@ -324,24 +380,22 @@ if batting is not None and is_batter_role:
             hide_index=True,
         )
     with adv_tab:
-        st.dataframe(
-            batting[["ISO", "BABIP", "K_PCT", "BB_PCT", "wOBA", "xwOBA", "WAR", "OPS_plus", "wRC_plus"]]
-            .rename({"K_PCT": "K%", "BB_PCT": "BB%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
-            .to_frame().T,
-            use_container_width=True,
-            hide_index=True,
-        )
+        _stat_table(batting, [
+            ("ISO", "ISO"), ("BABIP", "BABIP"), ("K_PCT", "K%"), ("BB_PCT", "BB%"),
+            ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("xOBP", "xOBP"), ("xISO", "xISO"),
+            ("OPS_plus", "OPS+"), ("wRC_plus", "wRC+"), ("WAR", "WAR"),
+        ])
     with sc_tab:
-        st.dataframe(
-            batting[["avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct", "xBA", "xSLG"]]
-            .rename({
-                "avg_exit_velo": "Avg EV", "max_exit_velo": "Max EV",
-                "hard_hit_pct": "Hard-Hit%", "barrel_pct": "Barrel%",
-            })
-            .to_frame().T,
-            use_container_width=True,
-            hide_index=True,
-        )
+        _stat_table(batting, [
+            ("avg_exit_velo", "Avg EV"), ("max_exit_velo", "Max EV"),
+            ("hard_hit_pct", "Hard-Hit%"), ("barrel_pct", "Barrel%"),
+            ("contact_pct", "Contact%"), ("chase_pct", "Chase%"),
+            ("bat_speed", "Bat Speed"),
+            ("xBA", "xBA"), ("xSLG", "xSLG"),
+            # Actual minus expected — the "is this earned or is it luck?"
+            # columns, which are the point of carrying the x-stats at all.
+            ("xBA_diff", "BA − xBA"), ("xSLG_diff", "SLG − xSLG"), ("xwOBA_diff", "wOBA − xwOBA"),
+        ])
     with bb_tab:
         bb_row = db.load_batted_ball(season, mtime)
         bb_row = bb_row[bb_row["mlbID"] == mlbID] if "mlbID" in bb_row.columns else bb_row.iloc[0:0]
@@ -416,25 +470,21 @@ if pitching is not None and is_pitcher_role:
             hide_index=True,
         )
     with adv_tab:
-        st.dataframe(
-            pitching[["FIP", "K_9", "BB_9", "K_BB", "WAR", "ERA_plus"]]
-            .rename({"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "ERA_plus": "ERA+"})
-            .to_frame().T,
-            use_container_width=True,
-            hide_index=True,
-        )
+        _stat_table(pitching, [
+            ("FIP", "FIP"), ("xFIP", "xFIP"), ("xERA", "xERA"),
+            ("K_9", "K/9"), ("BB_9", "BB/9"), ("K_BB", "K/BB"),
+            ("BAbip", "BABIP"), ("GB_FB", "GB/FB"),
+            ("ERA_plus", "ERA+"), ("WAR", "WAR"),
+        ])
     with sc_tab:
-        st.dataframe(
-            pitching[["avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against"]]
-            .rename({
-                "avg_exit_velo_against": "Avg EV Against",
-                "hard_hit_pct_against": "Hard-Hit% Against",
-                "barrel_pct_against": "Barrel% Against",
-            })
-            .to_frame().T,
-            use_container_width=True,
-            hide_index=True,
-        )
+        _stat_table(pitching, [
+            ("avg_exit_velo_against", "Avg EV Against"),
+            ("hard_hit_pct_against", "Hard-Hit% Against"),
+            ("barrel_pct_against", "Barrel% Against"),
+            ("xBA_against", "xBA Against"), ("xSLG_against", "xSLG Against"),
+            ("xwOBA_against", "xwOBA Against"), ("xERA_diff", "ERA − xERA"),
+            ("fastball_velo", "Fastball Velo"), ("induced_chase_pct", "Induced Chase%"),
+        ])
     with pitch_splits_tab:
         with st.spinner("Loading splits..."):
             pitch_splits = db.load_split_stats(mlbID, season, "pitching")
@@ -948,3 +998,9 @@ if awards and awards["marquee"]:
 
 if batting is None and pitching is None and fielding.empty:
     st.info("No stats found for this player in the selected season.")
+
+# Persists whatever's currently in session_state to this browser's
+# localStorage — same unconditional end-of-render call the Following page
+# makes (cheap and idempotent; see following.py). This is what makes the
+# Follow button above stick.
+following.save()
