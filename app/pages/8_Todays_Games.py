@@ -40,6 +40,10 @@ pitching_raw = db.load_pitching(season, mtime)
 pitching = teams.add_team_abbr(pitching_raw)
 
 
+_THEME = getattr(getattr(st, "context", None), "theme", None)
+_THEME = getattr(_THEME, "type", None) or "light"
+
+
 def team_color(abbr):
     return teams.color_for_abbr(teams.normalize_mlb_abbr(abbr))
 
@@ -101,7 +105,18 @@ def render_games():
         )
         prev_scores[row["game_pk"]] = (away_score, home_score)
 
-        with st.container(border=True):
+        # Each card wears the matchup: away colour on the left, home on the
+        # right, meeting in a neutral band. st.container's key becomes an
+        # st-key-* class, which is the only stable hook for styling one
+        # specific container.
+        card_key = f"game{row['game_pk']}"
+        st.markdown(
+            f"<style>.st-key-{card_key}{{background:"
+            f"{style.matchup_gradient(team_color(row['away_abbr']), team_color(row['home_abbr']), _THEME)}"
+            " !important;}</style>",
+            unsafe_allow_html=True,
+        )
+        with st.container(border=True, key=card_key):
             if status == "In Progress":
                 st.markdown(
                     "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"

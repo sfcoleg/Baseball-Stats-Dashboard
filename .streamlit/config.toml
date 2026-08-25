@@ -22,15 +22,15 @@ linkUnderline = false
 
 [theme.light]
 primaryColor = "#2E86DE"
-backgroundColor = "#F4F7FB"
-secondaryBackgroundColor = "#FFFFFF"
+backgroundColor = "#E9EEF6"
+secondaryBackgroundColor = "#F7FAFD"
 textColor = "#0C1725"
-borderColor = "#E4EAF3"
+borderColor = "#D8E1EE"
 linkColor = "#1B5FA8"
 
 [theme.light.sidebar]
-backgroundColor = "#FFFFFF"
-borderColor = "#E4EAF3"
+backgroundColor = "#F4F7FB"
+borderColor = "#D8E1EE"
 
 [theme.dark]
 primaryColor = "#6FAFE8"

@@ -71,8 +71,8 @@ DIAMOND_COLOR = "#2E86DE"
 # as literals. Light-theme values: charts sit on white cards.
 CHART_TEXT = "#0C1725"
 CHART_DIM = "#71829A"
-CHART_GRID = "#E4EAF3"
-CHART_SURFACE = "#FFFFFF"
+CHART_GRID = "#D8E1EE"
+CHART_SURFACE = "#F7FAFD"
 CHART_BLUE = "#2E86DE"
 CHART_AMBER = "#B7791F"
 CHART_RED = "#C0453F"
@@ -1463,3 +1463,46 @@ def matchup_preview_html(profile_a: dict, profile_b: dict, team_color_fn) -> str
         if top_gaps else ""
     )
     return table + focus
+
+
+# --- team-colour tinting ------------------------------------------------------
+# Pure white everywhere is fatiguing to read, and team colour is the one source
+# of hue this site can use that actually means something. These helpers pull a
+# team's real colour down to a soft wash that carries the identity without
+# fighting the text on top of it.
+
+def team_tint(hex_color: str, theme: str = "light", strength: float = 1.0) -> str:
+    """A team's colour softened into a background wash.
+
+    Saturation is cut and lightness pinned near the page's own, so a bright
+    red and a navy end up equally readable rather than one shouting. Keeping
+    the hue means the Cardinals still look red and the Dodgers still look blue.
+    `strength` scales how far from neutral it lands (0 = neutral, 1 = full).
+    """
+    import colorsys
+    h = (hex_color or "#666666").lstrip("#")
+    if len(h) != 6:
+        h = "666666"
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    hue, _, sat = colorsys.rgb_to_hls(r, g, b)
+    if theme == "dark":
+        light, sat = 0.20, min(sat * 0.55, 0.40)
+        base = 0.145
+    else:
+        light, sat = 0.905, min(sat * 0.60, 0.55)
+        base = 0.965
+    light = base + (light - base) * strength
+    sat *= strength
+    nr, ng, nb = colorsys.hls_to_rgb(hue, light, sat)
+    return "#%02X%02X%02X" % (round(nr * 255), round(ng * 255), round(nb * 255))
+
+
+def matchup_gradient(away_hex: str, home_hex: str, theme: str = "light",
+                     neutral: str | None = None) -> str:
+    """Away colour on the left, home colour on the right, meeting in a neutral
+    band in the middle — the two sides of a matchup, readable at a glance
+    before you've read a word of the card."""
+    neutral = neutral or ("#1B2534" if theme == "dark" else "#FBFCFE")
+    a, hh = team_tint(away_hex, theme), team_tint(home_hex, theme)
+    return (f"linear-gradient(100deg, {a} 0%, {a} 18%, {neutral} 47%, "
+            f"{neutral} 53%, {hh} 82%, {hh} 100%)")

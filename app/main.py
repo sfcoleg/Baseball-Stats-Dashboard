@@ -30,7 +30,8 @@ import prefs
 import sidebar
 import style
 
-st.set_page_config(page_title="Diamond Metrics", layout="wide")
+st.set_page_config(page_title="Diamond Metrics", layout="wide",
+                   initial_sidebar_state="collapsed")
 
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them. Each
@@ -79,8 +80,8 @@ localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 # st.context.theme.type reports the theme Streamlit actually painted.
 _THEME_TOKENS = {
     "light": (
-        "--dm-text:#0C1725; --dm-dim:#71829A; --dm-line:#E4EAF3;"
-        "--dm-surface:#FFFFFF; --dm-surface-mute:#F4F7FB; --dm-card:#F5FAFF;"
+        "--dm-text:#0C1725; --dm-dim:#6B7C94; --dm-line:#D8E1EE;"
+        "--dm-surface:#F7FAFD; --dm-surface-mute:#E9EEF6; --dm-card:#F2F7FD;"
         "--dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
         "--dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
         "--dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
@@ -139,6 +140,33 @@ st.markdown(
     "  font-weight:700;letter-spacing:-0.5px;}"
     "[data-testid='stMetricLabel']{text-transform:uppercase;letter-spacing:0.9px;"
     "  font-size:0.7rem !important;color:var(--dm-dim);}"
+    # --- full-width top navigation ----------------------------------------
+    ".dm-topnav{position:fixed;top:0;left:0;right:0;z-index:999990;"
+    "  display:flex;align-items:center;gap:16px;height:3.2rem;padding:0 16px;"
+    "  background:var(--dm-surface);border-bottom:2px solid var(--dm-blue);"
+    "  overflow-x:auto;scrollbar-width:none;}"
+    ".dm-topnav::-webkit-scrollbar{display:none;}"
+    ".dm-brand{display:flex;align-items:center;gap:8px;flex:0 0 auto;text-decoration:none;}"
+    ".dm-brand .diamond-title{font-size:1.05rem !important;line-height:1 !important;}"
+    ".dm-sportwrap{display:flex;gap:4px;flex:0 0 auto;}"
+    ".dm-sport{font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:0.82rem;"
+    "  letter-spacing:0.5px;padding:4px 10px;border-radius:7px;text-decoration:none;"
+    "  color:var(--dm-dim);border:1px solid var(--dm-line);white-space:nowrap;}"
+    ".dm-sport.active{background:var(--dm-blue-soft);color:var(--dm-blue-text);"
+    "  border-color:var(--dm-blue);}"
+    ".dm-navlinks{display:flex;align-items:center;gap:2px;flex:1 1 auto;white-space:nowrap;}"
+    ".dm-nav-link{font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:0.92rem;"
+    "  letter-spacing:0.4px;text-transform:uppercase;text-decoration:none;color:var(--dm-dim);"
+    "  padding:6px 10px;border-radius:7px;border-bottom:3px solid transparent;}"
+    ".dm-nav-link:hover{color:var(--dm-text);background:var(--dm-surface-mute);}"
+    ".dm-nav-link.active{color:var(--dm-text);border-bottom-color:var(--dm-blue);}"
+    ".dm-nav-util{font-size:0.76rem;color:var(--dm-dim);text-decoration:none;flex:0 0 auto;"
+    "  opacity:0.75;}"
+    ".dm-nav-util:hover{opacity:1;}"
+    # The bar is fixed, so the page needs to start below it.
+    "[data-testid='stMainBlockContainer']{padding-top:3.6rem !important;}"
+    "@media (max-width:640px){.dm-topnav{height:3rem;}"
+    "  .dm-nav-link{font-size:0.85rem;padding:5px 8px;}}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
@@ -162,12 +190,11 @@ st.markdown(
     "  text-shadow: none;"
     "}"
     ".diamond-header {"
-    f"  position: fixed; top: 0; left: 230px; height: {HEADER_HEIGHT}; z-index: 1000000;"
-    "  display: flex; align-items: center; gap: 8px; padding-left: 4.5rem;"
+    f"  position: fixed; top: 0; left: 0; height: {HEADER_HEIGHT}; z-index: 999995;"
+    "  display: flex; align-items: center; gap: 8px; padding-left: 14px;"
     "  transition: left 0.2s ease, padding-left 0.2s ease;"
     "}"
     f"[data-testid='stHeader'] {{ height: {HEADER_HEIGHT}; }}"
-    f"[data-testid='stMainBlockContainer'] {{ padding-top: {HEADER_HEIGHT} !important; }}"
     # When the sidebar is collapsed, it stops reserving its 230px column
     # (see the [aria-expanded='true']-scoped width rule below), so the
     # header needs to reclaim that freed space too instead of leaving a
@@ -257,12 +284,7 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-st.markdown(
-    f"<div class='diamond-header'><span class='diamond-logo'>{style.diamond_logo(26)}</span>"
-    f"<h1 class='diamond-title'>Diamond Metrics</h1>"
-    f"</div>",
-    unsafe_allow_html=True,
-)
+
 
 # Shrink the sidebar's built-in header bar (which only holds the collapse
 # arrow) so the search box sits higher, closer to the top of the sidebar.
@@ -418,46 +440,51 @@ NHL_PAGES = [
 pg = st.navigation(PAGES + NHL_PAGES, position="hidden")
 active_sport = "nhl" if (pg.url_path or "").startswith("nhl") else "mlb"
 
-sidebar.render_sport_switcher(active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0]})
-sidebar.render_search(active_sport)
 
 _MLB_NAV_HIDDEN = (
     "Player", "Game Center", "Glossary", "Settings",
     "League Trends", "Ballparks", "Umpires", "Around the League", "Minor Leagues",
     "Box Score Search", "Free Agency",
 )
-if active_sport == "mlb":
-    for p in PAGES:
-        if p.title not in _MLB_NAV_HIDDEN:
-            st.sidebar.page_link(p, label=p.title)
-else:
-    # Daily Digest stays registered (so /nhl-digest resolves for previews)
-    # but off the sidebar until the season starts — every section is
-    # empty over the summer. Flip to True in October.
-    SHOW_NHL_DIGEST = False
-    _nhl_hidden = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"})
-    for p in NHL_PAGES:
-        if p.title not in _nhl_hidden:
-            st.sidebar.page_link(p, label=p.title.replace("NHL ", ""))
+# Daily Digest stays registered (so /nhl-digest resolves for previews) but off
+# the nav until the season starts — every section is empty over the summer.
+SHOW_NHL_DIGEST = False
+_NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
+    set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"}
+)
 
-# Small, deliberately understated link to Settings — sits below the main
-# nav (not mixed into the loop above), shrunk/muted via a href-matching CSS
-# selector (page_link renders as a sibling element, not a child of any
-# preceding markdown div, so it has to be targeted this way rather than
-# wrapped) so it reads as a quiet utility link, available everywhere, not
-# another top-level nav section. The Glossary link is intentionally NOT
-# here — it's contextual instead, as a small button on the stat pages
-# themselves (Batting/Pitching/Baserunning/Fielding — see style.glossary_link).
-st.sidebar.markdown(
-    "<style>"
-    "[data-testid='stSidebar'] a[href*='Settings'] {"
-    "  font-size: 0.8rem !important; opacity: 0.6;"
-    "}"
-    "[data-testid='stSidebar'] a[href*='Settings']:hover { opacity: 1; }"
-    "</style>",
+# Navigation is a full-width bar across the top rather than a sidebar column.
+# These are plain anchors, not st.page_link: page_link only renders vertically
+# in whatever container it's given, so it can't lay out as a horizontal strip.
+if active_sport == "mlb":
+    _nav = [(pg_.url_path or "", pg_.title) for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
+else:
+    _nav = [(pg_.url_path, pg_.title.replace("NHL ", "")) for pg_ in NHL_PAGES
+            if pg_.title not in _NHL_NAV_HIDDEN]
+
+_here = pg.url_path or ""
+_links = "".join(
+    f"<a class='dm-nav-link{' active' if path == _here else ''}' href='/{path}' target='_self'>{label}</a>"
+    for path, label in _nav
+)
+_sport = "".join(
+    f"<a class='dm-sport{' active' if active_sport == sid else ''}' href='/{home}' target='_self'>{lbl}</a>"
+    for sid, home, lbl in (("mlb", "", "\u26be MLB"), ("nhl", "nhl", "\U0001F3D2 NHL"))
+)
+st.markdown(
+    "<div class='dm-topnav'>"
+    f"<a class='dm-brand' href='/' target='_self'>{style.diamond_logo(22)}"
+    f"<span class='diamond-title'>Diamond Metrics</span></a>"
+    f"<div class='dm-sportwrap'>{_sport}</div>"
+    f"<nav class='dm-navlinks'>{_links}</nav>"
+    "<a class='dm-nav-util' href='/Settings' target='_self'>Settings</a>"
+    "</div>",
     unsafe_allow_html=True,
 )
-settings_page = next(p for p in PAGES if p.title == "Settings")
-st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
+
+# Search stays a real Streamlit widget (it needs reruns and callbacks), so it
+# can't live inside the static bar above — it keeps the sidebar, which is
+# collapsed by default now that navigation has moved out of it.
+sidebar.render_search(active_sport)
 
 pg.run()
