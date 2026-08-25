@@ -667,6 +667,26 @@ def playoff_odds_table(df, team_color_fn) -> str:
 # inside pairs is what produces the WC -> Division Series -> Championship
 # Series funnel, with each level's connector lines exact by construction
 # (no manual pixel math, no JS layout pass — just flexbox arithmetic).
+#
+# Every connector lands correctly only because each level's width is exact:
+# a slot draws its horizontal stub at its own far edge, so the slot's
+# CONTENT has to fill the slot right up to that stub or the line renders
+# floating in space, detached from the teams it's supposed to join. With
+# chip width C and connector length G that means, per level:
+#
+#   leaf chip          C
+#   Wild Card pair     C + G          (chip + its stub)
+#   DS-level content   (C + G) + C    (WC pair, then a `.br-lead` line
+#                                      carrying the winner across the DS
+#                                      column) — and the bye chip matches
+#                                      it via .br-bye-shift's C + G margin
+#   CS-level content   that + G
+#
+# The .br-lead line is what makes the bye's full-column indent work: the
+# bye sits one column right (it skips the Wild Card round), so the WC side
+# needs a matching column of plain line to reach the same convergence
+# point. Without it the WC teams' stub floats a full column away from them.
+#
 # The mirrored variants (.mirror) put every line/stub/shift on the LEFT
 # instead of the right, so the NL tree can grow leftward — AL and NL then
 # sit on either side of a centered World Series box, flowing toward each
@@ -677,44 +697,65 @@ def playoff_odds_table(df, team_color_fn) -> str:
 # both of them — and the World Series box — to the same line).
 PLAYOFF_BRACKET_CSS = """
 <style>
+.bracket-row {
+  --br-chip:180px; --br-gap:24px; --br-slot-h:46px;
+  /* nowrap + max-content: the whole bracket is one indivisible figure, so
+     if it doesn't fit it scrolls inside its overflow-x:auto parent. Letting
+     it wrap instead stacked the NL tree underneath the AL one and broke the
+     converging-on-the-World-Series shape entirely. */
+  display:flex; align-items:center; justify-content:center; flex-wrap:nowrap;
+  gap:0; width:max-content; margin:0 auto;
+}
 .bracket-tree { display:flex; align-items:center; }
-.bracket-row { display:flex; align-items:center; justify-content:center; flex-wrap:wrap; gap:0; }
-.br-pair { display:flex; flex-direction:column; position:relative; }
+/* Grid, not flex-column: the ::after connector is anchored at 25%/75% of
+   the pair, which only lands on the two slots' midpoints if the slots are
+   EQUAL height. `flex:1` doesn't guarantee that in an auto-height
+   container — a slot holding a bare bye chip stayed at min-height while
+   its sibling holding a whole Wild Card pair grew to twice that, so every
+   Division Series connector was drawn ~12px off its own stubs. Two `1fr`
+   grid rows are equalised to the taller content by definition. */
+.br-pair { display:grid; grid-template-rows:1fr 1fr; position:relative; }
 .br-pair::after {
   content:''; position:absolute; right:0; top:25%; bottom:25%; width:1px; background:var(--dm-line);
 }
 .br-pair.mirror::after { right:auto; left:0; }
-.br-slot { flex:1; display:flex; align-items:center; position:relative; padding-right:18px; min-height:36px; }
+.br-slot {
+  display:flex; align-items:center; position:relative;
+  padding-right:var(--br-gap); min-height:var(--br-slot-h);
+}
 .br-slot::after {
-  content:''; position:absolute; right:0; top:50%; width:18px; height:1px; background:var(--dm-line);
+  content:''; position:absolute; right:0; top:50%; width:var(--br-gap); height:1px; background:var(--dm-line);
 }
-.br-slot.mirror { padding-right:0; padding-left:18px; justify-content:flex-end; }
+.br-slot.mirror { padding-right:0; padding-left:var(--br-gap); justify-content:flex-end; }
 .br-slot.mirror::after { right:auto; left:0; }
-.br-bye-shift { margin-left:88px; }
-.br-bye-shift.mirror { margin-left:0; margin-right:88px; }
+/* The Wild Card winner's line across the Division Series column. */
+.br-advance { display:flex; align-items:center; }
+.br-advance.mirror { flex-direction:row-reverse; }
+.br-lead { width:var(--br-chip); height:1px; background:var(--dm-line); }
+.br-bye-shift { margin-left:calc(var(--br-chip) + var(--br-gap)); }
+.br-bye-shift.mirror { margin-left:0; margin-right:calc(var(--br-chip) + var(--br-gap)); }
 .br-team {
-  display:flex; align-items:center; gap:6px; background-color:var(--dm-surface-mute); border-radius:6px;
-  padding:4px 10px; white-space:nowrap; font-size:0.8rem;
+  display:flex; align-items:center; gap:8px; background-color:var(--dm-surface-mute); border-radius:8px;
+  padding:8px 12px; white-space:nowrap; font-size:0.9rem; width:var(--br-chip); box-sizing:border-box;
 }
-.br-seed { color:var(--dm-dim); font-weight:700; font-size:0.75rem; }
+.br-seed { color:var(--dm-dim); font-weight:700; font-size:0.85rem; min-width:0.9em; }
 .br-badge {
-  background-color:var(--br-color) !important; color:var(--br-text) !important; padding:1px 7px; border-radius:5px;
-  font-weight:700; text-decoration:none !important; font-size:0.8rem;
+  background-color:var(--br-color) !important; color:var(--br-text) !important; padding:2px 9px; border-radius:6px;
+  font-weight:700; text-decoration:none !important; font-size:0.9rem;
 }
-.br-rec { color:var(--dm-dim); font-size:0.75rem; }
-.br-tag { color:#F5B942; font-size:0.7rem; font-weight:700; }
-.br-matchbox { display:flex; flex-direction:column; gap:3px; }
+.br-rec { color:var(--dm-dim); font-size:0.85rem; }
+.br-tag { color:#F5B942; font-size:0.75rem; font-weight:700; }
 .br-ws-box {
-  display:flex; flex-direction:column; align-items:center; gap:6px; background-color:var(--dm-surface-mute);
-  border:1px solid var(--dm-line); border-radius:8px; padding:14px 22px; font-size:0.85rem; color:var(--dm-dim);
-  position:relative; margin:0 24px;
+  display:flex; flex-direction:column; align-items:center; gap:8px; background-color:var(--dm-surface-mute);
+  border:1px solid var(--dm-line); border-radius:10px; padding:20px 28px; font-size:0.95rem; color:var(--dm-dim);
+  position:relative; margin:0 28px;
 }
 .br-ws-box::before, .br-ws-box::after {
-  content:''; position:absolute; top:50%; width:24px; height:1px; background:var(--dm-line);
+  content:''; position:absolute; top:50%; width:28px; height:1px; background:var(--dm-line);
 }
-.br-ws-box::before { left:-24px; }
-.br-ws-box::after { right:-24px; }
-.br-ws-title { color:#F5B942; font-weight:700; letter-spacing:0.5px; }
+.br-ws-box::before { left:-28px; }
+.br-ws-box::after { right:-28px; }
+.br-ws-title { color:#F5B942; font-weight:700; letter-spacing:0.5px; font-size:1.05rem; }
 </style>
 """
 
@@ -755,9 +796,6 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
             f"<span class='br-rec'>{int(row['wins'])}-{int(row['losses'])}</span>{tag_html}</div>"
         )
 
-    def match_html(row_a, row_b):
-        return f"<div class='br-matchbox'>{team_html(row_a)}{team_html(row_b)}</div>"
-
     def pair(left_html, right_html):
         return (
             f"<div class='br-pair{mirror_cls}'>"
@@ -765,10 +803,20 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
             f"<div class='br-slot{mirror_cls}'>{right_html}</div></div>"
         )
 
+    def wild_card(row_a, row_b):
+        """A Wild Card matchup: the two teams joined by their own connector,
+        then a plain line carrying the winner across the Division Series
+        column to meet the bye team (see .br-lead in PLAYOFF_BRACKET_CSS)."""
+        return (
+            f"<div class='br-advance{mirror_cls}'>"
+            f"{pair(team_html(row_a), team_html(row_b))}"
+            f"<div class='br-lead'></div></div>"
+        )
+
     bye1 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[1], 'BYE')}</div>"
     bye2 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[2], 'BYE')}</div>"
-    wc_top = match_html(by_seed[3], by_seed[6])
-    wc_bottom = match_html(by_seed[4], by_seed[5])
+    wc_top = wild_card(by_seed[3], by_seed[6])
+    wc_bottom = wild_card(by_seed[4], by_seed[5])
 
     tree = pair(pair(bye1, wc_top), pair(wc_bottom, bye2))
     return f"<div class='bracket-tree'>{tree}</div>"
