@@ -129,8 +129,13 @@ st.markdown(
 # once here so every page inherits it rather than each re-inventing a card.
 # Streamlit's own containers/metrics are restyled in place; anything we hand-
 # write (section headings, game cards) gets a dm-* class. The raised-card
-# shadow is light-theme only — on a dark ground it just muddies the edge.
-_CARD_SHADOW = "box-shadow:0 1px 2px rgba(12,23,37,0.06);" if _theme_type == "light" else ""
+# shadow is light-theme only — on a dark ground it just muddies the edge; a
+# hairline border stands in instead, since dark-mode card vs. page background
+# is too close in value on its own for a bubble edge to read clearly.
+_CARD_SHADOW = (
+    "box-shadow:0 1px 2px rgba(12,23,37,0.06);" if _theme_type == "light"
+    else "border:1px solid rgba(255,255,255,0.06);"
+)
 st.markdown(
     "<style>"
     # --- section headings: accent kicker + condensed uppercase title -------
@@ -143,8 +148,11 @@ st.markdown(
     "h1{text-transform:uppercase;letter-spacing:0.5px;}"
     "[data-testid='stMain']{font-variant-numeric:tabular-nums;}"
     # --- bordered containers read as cards, not outlines -------------------
+    # Explicit padding, not just Streamlit's own default gap — without it,
+    # content (e.g. Game Center's on-the-mound/due-up cards) sits flush
+    # against the card edge instead of inside it.
     "[data-testid='stMain'] [data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock']{"
-    f"  background:var(--dm-surface);border-radius:14px;{_CARD_SHADOW}}}"
+    f"  background:var(--dm-surface);border-radius:14px;padding:16px 18px;{_CARD_SHADOW}}}"
     # --- game cards: left rail, condensed team names, big score ------------
     ".dm-game{flex:0 0 auto;width:176px;background:var(--dm-card);"
     "  border-left:4px solid var(--dm-blue);border-radius:0 10px 10px 0;"
@@ -209,10 +217,20 @@ st.markdown(
     # inline style on a span, so neither is caught by this.
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  [data-testid='stMarkdown'] div[style]){"
-    f"  background:var(--dm-surface);border-radius:14px;padding:14px 16px;{_CARD_SHADOW}}}"
-    # A bubble inside a bubble just draws a box around a box.
-    "[data-testid='stMainBlockContainer'] [data-testid='stLayoutWrapper'] "
-    "  [data-testid='stElementContainer']{background:transparent !important;"
+    f"  background:var(--dm-surface);border-radius:14px;padding:20px 22px;{_CARD_SHADOW}}}"
+    # Rows that are already their own card (Injury Report, Transactions) opt
+    # out of the generic HTML-card bubble above — a bubble around a row that's
+    # already got its own background just draws a box around a box, one per
+    # row, which reads as clutter rather than structure.
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  .dm-flat-card){background:transparent !important;border:none !important;"
+    "  box-shadow:none !important;padding:0 !important;}"
+    # A bubble inside a bubble just draws a box around a box — but scope this
+    # to a card's own direct children. Matching every descendant also catches
+    # anything inside st.columns, which Streamlit wraps in a layout wrapper of
+    # its own.
+    "[data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock'] "
+    "  > [data-testid='stElementContainer']{background:transparent !important;"
     "  box-shadow:none !important;padding:0 !important;}"
 
     # Every st.markdown("<style>") and every localStorage-bridge component

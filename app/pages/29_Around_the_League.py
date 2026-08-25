@@ -50,7 +50,8 @@ with injury_tab:
             color = teams.color_for_abbr(row["Tm"])
             detail = row["Detail"] if isinstance(row["Detail"], str) and row["Detail"] else "No further detail available"
             st.markdown(
-                f"<div style='display:flex;align-items:center;gap:14px;background-color:var(--dm-surface-mute);"
+                f"<div class='dm-flat-card' style='display:flex;align-items:center;gap:14px;"
+                f"background-color:var(--dm-surface-mute);"
                 f"border-left:4px solid {color};padding:10px 14px;border-radius:6px;margin:6px 0'>"
                 f"<img src='{style.headshot_url(row['mlbID'], width=100)}' style='width:56px;height:56px;"
                 f"border-radius:50%;object-fit:cover;object-position:center 25%;flex-shrink:0'>"
@@ -81,7 +82,8 @@ with tx_tab:
                     f"border-radius:6px;font-weight:700;font-size:0.8rem;margin-right:6px'>{abbr}</span>"
                 )
         st.markdown(
-            f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);padding:10px 14px;"
+            f"<div class='dm-flat-card' style='background-color:var(--dm-surface-mute);"
+            f"border-left:4px solid var(--dm-blue);padding:10px 14px;"
             f"border-radius:6px;margin:6px 0'>"
             f"<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:4px'>"
             f"<div>{badges}<span style='color:var(--dm-dim);font-size:0.85rem'>{row['type']}</span></div>"

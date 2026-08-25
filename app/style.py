@@ -1023,21 +1023,25 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
     sz_top = pitches[-1]["sz_top"] if pitches else 3.5
     sz_bottom = pitches[-1]["sz_bottom"] if pitches else 1.5
     # Zone box with a whisper of fill so it reads as a region, not a wire.
+    # Zone box and gridlines are drawn in the theme's own text color rather
+    # than a hardcoded near-white — "#FAFAFA" against a light-mode chart
+    # background is invisible, which is why the zone used to disappear
+    # entirely in light mode.
     fig.add_shape(
         type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
-        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(250,250,250,0.05)",
+        line=dict(color=CHART_TEXT, width=2), fillcolor=_hex_to_rgba(CHART_TEXT, 0.05),
     )
     # Rule-of-thirds gridlines — the mental grid every broadcast zone uses.
     third_w, third_h = 1.416 / 3, (sz_top - sz_bottom) / 3
     for i in (1, 2):
         fig.add_shape(
             type="line", x0=-0.708 + i * third_w, x1=-0.708 + i * third_w,
-            y0=sz_bottom, y1=sz_top, line=dict(color="rgba(250,250,250,0.18)", width=1),
+            y0=sz_bottom, y1=sz_top, line=dict(color=_hex_to_rgba(CHART_TEXT, 0.18), width=1),
         )
         fig.add_shape(
             type="line", x0=-0.708, x1=0.708,
             y0=sz_bottom + i * third_h, y1=sz_bottom + i * third_h,
-            line=dict(color="rgba(250,250,250,0.18)", width=1),
+            line=dict(color=_hex_to_rgba(CHART_TEXT, 0.18), width=1),
         )
     # Home plate (catcher's view, wide edge up) grounds the whole picture.
     fig.add_shape(
@@ -1053,7 +1057,7 @@ def strike_zone_chart(pitches: list[dict]) -> "go.Figure":
             x=[p["px"]], y=[p["pz"]], mode="markers+text",
             marker=dict(
                 size=40 if latest else 34, color=_PITCH_RESULT_COLORS[kind],
-                line=dict(color="#FAFAFA" if latest else "#12141C", width=3 if latest else 1.5),
+                line=dict(color=CHART_TEXT if latest else "#12141C", width=3 if latest else 1.5),
             ),
             text=[str(p["number"])], textfont=dict(color="#12141C", size=15, family="Arial Black"),
             hovertext=f"{speed_bit}{p['pitch_type']} — {p['description']}", hoverinfo="text",
@@ -1210,12 +1214,15 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
         )
         scoring_rows = wp_df[score_changed]
         if not scoring_rows.empty:
+            # The theme's own text color, not a hardcoded near-white — a
+            # white line/marker on a light-mode chart background was
+            # invisible, which read as the scoring markers not showing up.
             for x in scoring_rows["atBatIndex"]:
-                fig.add_vline(x=x, line=dict(color="#FAFAFA", width=1))
+                fig.add_vline(x=x, line=dict(color=_hex_to_rgba(CHART_TEXT, 0.5), width=1))
             has_desc = "description" in scoring_rows.columns
             fig.add_trace(go.Scatter(
                 x=scoring_rows["atBatIndex"], y=scoring_rows["home_win_pct"], mode="markers",
-                marker=dict(size=9, color="#FAFAFA", line=dict(color=home_color, width=2)),
+                marker=dict(size=9, color=CHART_TEXT, line=dict(color=home_color, width=2)),
                 text=scoring_rows["description"] if has_desc else None,
                 hovertemplate="%{text}<extra></extra>" if has_desc else "Scoring play<extra></extra>",
                 showlegend=False,
@@ -1223,7 +1230,7 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
     fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba(CHART_GRID, 0.25), color=CHART_DIM, ticksuffix="%")
     fig.update_xaxes(visible=False)
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
     )
     return fig
@@ -1556,6 +1563,16 @@ def chart_template(theme_type: str = "light"):
             colorway=["#2E86DE", "#C0453F", "#2E7D32", "#B7791F",
                       "#7A4FBF", "#1F8A8A", "#C2557A", "#4C6EF5"],
             xaxis=axis, yaxis=axis,
+            # Radar charts (Compare's batting profile) draw their rings and
+            # spokes from the polar axes, not xaxis/yaxis — without these the
+            # five-section grid has no colour to draw itself in.
+            polar=dict(
+                bgcolor="rgba(0,0,0,0)",
+                radialaxis=dict(gridcolor=CHART_GRID, linecolor=CHART_GRID,
+                                tickfont=dict(color=CHART_DIM)),
+                angularaxis=dict(gridcolor=CHART_GRID, linecolor=CHART_GRID,
+                                 tickfont=dict(color=CHART_DIM)),
+            ),
             legend=dict(font=dict(color=CHART_DIM)),
         ),
         data=dict(
@@ -1587,4 +1604,5 @@ def apply_theme(theme_type: str) -> None:
         DIAMOND_COLOR = "#2E86DE"
     import plotly.io as _pio
     _pio.templates["diamond"] = chart_template(theme_type)
-    _pio.templates.default = "diamond"
+    _base = "plotly_dark" if theme_type == "dark" else "plotly_white"
+    _pio.templates.default = f"{_base}+diamond"

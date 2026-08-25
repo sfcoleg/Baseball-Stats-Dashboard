@@ -31,7 +31,7 @@ with col2:
     min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
 with col3:
     sort_by = st.selectbox(
-        "Sort by", ["ERA", "FIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "WAR", "ERA_plus"], index=0,
+        "Sort by", ["ERA", "FIP", "xFIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "WAR", "ERA_plus"], index=0,
         format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
@@ -99,7 +99,7 @@ for c, op, value in conditions:
         filtered = filtered[filtered[c] >= value]
     else:
         filtered = filtered[filtered[c] <= value]
-ascending = sort_by in ("ERA", "FIP", "xERA", "WHIP")
+ascending = sort_by in ("ERA", "FIP", "xFIP", "xERA", "WHIP")
 filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=True)
 
 table_rows = filtered
@@ -141,17 +141,17 @@ with advanced_tab:
         adv_rows = adv_rows.assign(WPA=float("nan"))
         adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
     display = teams.add_team_abbr(adv_rows)[
-        ["Name", "Age", "Tm", "IP", "FIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WAR", "ERA_plus", "WPA", "WPA+"]
+        ["Name", "Age", "Tm", "IP", "FIP", "xFIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WAR", "ERA_plus", "WPA", "WPA+"]
     ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB", "ERA_plus": "ERA+"})
     st.dataframe(
         style.style_stats_table(
             display,
             higher_better=["K/9", "K/BB", "WAR", "ERA+", "WPA", "WPA+"],
-            lower_better=["FIP", "BB/9", "BAbip"],
+            lower_better=["FIP", "xFIP", "BB/9", "BAbip"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "FIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}",
+                "FIP": "{:.2f}", "xFIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}",
                 "GB/FB": "{:.2f}", "WAR": "{:.1f}", "ERA+": "{:.0f}", "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),

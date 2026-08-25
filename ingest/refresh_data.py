@@ -109,13 +109,40 @@ def add_batting_sabermetrics(df):
     return df
 
 
+FIP_CONSTANT = 3.10
+
+
 def add_pitching_sabermetrics(df):
-    fip_constant = 3.10
     df["K_9"] = (df["SO"] * 9 / df["IP"]).round(2)
     df["BB_9"] = (df["BB"] * 9 / df["IP"]).round(2)
     df["K_BB"] = (df["SO"] / df["BB"].replace(0, float("nan"))).round(2)
     df["FIP"] = (
-        (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / df["IP"] + fip_constant
+        (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / df["IP"] + FIP_CONSTANT
+    ).round(2)
+    return df
+
+
+def add_xfip(df):
+    """xFIP — same shape as FIP, but HR is replaced by FLY BALLS * the
+    LEAGUE-WIDE HR/FB rate, so a pitcher who's given up an unlucky/lucky
+    number of home runs on his actual fly balls gets normalized to what a
+    league-average pitcher would've allowed on that same fly-ball volume.
+    Needs a raw fly-ball count, which neither Baseball-Reference (only a
+    GB/FB ratio) nor the xERA leaderboard expose — pulled here from
+    Statcast's batted-ball-profile leaderboard instead (see fetch_pitching):
+    `batted_ball` is the batted-ball-event count, `flyballs_percent` the
+    share of those that were fly balls."""
+    fb = df["batted_ball"] * df["flyballs_percent"] / 100
+    fb_total = fb.sum()
+    if not fb_total:
+        # Statcast batted-ball data doesn't reach back before ~2015 — for an
+        # older season the leaderboard merge leaves every row NaN, fb.sum()
+        # is 0, and a league HR/FB rate can't be computed at all.
+        df["xFIP"] = float("nan")
+        return df
+    lg_hr_fb = df["HR"].sum() / fb_total
+    df["xFIP"] = (
+        (13 * fb * lg_hr_fb + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / df["IP"] + FIP_CONSTANT
     ).round(2)
     return df
 
@@ -432,13 +459,12 @@ def fetch_pitching(season=CURRENT_SEASON):
         "brl_percent": "barrel_pct_against",
     })
 
-    # xERA: Statcast's contact-quality-based expected ERA — the closest
-    # equivalent this data source has to xFIP/SIERA. True xFIP needs a raw
-    # fly-ball count and league HR/FB rate that neither Baseball-Reference
-    # nor Statcast expose here (bref only gives a GB/FB *ratio*), so xERA is
-    # used instead of trying to approximate xFIP from incomplete inputs. This
-    # same leaderboard also has expected-contact-quality equivalents of
-    # BA/SLG/wOBA against, so we're not limited to just xERA here.
+    # xERA: Statcast's contact-quality-based expected ERA. This same
+    # leaderboard also has expected-contact-quality equivalents of
+    # BA/SLG/wOBA against, so we're not limited to just xERA here. (xFIP
+    # itself — HR normalized to league HR/FB rate rather than xERA's
+    # contact-quality model — is computed separately below, from the
+    # batted-ball-profile leaderboard's raw fly-ball count.)
     print(f"Fetching {season} Statcast expected stats (pitchers)...")
     expected = statcast_pitcher_expected_stats(season, minPA=1)[
         ["player_id", "xera", "est_ba", "est_slg", "est_woba", "era_minus_xera_diff"]
@@ -471,14 +497,21 @@ def fetch_pitching(season=CURRENT_SEASON):
         "oz_swing_percent": "induced_chase_pct",
     })
 
+    print(f"Fetching {season} Statcast batted-ball profile (pitchers, for xFIP)...")
+    batted_ball = fetch_savant_custom_leaderboard(
+        season, "pitcher", ["batted_ball", "flyballs_percent"]
+    )[["player_id", "batted_ball", "flyballs_percent"]]
+
     print(f"Fetching {season} WAR (Baseball-Reference)...")
     war = fetch_war(is_pitcher=True, season=season)
 
     pitching["mlbID"] = pd.to_numeric(pitching["mlbID"], errors="coerce")
-    for stats_df in (exitvelo, expected, stuff_pctile, stuff_raw, war):
+    for stats_df in (exitvelo, expected, stuff_pctile, stuff_raw, batted_ball, war):
         pitching = pitching.merge(stats_df, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
         pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
 
+    pitching = add_xfip(pitching)
+    pitching = pitching.drop(columns=["batted_ball", "flyballs_percent"])
     pitching = correct_traded_player_teams(pitching)
     pitching = add_pitching_plus_stats(pitching)
     pitching["season"] = season

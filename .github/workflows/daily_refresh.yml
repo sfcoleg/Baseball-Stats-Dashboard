@@ -24,7 +24,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: pip install -r requirements-ingest.txt
 
       - name: Run ingest
         run: python ingest/refresh_data.py
@@ -33,6 +33,6 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/stats.db
+          git add data/*.db
           git diff --cached --quiet || git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
           git push

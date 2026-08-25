@@ -372,8 +372,9 @@ if leaders:
         cols = st.columns(3)
         for col, (row_data, text, _key) in zip(cols, leaders[start:start + 3]):
             with col:
-                style.milestone_card(int(row_data["mlbID"]), row_data["Name"],
-                                     selected_abbr, color, text, season=season)
+                with st.container(border=True):
+                    style.milestone_card(int(row_data["mlbID"]), row_data["Name"],
+                                         selected_abbr, color, text, season=season)
 
 
 # --- Roster tables (names link to player profiles) ---------------------------
