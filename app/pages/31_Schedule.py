@@ -37,6 +37,19 @@ era_by_id = dict(zip(pitching["mlbID"], pitching["ERA"]))
 gs_by_id = dict(zip(pitching["mlbID"], pitching["GS"]))
 
 
+def team_logo(abbr):
+    team_id = teams.team_id_for_abbr(teams.normalize_mlb_abbr(abbr))
+    return style.team_logo_for_season(teams.normalize_mlb_abbr(abbr), team_id, season) if team_id else None
+
+
+def _logo_img(abbr, size=22):
+    logo = team_logo(abbr)
+    return (
+        f"<img src='{logo}' style='height:{size}px;width:{size}px;object-fit:contain;"
+        f"vertical-align:middle;margin-right:4px'>" if logo else ""
+    )
+
+
 def _sp_line(name, pid):
     # NaN (a float) is truthy, so a plain `if not name` lets pandas' missing
     # values through and renders a literal "nan".
@@ -69,10 +82,12 @@ if not duels.empty:
             f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-amber);padding:8px 14px;"
             f"border-radius:6px;margin:5px 0'>"
             f"<span style='color:var(--dm-dim);font-size:0.85rem'>{g['date']}</span><br>"
+            f"{_logo_img(g['away_abbr'])}"
             f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['away_abbr']}</span> "
             f"<b>{_sp_line(g['away_pitcher_name'], g['away_pitcher_mlbID'])}</b>"
             f" <span style='color:var(--dm-dim)'>vs</span> "
+            f"{_logo_img(g['home_abbr'])}"
             f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['home_abbr']}</span> "
             f"<b>{_sp_line(g['home_pitcher_name'], g['home_pitcher_mlbID'])}</b>"
@@ -100,9 +115,11 @@ for date_str, day_games in upcoming.groupby("date", sort=True):
             f"<div style='background-color:var(--dm-surface-mute);padding:8px 14px;border-radius:6px;margin:4px 0;"
             f"display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap'>"
             f"<div style='min-width:0'>"
+            f"{_logo_img(g['away_abbr'])}"
             f"<span style='background-color:{away_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['away_abbr']}</span>"
             f" <span style='color:var(--dm-dim)'>@</span> "
+            f"{_logo_img(g['home_abbr'])}"
             f"<span style='background-color:{home_color}66;color:var(--dm-text);padding:2px 8px;border-radius:6px;"
             f"font-weight:700'>{g['home_abbr']}</span>"
             f" <span class='game-time-local' data-utc='{g['game_time_utc']}' "
