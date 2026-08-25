@@ -16,9 +16,9 @@ STORAGE_KEY = "sabermetrics_prefs"
 
 def bootstrap() -> None:
     """Call once, early in main.py (before any page renders). Seeds
-    st.session_state["pref_default_season"]/["pref_favorite_team"] — from
-    a ?prefs= query param if present (set by the redirect below on a prior
-    run), else None/None."""
+    st.session_state["pref_default_season"]/["pref_favorite_team"]/
+    ["pref_theme"] — from a ?prefs= query param if present (set by the
+    redirect below on a prior run), else defaults."""
     if "pref_default_season" in st.session_state:
         st.session_state["_prefs_safe_to_save"] = True
         return
@@ -31,11 +31,13 @@ def bootstrap() -> None:
             data = {}
         st.session_state["pref_default_season"] = data.get("default_season")
         st.session_state["pref_favorite_team"] = data.get("favorite_team")
+        st.session_state["pref_theme"] = data.get("theme") or "system"
         st.session_state["_prefs_safe_to_save"] = True
         return
 
     st.session_state["pref_default_season"] = None
     st.session_state["pref_favorite_team"] = None
+    st.session_state["pref_theme"] = "system"
     # Not safe to save yet — see following.py's identical placeholder-guard
     # for why (the shared redirect may still be in flight).
     st.session_state["_prefs_safe_to_save"] = False
@@ -50,6 +52,7 @@ def save() -> None:
     payload = json.dumps({
         "default_season": st.session_state.get("pref_default_season"),
         "favorite_team": st.session_state.get("pref_favorite_team"),
+        "theme": st.session_state.get("pref_theme", "system"),
     })
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
     components.html(f"<script>localStorage.setItem('{STORAGE_KEY}', {js_literal});</script>", height=0)
@@ -68,3 +71,26 @@ def default_season_index(seasons: list[int]) -> int:
 
 def get_favorite_team() -> str | None:
     return st.session_state.get("pref_favorite_team")
+
+
+THEME_CHOICES = ("system", "light", "dark")
+
+
+def theme_preference() -> str:
+    """"system", "light" or "dark" — what the visitor chose on Settings."""
+    value = st.session_state.get("pref_theme", "system")
+    return value if value in THEME_CHOICES else "system"
+
+
+def resolve_theme(detected: str | None) -> str:
+    """The theme to actually paint.
+
+    An explicit Light/Dark choice always wins. On "system" we fall back to
+    what Streamlit reports it painted (st.context.theme), which it infers
+    from its own background colour — that inference can come back stale or
+    empty on a first render, which is exactly why an explicit choice exists.
+    """
+    chosen = theme_preference()
+    if chosen in ("light", "dark"):
+        return chosen
+    return detected if detected in ("light", "dark") else "light"

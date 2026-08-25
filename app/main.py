@@ -30,8 +30,7 @@ import prefs
 import sidebar
 import style
 
-st.set_page_config(page_title="Diamond Metrics", layout="wide",
-                   initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
 # Seeds st.session_state's follow lists from the browser's own localStorage
 # (see following.py) — must run before any page can read them. Each
@@ -97,7 +96,27 @@ _THEME_TOKENS = {
     ),
 }
 _theme_obj = getattr(getattr(st, "context", None), "theme", None)
-_theme_type = getattr(_theme_obj, "type", None) or "light"
+_detected = getattr(_theme_obj, "type", None)
+_theme_type = prefs.resolve_theme(_detected)
+
+# Streamlit's own chrome follows the system scheme, which is what made the
+# page appear to flip on navigation: its inference could land on a different
+# answer than ours between runs. With an explicit Light/Dark choice we paint
+# the app surfaces ourselves so the two can never disagree.
+_FORCE_BG = {"light": ("#E9EEF6", "#0C1725", "#F4F7FB"),
+             "dark": ("#151C28", "#EFF3F9", "#1E2735")}
+if prefs.theme_preference() in ("light", "dark"):
+    _bg, _fg, _side = _FORCE_BG[_theme_type]
+    st.markdown(
+        "<style>"
+        f"[data-testid='stApp'],[data-testid='stMain']{{background:{_bg} !important;}}"
+        f"[data-testid='stAppViewContainer']{{background:{_bg} !important;}}"
+        f"[data-testid='stSidebar']{{background:{_side} !important;}}"
+        f"[data-testid='stMain'],[data-testid='stMain'] p,[data-testid='stMain'] "
+        f"li,[data-testid='stMain'] label{{color:{_fg};}}"
+        "</style>",
+        unsafe_allow_html=True,
+    )
 st.markdown(
     f"<style>:root{{{_THEME_TOKENS.get(_theme_type, _THEME_TOKENS['light'])}}}</style>",
     unsafe_allow_html=True,
@@ -141,32 +160,36 @@ st.markdown(
     "[data-testid='stMetricLabel']{text-transform:uppercase;letter-spacing:0.9px;"
     "  font-size:0.7rem !important;color:var(--dm-dim);}"
     # --- full-width top navigation ----------------------------------------
-    ".dm-topnav{position:fixed;top:0;left:0;right:0;z-index:999990;"
-    "  display:flex;align-items:center;gap:16px;height:3.2rem;padding:0 16px;"
+    # The container Streamlit gives us is a vertical block; flexing it turns
+    # the page_links into a horizontal strip.
+    ".st-key-dm_nav{position:fixed;top:0;left:0;right:0;z-index:999990;"
     "  background:var(--dm-surface);border-bottom:2px solid var(--dm-blue);"
-    "  overflow-x:auto;scrollbar-width:none;}"
-    ".dm-topnav::-webkit-scrollbar{display:none;}"
-    ".dm-brand{display:flex;align-items:center;gap:8px;flex:0 0 auto;text-decoration:none;}"
+    "  padding:0 292px 0 14px;height:3.2rem;"
+    "  flex-direction:row !important;align-items:center;gap:2px !important;"
+    "  flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;"
+    "  box-shadow:none !important;}"
+    ".st-key-dm_nav::-webkit-scrollbar{display:none;}"
+    ".st-key-dm_nav [data-testid='stElementContainer']{width:auto !important;flex:0 0 auto;}"
+    ".st-key-dm_nav [data-testid='stPageLink'] a{padding:5px 9px;border-radius:7px;}"
+    ".st-key-dm_nav [data-testid='stPageLink'] p{font-family:'Archivo Narrow',sans-serif;"
+    "  font-weight:600;font-size:0.92rem;letter-spacing:0.4px;text-transform:uppercase;"
+    "  color:var(--dm-dim);margin:0;white-space:nowrap;}"
+    ".st-key-dm_nav [data-testid='stPageLink'] a:hover p{color:var(--dm-text);}"
+    ".dm-brand{display:flex;align-items:center;gap:8px;flex:0 0 auto;text-decoration:none;"
+    "  margin-right:8px;}"
     ".dm-brand .diamond-title{font-size:1.05rem !important;line-height:1 !important;}"
-    ".dm-sportwrap{display:flex;gap:4px;flex:0 0 auto;}"
-    ".dm-sport{font-family:'Archivo Narrow',sans-serif;font-weight:700;font-size:0.82rem;"
-    "  letter-spacing:0.5px;padding:4px 10px;border-radius:7px;text-decoration:none;"
-    "  color:var(--dm-dim);border:1px solid var(--dm-line);white-space:nowrap;}"
-    ".dm-sport.active{background:var(--dm-blue-soft);color:var(--dm-blue-text);"
-    "  border-color:var(--dm-blue);}"
-    ".dm-navlinks{display:flex;align-items:center;gap:2px;flex:1 1 auto;white-space:nowrap;}"
-    ".dm-nav-link{font-family:'Archivo Narrow',sans-serif;font-weight:600;font-size:0.92rem;"
-    "  letter-spacing:0.4px;text-transform:uppercase;text-decoration:none;color:var(--dm-dim);"
-    "  padding:6px 10px;border-radius:7px;border-bottom:3px solid transparent;}"
-    ".dm-nav-link:hover{color:var(--dm-text);background:var(--dm-surface-mute);}"
-    ".dm-nav-link.active{color:var(--dm-text);border-bottom-color:var(--dm-blue);}"
-    ".dm-nav-util{font-size:0.76rem;color:var(--dm-dim);text-decoration:none;flex:0 0 auto;"
-    "  opacity:0.75;}"
-    ".dm-nav-util:hover{opacity:1;}"
-    # The bar is fixed, so the page needs to start below it.
+    # Search is a real widget, lifted into the slot the padding above reserves.
+    ".st-key-dm_search{position:fixed;top:5px;right:14px;width:264px;z-index:999995;"
+    "  background:transparent;}"
+    ".st-key-dm_search [data-testid='stTextInput'] input{height:2.1rem;font-size:0.86rem;}"
+    ".st-key-dm_search [data-testid='stButton'] button{font-size:0.8rem;padding:2px 8px;}"
     "[data-testid='stMainBlockContainer']{padding-top:3.6rem !important;}"
-    "@media (max-width:640px){.dm-topnav{height:3rem;}"
-    "  .dm-nav-link{font-size:0.85rem;padding:5px 8px;}}"
+    # Desktop shows the bar and hides the sidebar; mobile does the reverse, so a
+    # phone keeps exactly the navigation it had before the bar existed.
+    "@media (min-width:641px){[data-testid='stSidebar']{display:none !important;}"
+    "  [data-testid='stSidebarCollapsedControl']{display:none !important;}}"
+    "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search{display:none !important;}"
+    "  [data-testid='stMainBlockContainer']{padding-top:2.5rem !important;}}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
@@ -453,38 +476,59 @@ _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
     set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"}
 )
 
-# Navigation is a full-width bar across the top rather than a sidebar column.
-# These are plain anchors, not st.page_link: page_link only renders vertically
-# in whatever container it's given, so it can't lay out as a horizontal strip.
+# Navigation renders twice, and CSS picks one: a full-width bar across the top
+# on desktop, and the original sidebar on mobile, where a horizontal strip of a
+# dozen links would be unusable. Only one is ever visible.
+#
+# These are st.page_link, NOT hand-written <a> tags. A plain anchor triggers a
+# full page load, and because app/pages/ sits next to this script Streamlit
+# also runs its classic file-based router — so a full load of e.g. /Batting
+# renders that file on its own, without main.py, losing the bar and the theme
+# entirely. page_link navigates through Streamlit's own router instead, which
+# keeps main.py in charge, and it marks the current page for free.
 if active_sport == "mlb":
-    _nav = [(pg_.url_path or "", pg_.title) for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
+    _nav_pages = [pg_ for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
 else:
-    _nav = [(pg_.url_path, pg_.title.replace("NHL ", "")) for pg_ in NHL_PAGES
-            if pg_.title not in _NHL_NAV_HIDDEN]
+    _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 
-_here = pg.url_path or ""
-_links = "".join(
-    f"<a class='dm-nav-link{' active' if path == _here else ''}' href='/{path}' target='_self'>{label}</a>"
-    for path, label in _nav
-)
-_sport = "".join(
-    f"<a class='dm-sport{' active' if active_sport == sid else ''}' href='/{home}' target='_self'>{lbl}</a>"
-    for sid, home, lbl in (("mlb", "", "\u26be MLB"), ("nhl", "nhl", "\U0001F3D2 NHL"))
-)
-st.markdown(
-    "<div class='dm-topnav'>"
-    f"<a class='dm-brand' href='/' target='_self'>{style.diamond_logo(22)}"
-    f"<span class='diamond-title'>Diamond Metrics</span></a>"
-    f"<div class='dm-sportwrap'>{_sport}</div>"
-    f"<nav class='dm-navlinks'>{_links}</nav>"
-    "<a class='dm-nav-util' href='/Settings' target='_self'>Settings</a>"
-    "</div>",
+_bar = st.container(key="dm_nav")
+with _bar:
+    st.markdown(
+        f"<a class='dm-brand' href='/' target='_self'>{style.diamond_logo(22)}"
+        f"<span class='diamond-title'>Diamond Metrics</span></a>",
+        unsafe_allow_html=True,
+    )
+    for pg_ in _nav_pages:
+        st.page_link(pg_, label=pg_.title.replace("NHL ", ""))
+    # Sport switch and Settings ride at the right-hand end of the same strip.
+    other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
+    st.page_link(other_home, label="\U0001F3D2 NHL" if active_sport == "mlb" else "\u26be MLB")
+    st.page_link(next(p_ for p_ in PAGES if p_.title == "Settings"), label="Settings")
+
+# The bar can't host a widget, so search renders as its own container that CSS
+# lifts into the slot reserved at the bar's right edge.
+_search_box = st.container(key="dm_search")
+sidebar.render_search(active_sport, target=_search_box, key_suffix="_top")
+
+# --- mobile: the sidebar exactly as it was before the top bar existed --------
+sidebar.render_sport_switcher(active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0]})
+sidebar.render_search(active_sport)
+if active_sport == "mlb":
+    for p_ in PAGES:
+        if p_.title not in _MLB_NAV_HIDDEN:
+            st.sidebar.page_link(p_, label=p_.title)
+else:
+    for p_ in NHL_PAGES:
+        if p_.title not in _NHL_NAV_HIDDEN:
+            st.sidebar.page_link(p_, label=p_.title.replace("NHL ", ""))
+st.sidebar.markdown(
+    "<style>"
+    "[data-testid='stSidebar'] a[href*='Settings'] { font-size: 0.8rem !important; opacity: 0.6; }"
+    "[data-testid='stSidebar'] a[href*='Settings']:hover { opacity: 1; }"
+    "</style>",
     unsafe_allow_html=True,
 )
-
-# Search stays a real Streamlit widget (it needs reruns and callbacks), so it
-# can't live inside the static bar above — it keeps the sidebar, which is
-# collapsed by default now that navigation has moved out of it.
-sidebar.render_search(active_sport)
+settings_page = next(p_ for p_ in PAGES if p_.title == "Settings")
+st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
 
 pg.run()

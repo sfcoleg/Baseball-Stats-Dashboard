@@ -69,6 +69,25 @@ team_choice = st.selectbox(
 )
 st.session_state["pref_favorite_team"] = None if team_choice == "None" else team_choice.split(" — ")[0]
 
+style.colored_header("Appearance", "chart")
+_theme_labels = {"system": "Match my device", "light": "Light", "dark": "Dark"}
+_current = prefs.theme_preference()
+theme_choice = st.radio(
+    "Theme", list(prefs.THEME_CHOICES), horizontal=True,
+    index=list(prefs.THEME_CHOICES).index(_current),
+    format_func=lambda v: _theme_labels[v],
+    label_visibility="collapsed",
+)
+if theme_choice != _current:
+    st.session_state["pref_theme"] = theme_choice
+    prefs.save()
+    st.rerun()
+st.session_state["pref_theme"] = theme_choice
+st.caption(
+    "Light and Dark stay put on every page. Match my device follows your "
+    "system setting, which can change as you move between pages."
+)
+
 # Persists whatever's currently in session_state to this browser's
 # localStorage — cheap and safe to call unconditionally on every render
 # (see prefs.py / following.py).

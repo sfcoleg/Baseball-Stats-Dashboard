@@ -65,13 +65,20 @@ def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
     st.session_state["_sport_switch_rendered"] = SPORT_LABELS[active_sport]
 
 
-def render_search(active_sport: str = "mlb") -> None:
+def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") -> None:
+    """Player search. `target` is the container to render into — it used to
+    always be the sidebar, but the search box now lives in the top nav bar,
+    which is static HTML and can't host a widget; main.py renders it into a
+    normal container and positions that container into the bar with CSS.
+    Defaults to the sidebar so any other caller is unaffected. `key_suffix`
+    keeps the desktop and mobile copies from colliding on widget keys."""
+    target = target if target is not None else st.sidebar
     if active_sport != "mlb":
-        _render_nhl_search()
+        _render_nhl_search(target, key_suffix)
         return
 
-    query = st.sidebar.text_input(
-        "Search players", key="sidebar_search_query", placeholder="e.g. Ohtani, Judge",
+    query = target.text_input(
+        "Search players", key=f"sidebar_search_query{key_suffix}", placeholder="e.g. Ohtani, Judge",
         label_visibility="collapsed",
     )
 
@@ -82,24 +89,25 @@ def render_search(active_sport: str = "mlb") -> None:
     matches = db.search_players_all_seasons(query, mtime)
 
     if matches.empty:
-        st.sidebar.caption("No matches.")
+        target.caption("No matches.")
         return
 
     for _, row in matches.head(8).iterrows():
         label = f"{row['Name']} ({row['Tm']}) — {row['roles']}"
-        if st.sidebar.button(label, key=f"sidebar_result_{row['mlbID']}_{row['roles']}", use_container_width=True):
+        if target.button(label, key=f"sidebar_result{key_suffix}_{row['mlbID']}_{row['roles']}", use_container_width=True):
             st.session_state["selected_mlbID"] = int(row["mlbID"])
             st.session_state["selected_name"] = row["Name"]
             st.session_state["selected_season"] = int(row["season"])
             st.switch_page("pages/_Player.py")
 
     if len(matches) > 8:
-        st.sidebar.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
+        target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
 
 
-def _render_nhl_search() -> None:
-    query = st.sidebar.text_input(
-        "Search players", key="sidebar_search_query_nhl", placeholder="e.g. McDavid, Hellebuyck",
+def _render_nhl_search(target=None, key_suffix: str = "") -> None:
+    target = target if target is not None else st.sidebar
+    query = target.text_input(
+        "Search players", key=f"sidebar_search_query_nhl{key_suffix}", placeholder="e.g. McDavid, Hellebuyck",
         label_visibility="collapsed",
     )
 
@@ -110,15 +118,15 @@ def _render_nhl_search() -> None:
     matches = ndb.search_players_all_seasons(query, mtime)
 
     if matches.empty:
-        st.sidebar.caption("No matches.")
+        target.caption("No matches.")
         return
 
     for _, row in matches.head(8).iterrows():
         tm = nteams._primary(row["Tm"])
         label = f"{row['Name']} ({tm}) — {row['role']}"
-        if st.sidebar.button(label, key=f"sidebar_result_nhl_{row['playerId']}", use_container_width=True):
+        if target.button(label, key=f"sidebar_result_nhl{key_suffix}_{row['playerId']}", use_container_width=True):
             st.session_state["nhl_selected_playerId"] = int(row["playerId"])
             st.switch_page("nhl/pages/player.py")
 
     if len(matches) > 8:
-        st.sidebar.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
+        target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
