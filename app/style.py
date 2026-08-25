@@ -1,6 +1,7 @@
 """Reusable pandas Styler helpers for dashboard tables: color-coded stat
 columns (green = better, red = worse) and team-color badges."""
 import base64
+import contextlib
 import math
 from pathlib import Path
 
@@ -143,6 +144,26 @@ def colored_header(text, category, color=None):
         f"<span class='dm-stitle'>{text}</span></div>",
         unsafe_allow_html=True,
     )
+
+
+@contextlib.contextmanager
+def section(text, category, color=None):
+    """A section as its own bubble: a bordered container with the heading
+    inside it, so the page reads as a stack of cards on the grey ground
+    rather than one long sheet.
+
+    Used as a context manager so the section's extent is explicit —
+    Streamlit renders a flat stream of elements with nothing marking where
+    one section stops, so a bare heading can't be styled into a card by CSS
+    alone.
+
+        with style.section("Milestones", "headliners"):
+            ...content...
+    """
+    box = st.container(border=True)
+    with box:
+        colored_header(text, category, color)
+        yield box
 
 
 def glossary_link():
@@ -820,14 +841,14 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
         styler = styler.format(fmt, na_rep="—")
 
     for col in higher_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn")
+        styler = styler.background_gradient(subset=[col], cmap="RdYlGn", low=0.45, high=0.45)
     for col in lower_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn_r")
+        styler = styler.background_gradient(subset=[col], cmap="RdYlGn_r", low=0.45, high=0.45)
 
     if team_col and team_col in df.columns and team_color_fn:
         def _team_bg(val):
             color = team_color_fn(val)
-            return f"background-color: {color}66; color: var(--dm-text); font-weight: 600"
+            return f"background-color: {color}55; color: {CHART_TEXT}; font-weight: 600"
 
         styler = styler.map(_team_bg, subset=[team_col])
         if team_abbr_fn:
@@ -1506,3 +1527,25 @@ def matchup_gradient(away_hex: str, home_hex: str, theme: str = "light",
     a, hh = team_tint(away_hex, theme), team_tint(home_hex, theme)
     return (f"linear-gradient(100deg, {a} 0%, {a} 18%, {neutral} 47%, "
             f"{neutral} 53%, {hh} 82%, {hh} 100%)")
+
+
+def apply_theme(theme_type: str) -> None:
+    """Point the CHART_* literals at the active theme.
+
+    Charts render to SVG and dataframe cells render in a canvas grid, so
+    neither can read the --dm-* custom properties the rest of the site uses;
+    they need real colour values, and those have to be swapped when the theme
+    does. main.py calls this once it has resolved the theme.
+    """
+    global CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE, CHART_BLUE
+    global CHART_AMBER, CHART_RED, CHART_GREEN, DIAMOND_COLOR
+    if theme_type == "dark":
+        CHART_TEXT, CHART_DIM, CHART_GRID = "#EFF3F9", "#9AA8BD", "#2E3B4E"
+        CHART_SURFACE, CHART_BLUE = "#1E2735", "#6FAFE8"
+        CHART_AMBER, CHART_RED, CHART_GREEN = "#F5B942", "#F87171", "#7CFC9A"
+        DIAMOND_COLOR = "#9BCAF3"
+    else:
+        CHART_TEXT, CHART_DIM, CHART_GRID = "#0C1725", "#6B7C94", "#D8E1EE"
+        CHART_SURFACE, CHART_BLUE = "#FBFCFE", "#2E86DE"
+        CHART_AMBER, CHART_RED, CHART_GREEN = "#B7791F", "#C0453F", "#2E7D32"
+        DIAMOND_COLOR = "#2E86DE"

@@ -81,7 +81,7 @@ _THEME_TOKENS = {
     "light": (
         "--dm-text:#0C1725; --dm-dim:#6B7C94; --dm-line:#D8E1EE;"
         "--dm-surface:#FBFCFE; --dm-surface-mute:#DFE3E9; --dm-card:#F2F7FD;"
-        "--dm-banner:#D8E7F7;"
+        "--dm-banner:#D8E7F7; --dm-field:#EEF1F5;"
         "--dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
         "--dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
         "--dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
@@ -90,7 +90,7 @@ _THEME_TOKENS = {
     "dark": (
         "--dm-text:#EFF3F9; --dm-dim:#9AA8BD; --dm-line:#2E3B4E;"
         "--dm-surface:#1E2735; --dm-surface-mute:#151C28; --dm-card:#1E2735;"
-        "--dm-banner:#1B2740;"
+        "--dm-banner:#1B2740; --dm-field:#26314A;"
         "--dm-blue:#6FAFE8; --dm-blue-text:#9BCAF3; --dm-blue-soft:#22334A;"
         "--dm-amber:#F5B942; --dm-amber-soft:#3A2F16;"
         "--dm-red:#F87171; --dm-red-soft:#3A1F1F;"
@@ -100,6 +100,7 @@ _THEME_TOKENS = {
 _theme_obj = getattr(getattr(st, "context", None), "theme", None)
 _detected = getattr(_theme_obj, "type", None)
 _theme_type = prefs.resolve_theme(_detected)
+style.apply_theme(_theme_type)
 
 # Streamlit's own chrome follows the system scheme, which is what made the
 # page appear to flip on navigation: its inference could land on a different
@@ -188,14 +189,28 @@ st.markdown(
     "  background:var(--dm-surface);}"
     ".st-key-dm_search [data-testid='stButton'] button{font-size:0.8rem;padding:2px 8px;}"
     # --- content sits on a panel, with the grey page visible around it ------
-    "[data-testid='stMainBlockContainer']{background:var(--dm-surface);border-radius:18px;"
-    "  padding:18px 26px 34px !important;margin:6.4rem auto 30px !important;"
-    f"  max-width:calc(100% - 44px) !important;{_CARD_SHADOW}}}"
+    # The page itself is grey; content sits on it as separate bubbles rather
+    # than one long sheet. Section headings stay bare on the grey so each
+    # heading reads as a label ABOVE its card, not another card.
+    "[data-testid='stMainBlockContainer']{background:transparent;"
+    "  padding:4px 0 34px !important;margin:6.4rem auto 0 !important;"
+    "  max-width:calc(100% - 44px) !important;}"
+    # Substantial blocks — tables, charts, hand-written HTML tables — each get
+    # their own bubble. Captions, inputs and headings are left bare: bubbling
+    # every element turns the page into confetti.
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  [data-testid='stDataFrame']),"
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  [data-testid='stPlotlyChart']),"
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has(table){"
+    f"  background:var(--dm-surface);border-radius:14px;padding:14px 16px;{_CARD_SHADOW}}}"
+
     # Every st.markdown("<style>") and every localStorage-bridge component
     # renders nothing, but Streamlit still gives each one a slot in the
     # vertical block's 1rem gap — six of them stack up into ~100px of dead
     # space above the real content on every page.
-    "[data-testid='stElementContainer']:has(style){display:none !important;}"
+    "[data-testid='stElementContainer']:has("
+    "  [data-testid='stMarkdown'] div > style:only-child){display:none !important;}"
     "[data-testid='stElementContainer']:has(> [data-testid='stCustomComponentV1']){"
     "  display:none !important;}"
     "@media (min-width:641px){[data-testid='stSidebar']{display:none !important;}"
@@ -203,6 +218,21 @@ st.markdown(
     "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search,.dm-banner{display:none !important;}"
     "  [data-testid='stMainBlockContainer']{margin:0 !important;padding-top:2.5rem !important;"
     "    border-radius:0;}}"
+    # Streamlit's own header bar sits between our banner and the tab row and
+    # paints its own background there — a dark band across the top with
+    # nothing in it. Its toolbar still needs to be reachable, so hide the bar
+    # itself rather than the controls.
+    "[data-testid='stHeader']{background:transparent !important;height:0 !important;}"
+    "[data-testid='stToolbar']{z-index:999999;}"
+    # --- inputs: light grey fields rather than stark white or dark ---------
+    "[data-baseweb='select'] > div,[data-baseweb='input'],"
+    "[data-testid='stTextInput'] input,[data-testid='stNumberInput'] input,"
+    "[data-testid='stDateInput'] input{"
+    "  background:var(--dm-field) !important;border-color:var(--dm-line) !important;"
+    "  color:var(--dm-text) !important;}"
+    "[data-baseweb='popover'] [role='listbox'],[data-baseweb='menu']{"
+    "  background:var(--dm-field) !important;}"
+    "[data-baseweb='menu'] li{color:var(--dm-text) !important;}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
