@@ -825,21 +825,25 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
     )
 
 
-def _resolve_table_gradient() -> tuple[float, float]:
-    """The light/dark low-high pair for background_gradient, resolved fresh
-    from THIS session rather than read off apply_theme()'s module globals.
+def _session_theme() -> str:
+    """This session's actual theme, resolved fresh rather than read off
+    apply_theme()'s module globals.
 
-    apply_theme() sets CHART_*/TABLE_GRADIENT_* as plain module attributes,
-    which Streamlit Community Cloud shares across every concurrent visitor's
-    session in the same process — one visitor's script run can overwrite
-    them mid-render of another visitor's table, which is exactly what
-    intermittently put dark-mode colors on a light-mode table (or vice
-    versa). Resolving the theme locally, per call, avoids that race for
-    this specific function regardless of what any other session is doing.
+    apply_theme() sets CHART_* as plain module attributes, which Streamlit
+    Community Cloud shares across every concurrent visitor's session in the
+    same process — one visitor's script run can overwrite them mid-render of
+    another visitor's table, which is exactly what intermittently put
+    dark-mode colors on a light-mode table (or vice versa). Anything a
+    dataframe cell's colour depends on has to go through here instead.
     """
     theme_obj = getattr(getattr(st, "context", None), "theme", None)
     detected = getattr(theme_obj, "type", None)
-    theme_type = prefs.resolve_theme(detected)
+    return prefs.resolve_theme(detected)
+
+
+def _resolve_table_gradient(theme_type: str) -> tuple[float, float]:
+    """background_gradient's low/high compression for this theme — light
+    mode wants a pale wash, dark mode a deeper, more saturated one."""
     return (0.35, 0.35) if theme_type == "dark" else (0.7, 0.7)
 
 
@@ -869,9 +873,10 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     # scale rather than at its darkest ends — light mode wants that pale,
     # low-saturation wash; dark mode wants the opposite pull toward deeper,
     # richer colour so cells don't wash out against a dark card. Resolved
-    # fresh per call (see _resolve_table_gradient) rather than off a shared
-    # module global.
-    grad_low, grad_high = _resolve_table_gradient()
+    # fresh per call (see _session_theme) rather than off a shared module
+    # global.
+    theme_type = _session_theme()
+    grad_low, grad_high = _resolve_table_gradient(theme_type)
     # background_gradient renders a NaN cell solid BLACK (matplotlib's
     # default "bad" color) with near-white text on top — worse than any
     # real value's color, and the single biggest source of "the table is
@@ -891,9 +896,17 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
         styler = styler.map(_nan_transparent, subset=[col])
 
     if team_col and team_col in df.columns and team_color_fn:
+        # A flat alpha over the team's raw colour left a dark-navy team
+        # (Yankees, Mariners) as a dark cell with dark text on a light
+        # table. team_tint pins lightness near the page's own instead, so
+        # the badge always sits in the right value range for the theme and
+        # the text colour can be a fixed, guaranteed-readable literal
+        # rather than the shared CHART_TEXT global.
+        badge_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
+
         def _team_bg(val):
-            color = team_color_fn(val)
-            return f"background-color: {color}55; color: {CHART_TEXT}; font-weight: 600"
+            tint = team_badge_tint(team_color_fn(val), theme_type)
+            return f"background-color: {tint}; color: {badge_text}; font-weight: 600"
 
         styler = styler.map(_team_bg, subset=[team_col])
         if team_abbr_fn:
@@ -1574,6 +1587,29 @@ def team_tint(hex_color: str, theme: str = "light", strength: float = 1.0) -> st
         base = 0.965
     light = base + (light - base) * strength
     sat *= strength
+    nr, ng, nb = colorsys.hls_to_rgb(hue, light, sat)
+    return "#%02X%02X%02X" % (round(nr * 255), round(ng * 255), round(nb * 255))
+
+
+def team_badge_tint(hex_color: str, theme: str = "light") -> str:
+    """A team's colour for a stat-table Tm badge.
+
+    Same idea as team_tint, but a mid-range value rather than a near-page
+    wash — a badge is a small cell that has to stay distinguishable across
+    30 teams at a glance, where team_tint's pale background wash would
+    leave most of them looking alike. Still pinned well clear of the text
+    colour used on top (see style_stats_table) so contrast holds.
+    """
+    import colorsys
+    h = (hex_color or "#666666").lstrip("#")
+    if len(h) != 6:
+        h = "666666"
+    r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    hue, _, sat = colorsys.rgb_to_hls(r, g, b)
+    if theme == "dark":
+        light, sat = 0.30, min(sat * 0.80, 0.55)
+    else:
+        light, sat = 0.78, min(sat * 0.75, 0.62)
     nr, ng, nb = colorsys.hls_to_rgb(hue, light, sat)
     return "#%02X%02X%02X" % (round(nr * 255), round(ng * 255), round(nb * 255))
 

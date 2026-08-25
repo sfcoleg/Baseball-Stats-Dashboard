@@ -272,9 +272,22 @@ st.markdown(
     "[data-testid='stDateInput'] input{"
     "  background:var(--dm-field) !important;border-color:var(--dm-line) !important;"
     "  color:var(--dm-text) !important;}"
+    # The open dropdown panel. Streamlit 1.59 renders selectbox menus as
+    # [data-testid='stSelectboxVirtualDropdown'], NOT the data-baseweb
+    # popover/menu the older selectors assumed — those matched nothing, so
+    # the panel fell through to the page's own grey and read as a dark
+    # block sitting on a light page.
+    "[data-testid='stSelectboxVirtualDropdown'],"
     "[data-baseweb='popover'] [role='listbox'],[data-baseweb='menu']{"
     "  background:var(--dm-field) !important;}"
+    "[data-testid='stSelectboxVirtualDropdown'] [role='option'],"
     "[data-baseweb='menu'] li{color:var(--dm-text) !important;}"
+    "[data-testid='stSelectboxVirtualDropdown'] [role='option']:hover{"
+    "  background:var(--dm-surface-mute) !important;}"
+    # Multiselect chips (the "Transaction type" filter, Custom Leaderboard's
+    # stat picker) are their own baseweb tag element, missed the same way.
+    "[data-baseweb='tag']{background:var(--dm-blue-soft) !important;"
+    "  color:var(--dm-text) !important;}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
