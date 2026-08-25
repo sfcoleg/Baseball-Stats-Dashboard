@@ -1156,7 +1156,7 @@ def batter_zone_heatmap_chart(spray: pd.DataFrame) -> "go.Figure":
     fig.add_trace(go.Histogram2d(
         x=spray["px"], y=spray["pz"], z=spray["launch_speed"], histfunc="avg",
         xbins=dict(start=-2.5, end=2.5, size=0.5), ybins=dict(start=0.5, end=4.5, size=0.5),
-        colorscale=[[0, "#3B82F6"], [0.5, "#FAFAFA"], [1, "#D32F2F"]],
+        colorscale=[[0, CHART_BLUE], [0.5, "#E8EDF4"], [1, CHART_RED]],
         colorbar=dict(
             title=dict(text="Avg EV", font=dict(color="var(--dm-dim)")),
             tickfont=dict(color=CHART_DIM),
@@ -1529,6 +1529,42 @@ def matchup_gradient(away_hex: str, home_hex: str, theme: str = "light",
             f"{neutral} 53%, {hh} 82%, {hh} 100%)")
 
 
+# Colour scales that never approach the page colour. Plotly's "Blues" starts
+# at near-white and RdYlGn's midpoint is pale yellow, so on a white card the
+# lowest-value points simply vanish.
+BLUE_SCALE = [[0.0, "#A3C7E8"], [0.35, "#6FA6DC"], [0.7, "#2E86DE"], [1.0, "#134C88"]]
+HEAT_SCALE = [[0.0, "#2E7D32"], [0.5, "#D89A1E"], [1.0, "#B03A34"]]        # green low -> red high
+HEAT_SCALE_R = [[0.0, "#B03A34"], [0.5, "#D89A1E"], [1.0, "#2E7D32"]]      # red low -> green high
+
+
+def chart_template(theme_type: str = "light"):
+    """A plotly template applied to every figure.
+
+    The important part is the marker outline: whatever colour scale a chart
+    uses, a thin border keeps light-valued points visible against a light
+    card. Without it the bottom of any sequential scale disappears.
+    """
+    import plotly.graph_objects as _go
+    edge = "#33445C" if theme_type == "light" else "#0B1018"
+    axis = dict(gridcolor=CHART_GRID, zerolinecolor=CHART_GRID,
+                linecolor=CHART_GRID, tickfont=dict(color=CHART_DIM),
+                title=dict(font=dict(color=CHART_DIM)))
+    return _go.layout.Template(
+        layout=dict(
+            paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+            font=dict(color=CHART_TEXT),
+            colorway=["#2E86DE", "#C0453F", "#2E7D32", "#B7791F",
+                      "#7A4FBF", "#1F8A8A", "#C2557A", "#4C6EF5"],
+            xaxis=axis, yaxis=axis,
+            legend=dict(font=dict(color=CHART_DIM)),
+        ),
+        data=dict(
+            scatter=[_go.Scatter(marker=dict(line=dict(width=0.7, color=edge)))],
+            bar=[_go.Bar(marker=dict(line=dict(width=0.5, color=edge)))],
+        ),
+    )
+
+
 def apply_theme(theme_type: str) -> None:
     """Point the CHART_* literals at the active theme.
 
@@ -1549,3 +1585,6 @@ def apply_theme(theme_type: str) -> None:
         CHART_SURFACE, CHART_BLUE = "#FBFCFE", "#2E86DE"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#B7791F", "#C0453F", "#2E7D32"
         DIAMOND_COLOR = "#2E86DE"
+    import plotly.io as _pio
+    _pio.templates["diamond"] = chart_template(theme_type)
+    _pio.templates.default = "diamond"

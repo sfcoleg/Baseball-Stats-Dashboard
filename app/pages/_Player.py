@@ -556,7 +556,7 @@ if pitching is not None and is_pitcher_role:
                     plot_df = pitches if loc_pitch == "All" else pitches[pitches["pitch_name"] == loc_pitch]
                     fig = px.density_heatmap(
                         plot_df, x="plate_x", y="plate_z", nbinsx=25, nbinsy=25,
-                        color_continuous_scale="Turbo",
+                        color_continuous_scale=style.HEAT_SCALE,
                     )
                     fig.add_shape(
                         type="rect", x0=-0.83, x1=0.83, y0=1.5, y1=3.5,

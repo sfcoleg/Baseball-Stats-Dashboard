@@ -127,7 +127,7 @@ if not framing.empty and not poptime.empty:
             x=combo["pop_2b"], y=combo["framing_runs"], mode="markers",
             marker=dict(
                 size=(combo["pitches"] / combo["pitches"].max() * 22) + 6,
-                color=combo["framing_runs"], colorscale="RdYlGn",
+                color=combo["framing_runs"], colorscale=style.HEAT_SCALE_R,
                 line=dict(width=1, color="rgba(250,250,250,0.35)"), opacity=0.9,
             ),
             hovertext=[

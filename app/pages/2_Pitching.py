@@ -210,7 +210,7 @@ with statcast_tab:
     chart_df = filtered.dropna(subset=["avg_exit_velo_against", "ERA"])
     fig = px.scatter(
         chart_df, x="avg_exit_velo_against", y="ERA", size="IP", color="ERA",
-        hover_name="Name", color_continuous_scale="RdYlGn_r",
+        hover_name="Name", color_continuous_scale=style.HEAT_SCALE,
         labels={"avg_exit_velo_against": "Avg Exit Velocity Against (mph)"},
     )
     fig.update_layout(
@@ -282,7 +282,7 @@ with explore_tab:
     chart_df = filtered.dropna(subset=[x_stat, y_stat])
     fig = px.scatter(
         chart_df, x=x_stat, y=y_stat, size="IP", color="ERA",
-        hover_name="Name", color_continuous_scale="RdYlGn_r",
+        hover_name="Name", color_continuous_scale=style.HEAT_SCALE,
     )
     fig.update_layout(
         height=500, margin=dict(l=0, r=0, t=10, b=0),

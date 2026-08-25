@@ -285,7 +285,7 @@ hr_min, hr_max = top10_hr["HR"].min(), top10_hr["HR"].max()
 color_floor = hr_min - (hr_max - hr_min) * 0.6 - 1
 fig = px.bar(
     top10_hr, x="HR", y="Name", orientation="h",
-    color="HR", color_continuous_scale="Blues",
+    color="HR", color_continuous_scale=style.BLUE_SCALE,
     range_color=[color_floor, hr_max],
     text="HR",
 )

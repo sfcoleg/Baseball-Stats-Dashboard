@@ -143,8 +143,8 @@ st.markdown(
     "h1{text-transform:uppercase;letter-spacing:0.5px;}"
     "[data-testid='stMain']{font-variant-numeric:tabular-nums;}"
     # --- bordered containers read as cards, not outlines -------------------
-    "[data-testid='stMain'] [data-testid='stVerticalBlockBorderWrapper']{"
-    f"  background:var(--dm-surface);border-radius:12px;{_CARD_SHADOW}}}"
+    "[data-testid='stMain'] [data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock']{"
+    f"  background:var(--dm-surface);border-radius:14px;{_CARD_SHADOW}}}"
     # --- game cards: left rail, condensed team names, big score ------------
     ".dm-game{flex:0 0 auto;width:176px;background:var(--dm-card);"
     "  border-left:4px solid var(--dm-blue);border-radius:0 10px 10px 0;"
@@ -202,8 +202,19 @@ st.markdown(
     "  [data-testid='stDataFrame']),"
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  [data-testid='stPlotlyChart']),"
-    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has(table){"
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has(table),"
+    # Hand-written HTML cards (Daily Digest's transactions, On This Day,
+    # biggest plays) go out through st.markdown rather than a container, so
+    # they need bubbling too. Our card helpers emit a div carrying inline
+    # styles; plain markdown text emits <p>, and section headings put their
+    # inline style on a span, so neither is caught by this.
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  [data-testid='stMarkdown'] div[style]){"
     f"  background:var(--dm-surface);border-radius:14px;padding:14px 16px;{_CARD_SHADOW}}}"
+    # A bubble inside a bubble just draws a box around a box.
+    "[data-testid='stMainBlockContainer'] [data-testid='stLayoutWrapper'] "
+    "  [data-testid='stElementContainer']{background:transparent !important;"
+    "  box-shadow:none !important;padding:0 !important;}"
 
     # Every st.markdown("<style>") and every localStorage-bridge component
     # renders nothing, but Streamlit still gives each one a slot in the

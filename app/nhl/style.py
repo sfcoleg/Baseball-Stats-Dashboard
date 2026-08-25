@@ -13,7 +13,8 @@ _sys.path.append(str(_Path(__file__).resolve().parent.parent))
 # Chart colours live in the MLB-side style module; re-exported here so NHL
 # pages can reach them through nstyle.* like everything else.
 from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
-                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN)
+                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
+                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R)
 
 _CLINCH_LABELS = {"p": "Presidents' Trophy", "z": "Clinched conference", "y": "Clinched division", "x": "Clinched playoff berth"}
 

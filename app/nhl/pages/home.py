@@ -195,7 +195,7 @@ g_min, g_max = top10_goals["goals"].min(), top10_goals["goals"].max()
 color_floor = g_min - (g_max - g_min) * 0.6 - 1
 fig = px.bar(
     top10_goals, x="goals", y="skaterFullName", orientation="h",
-    color="goals", color_continuous_scale="Blues", range_color=[color_floor, g_max], text="goals",
+    color="goals", color_continuous_scale=nstyle.BLUE_SCALE, range_color=[color_floor, g_max], text="goals",
     labels={"goals": "Goals", "skaterFullName": ""},
 )
 fig.update_layout(
