@@ -105,8 +105,8 @@ filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=T
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, custom_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Custom Leaderboard", "Chart Explorer"]
+standard_tab, advanced1_tab, advanced2_tab, statcast_tab, custom_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced 1", "Advanced 2", "Statcast", "Custom Leaderboard", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -126,33 +126,67 @@ with standard_tab:
         height=600,
     )
 
-with advanced_tab:
-    # WPA (from our win probability model) rides at the end of Advanced
-    # rather than in a tab of its own — merged by mlbID, blank for players
-    # without graded plate appearances (pre-2025 seasons).
-    adv_rows = table_rows
-    wpa = db.load_wpa_pitching(season, db.db_mtime())
-    if not wpa.empty:
-        adv_rows = adv_rows.merge(
-            wpa[["mlbID", "wpa", "wpa_plus"]].rename(columns={"wpa": "WPA", "wpa_plus": "WPA+"}),
-            on="mlbID", how="left",
-        )
-    else:
-        adv_rows = adv_rows.assign(WPA=float("nan"))
-        adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
+# WPA (from our win probability model) and PROP+ (our pitch-quality model,
+# ingest/mlb_prop.py) both ride in Advanced rather than Statcast — neither
+# is itself a raw Statcast leaderboard number, they're models built on top.
+# Shared by both Advanced sub-tabs, so computed once here.
+adv_rows = table_rows
+wpa = db.load_wpa_pitching(season, db.db_mtime())
+if not wpa.empty:
+    adv_rows = adv_rows.merge(
+        wpa[["mlbID", "wpa", "wpa_plus"]].rename(columns={"wpa": "WPA", "wpa_plus": "WPA+"}),
+        on="mlbID", how="left",
+    )
+else:
+    adv_rows = adv_rows.assign(WPA=float("nan"))
+    adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
+prop = db.load_pitcher_prop(season, db.db_mtime())
+if not prop.empty:
+    adv_rows = adv_rows.merge(
+        prop[["mlbID", "prop_plus"]].astype({"mlbID": adv_rows["mlbID"].dtype})
+        .rename(columns={"prop_plus": "PROP+"}),
+        on="mlbID", how="left")
+    adv_rows["PROP+"] = pd.to_numeric(adv_rows["PROP+"], errors="coerce")
+else:
+    adv_rows = adv_rows.assign(**{"PROP+": float("nan")})
+
+with advanced1_tab:
+    # Run-prevention value: the rate/value stats a pitcher's overall
+    # effectiveness boils down to.
     display = teams.add_team_abbr(adv_rows)[
-        ["Name", "Age", "Tm", "IP", "FIP", "xFIP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WAR", "ERA_plus", "WPA", "WPA+"]
-    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB", "ERA_plus": "ERA+"})
+        ["Name", "Age", "Tm", "IP", "FIP", "xFIP", "ERA_plus", "WAR", "PROP+"]
+    ].rename(columns={"ERA_plus": "ERA+"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["K/9", "K/BB", "WAR", "ERA+", "WPA", "WPA+"],
-            lower_better=["FIP", "xFIP", "BB/9", "BAbip"],
+            higher_better=["WAR", "ERA+", "PROP+"],
+            lower_better=["FIP", "xFIP"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "FIP": "{:.2f}", "xFIP": "{:.2f}", "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}",
-                "GB/FB": "{:.2f}", "WAR": "{:.1f}", "ERA+": "{:.0f}", "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
+                "FIP": "{:.2f}", "xFIP": "{:.2f}", "WAR": "{:.1f}", "ERA+": "{:.0f}", "PROP+": "{:.0f}",
+            },
+        ),
+        use_container_width=True,
+        height=600,
+    )
+
+with advanced2_tab:
+    # Peripherals and in-game win value: how a pitcher gets those results,
+    # play by play.
+    display = teams.add_team_abbr(adv_rows)[
+        ["Name", "Age", "Tm", "IP", "K_9", "BB_9", "K_BB", "BAbip", "GB_FB", "WPA", "WPA+"]
+    ].rename(columns={"K_9": "K/9", "BB_9": "BB/9", "K_BB": "K/BB", "GB_FB": "GB/FB"})
+    st.dataframe(
+        style.style_stats_table(
+            display,
+            higher_better=["K/9", "K/BB", "WPA", "WPA+"],
+            lower_better=["BB/9", "BAbip"],
+            team_col="Tm",
+            team_color_fn=teams.color_for_abbr,
+            precision={
+                "K/9": "{:.2f}", "BB/9": "{:.2f}", "K/BB": "{:.2f}", "BAbip": "{:.3f}",
+                "GB/FB": "{:.2f}", "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),
         use_container_width=True,
@@ -160,22 +194,8 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    # PROP+ (our pitch-quality model, ingest/mlb_prop.py) rides here rather
-    # than in Advanced: it's built from the physical shape of a pitch, which
-    # is what the rest of this tab is about. Blank for seasons before 2020,
-    # where Statcast spin rate isn't available to grade with.
-    sc_rows = table_rows
-    prop = db.load_pitcher_prop(season, db.db_mtime())
-    if not prop.empty:
-        sc_rows = sc_rows.merge(
-            prop[["mlbID", "prop_plus"]].astype({"mlbID": sc_rows["mlbID"].dtype})
-            .rename(columns={"prop_plus": "PROP+"}),
-            on="mlbID", how="left")
-        sc_rows["PROP+"] = pd.to_numeric(sc_rows["PROP+"], errors="coerce")
-    else:
-        sc_rows = sc_rows.assign(**{"PROP+": float("nan")})
-    display = teams.add_team_abbr(sc_rows)[
-        ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "PROP+", "xBA_against", "xSLG_against",
+    display = teams.add_team_abbr(table_rows)[
+        ["Name", "Age", "Tm", "ERA", "xERA", "xERA_diff", "xBA_against", "xSLG_against",
          "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
          "fastball_velo", "induced_chase_pct"]
     ].rename(columns={
@@ -191,12 +211,12 @@ with statcast_tab:
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ERA diff", "PROP+", "Fastball Velo", "Induced Chase%"],
+            higher_better=["ERA diff", "Fastball Velo", "Induced Chase%"],
             lower_better=["ERA", "xERA", "xBA Against", "xSLG Against", "Avg EV Against", "Hard-Hit% Against", "Barrel% Against"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}", "PROP+": "{:.0f}",
+                "ERA": "{:.2f}", "xERA": "{:.2f}", "ERA diff": "{:+.2f}",
                 "xBA Against": "{:.3f}",
                 "xSLG Against": "{:.3f}", "Avg EV Against": "{:.1f}", "Hard-Hit% Against": "{:.1f}",
                 "Barrel% Against": "{:.1f}", "Fastball Velo": "{:.1f}", "Induced Chase%": "{:.1f}",

@@ -79,6 +79,14 @@ CHART_AMBER = "#B7791F"
 CHART_RED = "#C0453F"
 CHART_GREEN = "#2E7D32"
 
+# style_stats_table's background_gradient low/high (see apply_theme below).
+# Light theme: a very pale wash, since the card underneath is near-white and
+# a saturated cell would overpower it. Dark theme needs the OPPOSITE pull —
+# the same pale colours read as washed-out and low-contrast against a dark
+# card, so dark mode gets deeper, more saturated cells instead.
+TABLE_GRADIENT_LOW = 0.7
+TABLE_GRADIENT_HIGH = 0.7
+
 
 
 def diamond_logo(size=64):
@@ -304,7 +312,11 @@ def milestone_achieved_card(mlbID, name, team_abbr, team_color, text):
 
 
 _ON_THIS_DAY_KIND_COLORS = {
-    "Cycle": "#3B82F6", "3+ HR": "#F5B942", "5+ Hits": "#7CFC9A",
+    # This color doubles as literal text (see on_this_day_highlight_card's
+    # badge span) — "5+ Hits" was a pastel lawn-green pale enough to be
+    # nearly unreadable as text on its own tinted background; the other
+    # four kinds are all mid-saturation for the same reason.
+    "Cycle": "#3B82F6", "3+ HR": "#F5B942", "5+ Hits": "#22C55E",
     "No-Hitter": "#F87171", "Perfect Game": "#C084FC",
 }
 
@@ -842,14 +854,27 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 
     # low/high push the colormap's saturated extremes outside the data's
     # actual range, so the highest/lowest real values land partway into the
-    # scale rather than at its darkest ends — 0.45 (an earlier lightening
-    # pass) still left HR/RBI/SB-type columns reading as a wall of dark
-    # red/green; 0.7 keeps the gradient legible as a "good vs. bad" cue
-    # without it dominating the table visually.
+    # scale rather than at its darkest ends. TABLE_GRADIENT_LOW/HIGH are set
+    # per-theme by apply_theme() — light mode wants that pale, low-saturation
+    # wash; dark mode wants the opposite pull toward deeper, richer colour so
+    # cells don't wash out against a dark card.
+    # background_gradient renders a NaN cell solid BLACK (matplotlib's
+    # default "bad" color) with near-white text on top — worse than any
+    # real value's color, and the single biggest source of "the table is
+    # full of dark cells" on a column like WPA or xFIP that's blank for a
+    # chunk of rows. Override those specific cells back to a plain,
+    # unstyled background after the gradient runs.
+    def _nan_transparent(v):
+        return "background-color: transparent; color: inherit" if pd.isna(v) else ""
+
     for col in higher_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn", low=0.7, high=0.7)
+        styler = styler.background_gradient(
+            subset=[col], cmap="RdYlGn", low=TABLE_GRADIENT_LOW, high=TABLE_GRADIENT_HIGH)
+        styler = styler.map(_nan_transparent, subset=[col])
     for col in lower_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn_r", low=0.7, high=0.7)
+        styler = styler.background_gradient(
+            subset=[col], cmap="RdYlGn_r", low=TABLE_GRADIENT_LOW, high=TABLE_GRADIENT_HIGH)
+        styler = styler.map(_nan_transparent, subset=[col])
 
     if team_col and team_col in df.columns and team_color_fn:
         def _team_bg(val):
@@ -1520,8 +1545,16 @@ def team_tint(hex_color: str, theme: str = "light", strength: float = 1.0) -> st
     r, g, b = (int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
     hue, _, sat = colorsys.rgb_to_hls(r, g, b)
     if theme == "dark":
-        light, sat = 0.20, min(sat * 0.55, 0.40)
-        base = 0.145
+        # NOT a darkened copy of light mode's pale, heavily-desaturated
+        # wash — that landed at a lightness clearly above the dark page
+        # around it (read as "too bright") while still being muddy and
+        # grey-brown (heavy desaturation blurs the actual team colour
+        # out). Dark mode instead sits closer to the page's own dark
+        # value while keeping most of the real saturation, landing on a
+        # deep, rich version of the ACTUAL team colour — dark, but still
+        # clearly that team's colour, not a muted blend of it.
+        light, sat = 0.15, min(sat * 0.85, 0.65)
+        base = 0.10
     else:
         light, sat = 0.905, min(sat * 0.60, 0.55)
         base = 0.965
@@ -1598,16 +1631,22 @@ def apply_theme(theme_type: str) -> None:
     """
     global CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE, CHART_BLUE
     global CHART_AMBER, CHART_RED, CHART_GREEN, DIAMOND_COLOR
+    global TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH
     if theme_type == "dark":
         CHART_TEXT, CHART_DIM, CHART_GRID = "#EFF3F9", "#9AA8BD", "#2E3B4E"
         CHART_SURFACE, CHART_BLUE = "#1E2735", "#6FAFE8"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#F5B942", "#F87171", "#7CFC9A"
         DIAMOND_COLOR = "#9BCAF3"
+        # Dark cards need the OPPOSITE pull from light mode's pale wash — a
+        # pale RdYlGn tint reads as washed-out against a dark surface, so
+        # dark mode gets less compression, landing on deeper, richer cells.
+        TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH = 0.35, 0.35
     else:
         CHART_TEXT, CHART_DIM, CHART_GRID = "#0C1725", "#6B7C94", "#D8E1EE"
         CHART_SURFACE, CHART_BLUE = "#FBFCFE", "#2E86DE"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#B7791F", "#C0453F", "#2E7D32"
         DIAMOND_COLOR = "#2E86DE"
+        TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH = 0.7, 0.7
     import plotly.io as _pio
     _pio.templates["diamond"] = chart_template(theme_type)
     _base = "plotly_dark" if theme_type == "dark" else "plotly_white"

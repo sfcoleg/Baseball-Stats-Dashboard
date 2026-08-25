@@ -11,8 +11,8 @@ import db
 import style
 import teams
 
-st.set_page_config(page_title="Daily Digest | Diamond Metrics", layout="wide")
-st.title("Daily Digest")
+st.set_page_config(page_title="Clubhouse Report | Diamond Metrics", layout="wide")
+st.title("Clubhouse Report")
 
 today = db.today_pacific()
 yesterday = today - timedelta(days=1)

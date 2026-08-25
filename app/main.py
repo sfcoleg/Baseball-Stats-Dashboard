@@ -195,10 +195,20 @@ st.markdown(
     # back to a bare, compact box that just holds the input.
     ".st-key-dm_search{position:fixed;top:0.5rem;right:14px;width:200px;z-index:999995;"
     "  background:transparent !important;padding:0 !important;border:none !important;"
-    "  box-shadow:none !important;}"
+    "  box-shadow:none !important;max-height:85vh;overflow-y:auto;}"
     ".st-key-dm_search [data-testid='stTextInput'] input{height:1.9rem;font-size:0.8rem;"
-    "  padding:2px 10px;background:var(--dm-surface);}"
-    ".st-key-dm_search [data-testid='stButton'] button{font-size:0.75rem;padding:1px 7px;}"
+    "  padding:2px 10px;background:var(--dm-surface) !important;color:var(--dm-text) !important;"
+    "  border-color:var(--dm-line) !important;}"
+    ".st-key-dm_search [data-testid='stTextInput'] input::placeholder{color:var(--dm-dim);opacity:1;}"
+    # Search RESULTS (buttons + captions) render below the input, still
+    # inside this same fixed box — Streamlit's own button/caption styling
+    # is theme-agnostic (a plain light control), which read as a stray
+    # white panel dropped onto a dark page. Recolor them to match.
+    ".st-key-dm_search [data-testid='stButton'] button{font-size:0.75rem;padding:4px 8px;"
+    "  background:var(--dm-surface) !important;color:var(--dm-text) !important;"
+    "  border-color:var(--dm-line) !important;text-align:left;justify-content:flex-start;}"
+    ".st-key-dm_search [data-testid='stButton'] button:hover{background:var(--dm-surface-mute) !important;}"
+    ".st-key-dm_search [data-testid='stCaptionContainer']{color:var(--dm-dim) !important;}"
     # --- content sits on a panel, with the grey page visible around it ------
     # The page itself is grey; content sits on it as separate bubbles rather
     # than one long sheet. Section headings stay bare on the grey so each
@@ -482,7 +492,7 @@ st.session_state["_show_free_agency"] = SHOW_FREE_AGENCY  # read by pages/34_Oth
 
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
-    st.Page("pages/12_Daily_Digest.py", title="Daily Digest"),
+    st.Page("pages/12_Daily_Digest.py", title="Clubhouse Report"),
     st.Page("pages/13_Following.py", title="Following"),
     st.Page("pages/1_Batting.py", title="Batting"),
     st.Page("pages/2_Pitching.py", title="Pitching"),
