@@ -8,6 +8,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import following
 import localstorage_bridge
+import prefs
 import style
 import teams
 
@@ -19,6 +20,14 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 season = db.get_seasons("batting")[0]
+# Must go through prefs.resolve_theme() (an explicit Light/Dark choice in
+# Settings, not just whatever Streamlit's raw context reports) — reading
+# st.context.theme.type directly here let this page's matchup-gradient
+# colours disagree with the --dm-* CSS variables the rest of the page
+# uses, which main.py already resolves correctly. That mismatch is what
+# showed up as gradient cards using the wrong theme's colours.
+_detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
+_THEME = prefs.resolve_theme(_detected)
 
 # Normally seeded by following.bootstrap() in main.py, but Streamlit's legacy
 # pages/-folder auto-discovery can route a direct URL hit straight to this
@@ -127,7 +136,14 @@ else:
             status = live.get("status") or row["status"]
             started = status not in ("Scheduled", "Pre-Game", "Warmup", "Delayed Start", "Postponed")
 
-            with st.container(border=True):
+            card_key = f"following_game{row['game_pk']}"
+            st.markdown(
+                f"<style>.st-key-{card_key}{{background:"
+                f"{style.matchup_gradient(away_color, home_color, _THEME)}"
+                " !important;}</style>",
+                unsafe_allow_html=True,
+            )
+            with st.container(border=True, key=card_key):
                 if status == "In Progress":
                     st.markdown(
                         "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"

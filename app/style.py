@@ -9,6 +9,8 @@ import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
+import prefs
+
 # Category accent colors, used to visually distinguish sections throughout
 # the dashboard (Batting/Pitching/Fielding headers, etc.)
 def headshot_url(mlbID, width=180):
@@ -78,14 +80,6 @@ CHART_BLUE = "#2E86DE"
 CHART_AMBER = "#B7791F"
 CHART_RED = "#C0453F"
 CHART_GREEN = "#2E7D32"
-
-# style_stats_table's background_gradient low/high (see apply_theme below).
-# Light theme: a very pale wash, since the card underneath is near-white and
-# a saturated cell would overpower it. Dark theme needs the OPPOSITE pull —
-# the same pale colours read as washed-out and low-contrast against a dark
-# card, so dark mode gets deeper, more saturated cells instead.
-TABLE_GRADIENT_LOW = 0.7
-TABLE_GRADIENT_HIGH = 0.7
 
 
 
@@ -831,6 +825,24 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
     )
 
 
+def _resolve_table_gradient() -> tuple[float, float]:
+    """The light/dark low-high pair for background_gradient, resolved fresh
+    from THIS session rather than read off apply_theme()'s module globals.
+
+    apply_theme() sets CHART_*/TABLE_GRADIENT_* as plain module attributes,
+    which Streamlit Community Cloud shares across every concurrent visitor's
+    session in the same process — one visitor's script run can overwrite
+    them mid-render of another visitor's table, which is exactly what
+    intermittently put dark-mode colors on a light-mode table (or vice
+    versa). Resolving the theme locally, per call, avoids that race for
+    this specific function regardless of what any other session is doing.
+    """
+    theme_obj = getattr(getattr(st, "context", None), "theme", None)
+    detected = getattr(theme_obj, "type", None)
+    theme_type = prefs.resolve_theme(detected)
+    return (0.35, 0.35) if theme_type == "dark" else (0.7, 0.7)
+
+
 def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
                        team_color_fn=None, team_abbr_fn=None, precision=None):
     """Return a pandas Styler for st.dataframe with:
@@ -854,10 +866,12 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 
     # low/high push the colormap's saturated extremes outside the data's
     # actual range, so the highest/lowest real values land partway into the
-    # scale rather than at its darkest ends. TABLE_GRADIENT_LOW/HIGH are set
-    # per-theme by apply_theme() — light mode wants that pale, low-saturation
-    # wash; dark mode wants the opposite pull toward deeper, richer colour so
-    # cells don't wash out against a dark card.
+    # scale rather than at its darkest ends — light mode wants that pale,
+    # low-saturation wash; dark mode wants the opposite pull toward deeper,
+    # richer colour so cells don't wash out against a dark card. Resolved
+    # fresh per call (see _resolve_table_gradient) rather than off a shared
+    # module global.
+    grad_low, grad_high = _resolve_table_gradient()
     # background_gradient renders a NaN cell solid BLACK (matplotlib's
     # default "bad" color) with near-white text on top — worse than any
     # real value's color, and the single biggest source of "the table is
@@ -869,11 +883,11 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
 
     for col in higher_better:
         styler = styler.background_gradient(
-            subset=[col], cmap="RdYlGn", low=TABLE_GRADIENT_LOW, high=TABLE_GRADIENT_HIGH)
+            subset=[col], cmap="RdYlGn", low=grad_low, high=grad_high)
         styler = styler.map(_nan_transparent, subset=[col])
     for col in lower_better:
         styler = styler.background_gradient(
-            subset=[col], cmap="RdYlGn_r", low=TABLE_GRADIENT_LOW, high=TABLE_GRADIENT_HIGH)
+            subset=[col], cmap="RdYlGn_r", low=grad_low, high=grad_high)
         styler = styler.map(_nan_transparent, subset=[col])
 
     if team_col and team_col in df.columns and team_color_fn:
@@ -1629,24 +1643,26 @@ def apply_theme(theme_type: str) -> None:
     they need real colour values, and those have to be swapped when the theme
     does. main.py calls this once it has resolved the theme.
     """
+    # NOTE: style_stats_table does NOT read these — it resolves its own
+    # gradient low/high fresh per call (see _resolve_table_gradient) since
+    # these module globals are shared across every concurrent visitor's
+    # session on Streamlit Community Cloud, and one session's apply_theme()
+    # call can stomp on another's mid-render. The CHART_* globals below
+    # still have that same cross-session race for plotly charts — narrower
+    # blast radius (a chart briefly using the wrong-but-still-legible theme
+    # colors, not literal black cells), left as-is for now.
     global CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE, CHART_BLUE
     global CHART_AMBER, CHART_RED, CHART_GREEN, DIAMOND_COLOR
-    global TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH
     if theme_type == "dark":
         CHART_TEXT, CHART_DIM, CHART_GRID = "#EFF3F9", "#9AA8BD", "#2E3B4E"
         CHART_SURFACE, CHART_BLUE = "#1E2735", "#6FAFE8"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#F5B942", "#F87171", "#7CFC9A"
         DIAMOND_COLOR = "#9BCAF3"
-        # Dark cards need the OPPOSITE pull from light mode's pale wash — a
-        # pale RdYlGn tint reads as washed-out against a dark surface, so
-        # dark mode gets less compression, landing on deeper, richer cells.
-        TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH = 0.35, 0.35
     else:
         CHART_TEXT, CHART_DIM, CHART_GRID = "#0C1725", "#6B7C94", "#D8E1EE"
         CHART_SURFACE, CHART_BLUE = "#FBFCFE", "#2E86DE"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#B7791F", "#C0453F", "#2E7D32"
         DIAMOND_COLOR = "#2E86DE"
-        TABLE_GRADIENT_LOW, TABLE_GRADIENT_HIGH = 0.7, 0.7
     import plotly.io as _pio
     _pio.templates["diamond"] = chart_template(theme_type)
     _base = "plotly_dark" if theme_type == "dark" else "plotly_white"

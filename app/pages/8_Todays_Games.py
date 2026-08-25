@@ -9,6 +9,7 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import localstorage_bridge
 import predictions
+import prefs
 import style
 import teams
 
@@ -40,8 +41,15 @@ pitching_raw = db.load_pitching(season, mtime)
 pitching = teams.add_team_abbr(pitching_raw)
 
 
-_THEME = getattr(getattr(st, "context", None), "theme", None)
-_THEME = getattr(_THEME, "type", None) or "light"
+
+# Must go through prefs.resolve_theme() (an explicit Light/Dark choice in
+# Settings, not just whatever Streamlit's raw context reports) — reading
+# st.context.theme.type directly here let this page's matchup-gradient
+# colours disagree with the --dm-* CSS variables the rest of the page
+# uses, which main.py already resolves correctly. That mismatch is what
+# showed up as gradient cards using the wrong theme's colours.
+_detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
+_THEME = prefs.resolve_theme(_detected)
 
 
 def team_color(abbr):
