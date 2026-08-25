@@ -79,41 +79,46 @@ poptime = db.load_catcher_poptime(season, db.db_mtime())
 if not framing.empty or not poptime.empty:
     style.colored_header("Catchers", "fielding")
 
-if not framing.empty:
-    st.markdown("**Framing**")
-    fr = framing.sort_values("framing_runs", ascending=False).copy()
-    # framing_pct is stored as a 0-1 shadow-zone strike rate — show as a percentage.
-    if fr["framing_pct"].max() <= 1:
+    # One joined table (framing + throwing) rather than two separate ones —
+    # outer join so a catcher tracked for only one skill (e.g. too few
+    # attempts for a pop-time sample) still shows up, with the other
+    # skill's columns blank instead of dropping the row.
+    fr = framing.copy()
+    if not fr.empty and fr["framing_pct"].max() <= 1:
+        # framing_pct is stored as a 0-1 shadow-zone strike rate — show as a percentage.
         fr["framing_pct"] = fr["framing_pct"] * 100
-    fr_disp = fr[["Name", "pitches", "framing_runs", "framing_pct"]].rename(columns={
-        "Name": "Catcher", "pitches": "Pitches", "framing_runs": "Framing Runs",
-        "framing_pct": "Strike Rate %",
-    })
-    st.dataframe(
-        style.style_stats_table(
-            fr_disp,
-            higher_better=["Framing Runs", "Strike Rate %"],
-            precision={"Framing Runs": "{:+.1f}", "Strike Rate %": "{:.1f}"},
-        ),
-        use_container_width=True, height=420, hide_index=True,
-    )
+    fr = fr[["mlbID", "Name", "pitches", "framing_runs", "framing_pct"]] if not fr.empty else fr
 
-if not poptime.empty:
-    st.markdown("**Throwing**")
-    pt = poptime.sort_values("pop_2b").copy()
-    pt_disp = pt[["Name", "age", "pop_2b", "pop_2b_count", "pop_3b", "exchange_time", "arm"]].rename(columns={
-        "Name": "Catcher", "age": "Age", "pop_2b": "Pop 2B (s)", "pop_2b_count": "2B Attempts",
-        "pop_3b": "Pop 3B (s)", "exchange_time": "Exchange (s)", "arm": "Arm (mph)",
-    })
+    pt = poptime[["mlbID", "Name", "age", "pop_2b", "pop_2b_count", "pop_3b", "exchange_time", "arm"]].copy() \
+        if not poptime.empty else poptime
+
+    if not fr.empty and not pt.empty:
+        catchers = fr.merge(pt, on="mlbID", how="outer", suffixes=("", "_pt"))
+        catchers["Name"] = catchers["Name"].fillna(catchers.pop("Name_pt"))
+    elif not fr.empty:
+        catchers = fr
+    else:
+        catchers = pt
+
+    catchers = catchers.sort_values("framing_runs", ascending=False, na_position="last")
+    disp = catchers.rename(columns={
+        "Name": "Catcher", "pitches": "Pitches", "framing_runs": "Framing Runs",
+        "framing_pct": "Strike Rate %", "age": "Age", "pop_2b": "Pop 2B (s)",
+        "pop_2b_count": "2B Attempts", "pop_3b": "Pop 3B (s)",
+        "exchange_time": "Exchange (s)", "arm": "Arm (mph)",
+    }).drop(columns=["mlbID"])
     st.dataframe(
         style.style_stats_table(
-            pt_disp,
-            higher_better=["Arm (mph)"],
+            disp,
+            higher_better=["Framing Runs", "Strike Rate %", "Arm (mph)"],
             lower_better=["Pop 2B (s)", "Pop 3B (s)", "Exchange (s)"],
-            precision={"Pop 2B (s)": "{:.2f}", "Pop 3B (s)": "{:.2f}", "Exchange (s)": "{:.2f}",
-                       "Arm (mph)": "{:.1f}"},
+            precision={
+                "Pitches": "{:.0f}", "Framing Runs": "{:+.1f}", "Strike Rate %": "{:.1f}",
+                "Pop 2B (s)": "{:.2f}", "Pop 3B (s)": "{:.2f}", "Exchange (s)": "{:.2f}",
+                "Arm (mph)": "{:.1f}",
+            },
         ),
-        use_container_width=True, height=420, hide_index=True,
+        use_container_width=True, height=500, hide_index=True,
     )
 
 if not framing.empty and not poptime.empty:
