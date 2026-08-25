@@ -698,7 +698,7 @@ PLAYOFF_BRACKET_CSS = """
 }
 .br-seed { color:var(--dm-dim); font-weight:700; font-size:0.75rem; }
 .br-badge {
-  background-color:var(--br-color) !important; color:var(--dm-text) !important; padding:1px 7px; border-radius:5px;
+  background-color:var(--br-color) !important; color:var(--br-text) !important; padding:1px 7px; border-radius:5px;
   font-weight:700; text-decoration:none !important; font-size:0.8rem;
 }
 .br-rec { color:var(--dm-dim); font-size:0.75rem; }
@@ -736,15 +736,22 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
         return "<div style='color:var(--dm-dim)'>Not enough teams to seed a bracket yet.</div>"
 
     mirror_cls = " mirror" if mirror else ""
+    # Same reasoning as style_stats_table's Tm badges: a flat alpha over the
+    # raw team colour leaves a dark-navy team as a dark chip, which then has
+    # dark text on it in light mode. team_badge_tint pins the value per theme
+    # so the paired text colour is always readable.
+    theme_type = _session_theme()
+    badge_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
 
     def team_html(row, tag=None):
         abbr = row["team_abbr"]
-        color = team_color_fn(abbr)
+        tint = team_badge_tint(team_color_fn(abbr), theme_type)
         tag_html = f"<span class='br-tag'>{tag}</span>" if tag else ""
         return (
             "<div class='br-team'>"
             f"<span class='br-seed'>{int(row['seed'])}</span>"
-            f"<a href='?team={abbr}' target='_self' class='br-badge' style='--br-color:{color}66'>{abbr}</a>"
+            f"<a href='?team={abbr}' target='_self' class='br-badge' "
+            f"style='--br-color:{tint};--br-text:{badge_text}'>{abbr}</a>"
             f"<span class='br-rec'>{int(row['wins'])}-{int(row['losses'])}</span>{tag_html}</div>"
         )
 

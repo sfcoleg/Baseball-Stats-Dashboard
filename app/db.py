@@ -2788,14 +2788,26 @@ def current_playoff_picture(db_mtime_val: float) -> dict[str, pd.DataFrame]:
 
     picture = {}
     for league in sorted(standings["league"].unique()):
-        league_df = standings[standings["league"] == league]
-        div_winners = league_df[league_df["div_rank"] == "1"].sort_values("wins", ascending=False)
+        league_df = standings[standings["league"] == league].copy()
+        # Rank by winning PERCENTAGE, not raw win total. Teams reach a given
+        # date having played different numbers of games (rainouts, doubleheader
+        # splits, an uneven schedule), so a 78-53 team is ahead of a 79-58 one
+        # even though it has fewer wins — sorting on wins alone silently seeded
+        # the bracket wrong whenever games-played diverged.
+        games = league_df["wins"] + league_df["losses"]
+        league_df["_win_pct"] = np.where(games > 0, league_df["wins"] / games.where(games > 0, 1), 0.0)
+        # Real MLB tiebreakers are head-to-head/intradivision records, which we
+        # don't carry. Falling through wins -> run differential -> abbr at least
+        # makes the order deterministic, so an exact tie doesn't make the
+        # bracket flip around between reruns on identical data.
+        order, ascending = ["_win_pct", "wins", "run_diff", "team_abbr"], [False, False, False, True]
+        div_winners = league_df[league_df["div_rank"] == "1"].sort_values(order, ascending=ascending)
         wildcards = (
             league_df[league_df["div_rank"] != "1"]
-            .sort_values("wins", ascending=False)
+            .sort_values(order, ascending=ascending)
             .head(WILD_CARDS_PER_LEAGUE)
         )
-        seeded = pd.concat([div_winners, wildcards], ignore_index=True)
+        seeded = pd.concat([div_winners, wildcards], ignore_index=True).drop(columns="_win_pct")
         if seeded.empty:
             continue
         seeded.insert(0, "seed", range(1, len(seeded) + 1))

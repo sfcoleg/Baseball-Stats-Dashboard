@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime
 from pathlib import Path
 
 import streamlit as st
@@ -16,15 +17,13 @@ if clicked_team:
     st.session_state["team_page_selected_team"] = clicked_team
     st.switch_page("pages/4_Team.py")
 
-# Off for now: with most of the regular season still to play, the actual
-# bracket seeding (and therefore the "if the season ended today" bracket and
-# the bracket predictor built on top of it) is too unsettled to be
-# meaningful — it'll shuffle constantly and mostly just be noise until
-# real playoff races start resolving. Flip this back on closer to
-# September; the Playoff & World Series odds table below (a Monte Carlo
-# projection, not today's actual seeding) stays useful year-round and isn't
-# gated by this.
-SHOW_BRACKET_FEATURES = False
+# The bracket reseeds itself from live standings on every load (see
+# db.current_playoff_picture — no stored state), so it tracks the races as
+# they move rather than needing to be regenerated. It was gated off early
+# in the season, when seeding shuffled nightly and was mostly noise; with
+# the races now resolving it's back on. Picks made against a seeding that
+# has since changed are dropped rather than trusted (see _pick_row).
+SHOW_BRACKET_FEATURES = True
 
 if SHOW_BRACKET_FEATURES:
     bracket_picks.bootstrap()
@@ -49,11 +48,19 @@ def _render_bracket_features(standings, playoff_odds, mtime):
     predictor — split into a function (rather than inline top-level code)
     purely so the whole thing can be skipped with one `if
     SHOW_BRACKET_FEATURES:` guard instead of re-indenting every line by
-    hand. See SHOW_BRACKET_FEATURES above for why it's off right now."""
+    hand."""
     style.colored_header("If the Season Ended Today", "headliners")
     st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
     picture = db.current_playoff_picture(mtime)
     if "AL" in picture and "NL" in picture:
+        # Reseeded from whatever standings the nightly refresh last wrote —
+        # stamping the date makes it obvious the bracket is live rather than
+        # a fixture someone drew once.
+        as_of = datetime.fromtimestamp(mtime).strftime("%b %-d") if mtime else None
+        st.caption(
+            "Seeding is recomputed from the current standings every time this page loads"
+            + (f" — standings last refreshed {as_of}." if as_of else ".")
+        )
         st.markdown(
             "<div style='overflow-x:auto'>"
             + style.full_playoff_bracket_html(picture["AL"], picture["NL"], teams.color_for_abbr)
@@ -111,6 +118,16 @@ def _pick_row(node_id, team_a, team_b):
     the URL itself stays a live link to this exact bracket."""
     picks = st.session_state["bracket_picks"]
     current = picks.get(node_id)
+    # Seeding is recomputed from live standings on every load, so a pick
+    # saved yesterday can name a team that has since fallen out of the
+    # bracket — and picks come from a ?bracket= URL param, so they can name
+    # anything at all. Either way the downstream seed lookups would raise a
+    # KeyError on a team that isn't in the current field, so drop any pick
+    # that isn't one of THIS series' two actual participants. Later rounds
+    # then simply stay locked until the earlier one is re-picked.
+    if current is not None and current not in (team_a["abbr"], team_b["abbr"]):
+        picks.pop(node_id, None)
+        current = None
     cols = st.columns(2)
     for col, team in zip(cols, (team_a, team_b)):
         with col:
