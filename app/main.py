@@ -80,7 +80,8 @@ localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 _THEME_TOKENS = {
     "light": (
         "--dm-text:#0C1725; --dm-dim:#6B7C94; --dm-line:#D8E1EE;"
-        "--dm-surface:#F7FAFD; --dm-surface-mute:#E9EEF6; --dm-card:#F2F7FD;"
+        "--dm-surface:#FBFCFE; --dm-surface-mute:#DFE3E9; --dm-card:#F2F7FD;"
+        "--dm-banner:#D8E7F7;"
         "--dm-blue:#2E86DE; --dm-blue-text:#1B5FA8; --dm-blue-soft:#E7F1FC;"
         "--dm-amber:#B7791F; --dm-amber-soft:#FBF0DA;"
         "--dm-red:#C0453F; --dm-red-soft:#FBE9E8;"
@@ -89,6 +90,7 @@ _THEME_TOKENS = {
     "dark": (
         "--dm-text:#EFF3F9; --dm-dim:#9AA8BD; --dm-line:#2E3B4E;"
         "--dm-surface:#1E2735; --dm-surface-mute:#151C28; --dm-card:#1E2735;"
+        "--dm-banner:#1B2740;"
         "--dm-blue:#6FAFE8; --dm-blue-text:#9BCAF3; --dm-blue-soft:#22334A;"
         "--dm-amber:#F5B942; --dm-amber-soft:#3A2F16;"
         "--dm-red:#F87171; --dm-red-soft:#3A1F1F;"
@@ -103,7 +105,7 @@ _theme_type = prefs.resolve_theme(_detected)
 # page appear to flip on navigation: its inference could land on a different
 # answer than ours between runs. With an explicit Light/Dark choice we paint
 # the app surfaces ourselves so the two can never disagree.
-_FORCE_BG = {"light": ("#E9EEF6", "#0C1725", "#F4F7FB"),
+_FORCE_BG = {"light": ("#DFE3E9", "#0C1725", "#F4F7FB"),
              "dark": ("#151C28", "#EFF3F9", "#1E2735")}
 if prefs.theme_preference() in ("light", "dark"):
     _bg, _fg, _side = _FORCE_BG[_theme_type]
@@ -159,15 +161,19 @@ st.markdown(
     "  font-weight:700;letter-spacing:-0.5px;}"
     "[data-testid='stMetricLabel']{text-transform:uppercase;letter-spacing:0.9px;"
     "  font-size:0.7rem !important;color:var(--dm-dim);}"
-    # --- full-width top navigation ----------------------------------------
-    # The container Streamlit gives us is a vertical block; flexing it turns
-    # the page_links into a horizontal strip.
-    ".st-key-dm_nav{position:fixed;top:0;left:0;right:0;z-index:999990;"
+    # --- two-row header: blue banner over the tab strip --------------------
+    ".dm-banner{position:fixed;top:0;left:0;right:0;height:3.05rem;z-index:999990;"
+    "  background:var(--dm-banner);display:flex;align-items:center;padding:0 16px;"
+    "  border-bottom:1px solid var(--dm-line);}"
+    ".dm-brand{display:flex;align-items:center;gap:9px;text-decoration:none;}"
+    ".dm-brand .diamond-title{font-size:1.15rem !important;line-height:1 !important;}"
+    # The tab strip. .st-key-dm_nav IS Streamlit's vertical block, so the row
+    # direction goes on the element itself, not a descendant.
+    ".st-key-dm_nav{position:fixed;top:3.05rem;left:0;right:0;z-index:999989;"
     "  background:var(--dm-surface);border-bottom:2px solid var(--dm-blue);"
-    "  padding:0 292px 0 14px;height:3.2rem;"
+    "  padding:0 14px;height:2.85rem;"
     "  flex-direction:row !important;align-items:center;gap:2px !important;"
-    "  flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;"
-    "  box-shadow:none !important;}"
+    "  flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;box-shadow:none !important;}"
     ".st-key-dm_nav::-webkit-scrollbar{display:none;}"
     ".st-key-dm_nav [data-testid='stElementContainer']{width:auto !important;flex:0 0 auto;}"
     ".st-key-dm_nav [data-testid='stPageLink'] a{padding:5px 9px;border-radius:7px;}"
@@ -175,21 +181,28 @@ st.markdown(
     "  font-weight:600;font-size:0.92rem;letter-spacing:0.4px;text-transform:uppercase;"
     "  color:var(--dm-dim);margin:0;white-space:nowrap;}"
     ".st-key-dm_nav [data-testid='stPageLink'] a:hover p{color:var(--dm-text);}"
-    ".dm-brand{display:flex;align-items:center;gap:8px;flex:0 0 auto;text-decoration:none;"
-    "  margin-right:8px;}"
-    ".dm-brand .diamond-title{font-size:1.05rem !important;line-height:1 !important;}"
-    # Search is a real widget, lifted into the slot the padding above reserves.
-    ".st-key-dm_search{position:fixed;top:5px;right:14px;width:264px;z-index:999995;"
+    # Search sits permanently in the banner's right end.
+    ".st-key-dm_search{position:fixed;top:0.42rem;right:14px;width:280px;z-index:999995;"
     "  background:transparent;}"
-    ".st-key-dm_search [data-testid='stTextInput'] input{height:2.1rem;font-size:0.86rem;}"
+    ".st-key-dm_search [data-testid='stTextInput'] input{height:2.15rem;font-size:0.86rem;"
+    "  background:var(--dm-surface);}"
     ".st-key-dm_search [data-testid='stButton'] button{font-size:0.8rem;padding:2px 8px;}"
-    "[data-testid='stMainBlockContainer']{padding-top:3.6rem !important;}"
-    # Desktop shows the bar and hides the sidebar; mobile does the reverse, so a
-    # phone keeps exactly the navigation it had before the bar existed.
+    # --- content sits on a panel, with the grey page visible around it ------
+    "[data-testid='stMainBlockContainer']{background:var(--dm-surface);border-radius:18px;"
+    "  padding:18px 26px 34px !important;margin:6.4rem auto 30px !important;"
+    f"  max-width:calc(100% - 44px) !important;{_CARD_SHADOW}}}"
+    # Every st.markdown("<style>") and every localStorage-bridge component
+    # renders nothing, but Streamlit still gives each one a slot in the
+    # vertical block's 1rem gap — six of them stack up into ~100px of dead
+    # space above the real content on every page.
+    "[data-testid='stElementContainer']:has(style){display:none !important;}"
+    "[data-testid='stElementContainer']:has(> [data-testid='stCustomComponentV1']){"
+    "  display:none !important;}"
     "@media (min-width:641px){[data-testid='stSidebar']{display:none !important;}"
     "  [data-testid='stSidebarCollapsedControl']{display:none !important;}}"
-    "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search{display:none !important;}"
-    "  [data-testid='stMainBlockContainer']{padding-top:2.5rem !important;}}"
+    "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search,.dm-banner{display:none !important;}"
+    "  [data-testid='stMainBlockContainer']{margin:0 !important;padding-top:2.5rem !important;"
+    "    border-radius:0;}}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"
@@ -491,16 +504,20 @@ if active_sport == "mlb":
 else:
     _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 
+# Row one is the banner — identity on the left, search on the right, always
+# present. Row two is the tabs. Two rows rather than one so a long nav never
+# competes with the brand or the search box for the same strip of pixels.
+st.markdown(
+    f"<div class='dm-banner'><a class='dm-brand' href='/' target='_self'>"
+    f"{style.diamond_logo(24)}<span class='diamond-title'>Diamond Metrics</span></a></div>",
+    unsafe_allow_html=True,
+)
+
 _bar = st.container(key="dm_nav")
 with _bar:
-    st.markdown(
-        f"<a class='dm-brand' href='/' target='_self'>{style.diamond_logo(22)}"
-        f"<span class='diamond-title'>Diamond Metrics</span></a>",
-        unsafe_allow_html=True,
-    )
     for pg_ in _nav_pages:
         st.page_link(pg_, label=pg_.title.replace("NHL ", ""))
-    # Sport switch and Settings ride at the right-hand end of the same strip.
+    # Sport switch and Settings ride at the right-hand end of the tab row.
     other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
     st.page_link(other_home, label="\U0001F3D2 NHL" if active_sport == "mlb" else "\u26be MLB")
     st.page_link(next(p_ for p_ in PAGES if p_.title == "Settings"), label="Settings")

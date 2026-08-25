@@ -22,8 +22,8 @@ linkUnderline = false
 
 [theme.light]
 primaryColor = "#2E86DE"
-backgroundColor = "#E9EEF6"
-secondaryBackgroundColor = "#F7FAFD"
+backgroundColor = "#DFE3E9"
+secondaryBackgroundColor = "#FBFCFE"
 textColor = "#0C1725"
 borderColor = "#D8E1EE"
 linkColor = "#1B5FA8"
