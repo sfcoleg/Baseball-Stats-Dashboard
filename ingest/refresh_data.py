@@ -509,6 +509,17 @@ def fetch_pitching(season=CURRENT_SEASON):
     for stats_df in (exitvelo, expected, stuff_pctile, stuff_raw, batted_ball, war):
         pitching = pitching.merge(stats_df, left_on="mlbID", right_on="player_id", how="left", suffixes=("", "_dup"))
         pitching = pitching.drop(columns=[c for c in pitching.columns if c.endswith("_dup") or c == "player_id"])
+        # A pre-Statcast season (before ~2015) merges in a leaderboard that's
+        # EMPTY rather than just all-NaN — pandas gives an empty frame's
+        # columns object dtype, so the merged-in column comes back all-NaN
+        # *and object*, not float. That silently sets the SQLite column's
+        # type affinity to TEXT on whichever season gets stored first (see
+        # _store_season_table), which then stores every OTHER season's real
+        # float values as text strings too — coerce right after each merge
+        # so the dtype is always numeric regardless of source data shape.
+        for col in stats_df.columns:
+            if col != "player_id":
+                pitching[col] = pd.to_numeric(pitching[col], errors="coerce")
 
     pitching = add_xfip(pitching)
     pitching = pitching.drop(columns=["batted_ball", "flyballs_percent"])

@@ -840,10 +840,16 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     if fmt:
         styler = styler.format(fmt, na_rep="—")
 
+    # low/high push the colormap's saturated extremes outside the data's
+    # actual range, so the highest/lowest real values land partway into the
+    # scale rather than at its darkest ends — 0.45 (an earlier lightening
+    # pass) still left HR/RBI/SB-type columns reading as a wall of dark
+    # red/green; 0.7 keeps the gradient legible as a "good vs. bad" cue
+    # without it dominating the table visually.
     for col in higher_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn", low=0.45, high=0.45)
+        styler = styler.background_gradient(subset=[col], cmap="RdYlGn", low=0.7, high=0.7)
     for col in lower_better:
-        styler = styler.background_gradient(subset=[col], cmap="RdYlGn_r", low=0.45, high=0.45)
+        styler = styler.background_gradient(subset=[col], cmap="RdYlGn_r", low=0.7, high=0.7)
 
     if team_col and team_col in df.columns and team_color_fn:
         def _team_bg(val):
