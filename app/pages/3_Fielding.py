@@ -76,8 +76,11 @@ st.dataframe(
 framing = db.load_catcher_framing(season, db.db_mtime())
 poptime = db.load_catcher_poptime(season, db.db_mtime())
 
+if not framing.empty or not poptime.empty:
+    style.colored_header("Catchers", "fielding")
+
 if not framing.empty:
-    style.colored_header("Catcher Framing", "pitching")
+    st.markdown("**Framing**")
     fr = framing.sort_values("framing_runs", ascending=False).copy()
     # framing_pct is stored as a 0-1 shadow-zone strike rate — show as a percentage.
     if fr["framing_pct"].max() <= 1:
@@ -96,7 +99,7 @@ if not framing.empty:
     )
 
 if not poptime.empty:
-    style.colored_header("Catcher Throwing", "fielding")
+    st.markdown("**Throwing**")
     pt = poptime.sort_values("pop_2b").copy()
     pt_disp = pt[["Name", "age", "pop_2b", "pop_2b_count", "pop_3b", "exchange_time", "arm"]].rename(columns={
         "Name": "Catcher", "age": "Age", "pop_2b": "Pop 2B (s)", "pop_2b_count": "2B Attempts",
