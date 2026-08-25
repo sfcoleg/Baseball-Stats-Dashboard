@@ -232,8 +232,8 @@ if season == current_season:
         m2.metric(row["division"], f"#{row['div_rank']}")
         m3.metric("Run Diff", f"{row['run_diff']:+.0f}" if pd.notna(row["run_diff"]) else "—")
         m4.metric("Streak", row["streak"] if pd.notna(row["streak"]) else "—")
-        m5.metric("Playoff Odds", f"{pct:.1f}%" if pct is not None else "—")
-        m6.metric("World Series Odds", f"{ws_pct:.1f}%" if ws_pct is not None else "—")
+        m5.metric("Playoff Odds", style.format_playoff_pct(pct) if pct is not None else "—")
+        m6.metric("World Series Odds", style.format_playoff_pct(ws_pct) if ws_pct is not None else "—")
 
         # Records breakdown — the situational splits that explain a season
         # (a bad one-run record is usually the story behind "worse than

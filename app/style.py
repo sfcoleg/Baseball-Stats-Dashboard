@@ -598,6 +598,30 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
     )
 
 
+def format_playoff_pct(pct) -> str:
+    """A playoff-odds percentage as display text.
+
+    db._clamp_playoff_odds pins any still-alive team into [0.1, 99.9] so a
+    Monte Carlo that happened to break the same way in every sim doesn't
+    read as certainty. A team sitting AT that floor/ceiling is really
+    "somewhere beyond it", so it shows as <0.1% / >99.9% rather than an
+    exact-looking 0.1% / 99.9%. A team that is genuinely eliminated or
+    clinched (exactly 0 or 100, set from real math, not sampling) keeps its
+    true value — the symbols would be wrong there.
+    """
+    if pd.isna(pct):
+        return "—"
+    if pct <= 0:
+        return "0%"
+    if pct >= 100:
+        return "100%"
+    if pct <= 0.1:
+        return "<0.1%"
+    if pct >= 99.9:
+        return ">99.9%"
+    return f"{pct:.1f}%"
+
+
 def playoff_odds_table(df, team_color_fn) -> str:
     """One league's full playoff/World Series odds table (see
     db.compute_playoff_odds) — every team in the league, not just the
@@ -609,7 +633,7 @@ def playoff_odds_table(df, team_color_fn) -> str:
 
         def _pct_cell(col):
             pct = row[col]
-            pct_str = f"{pct:.1f}%" if pd.notna(pct) else "—"
+            pct_str = format_playoff_pct(pct)
             bar_color = _playoff_pct_color(pct) if pd.notna(pct) else "var(--dm-line)"
             return (
                 "<td style='padding:5px 10px;text-align:center'>"

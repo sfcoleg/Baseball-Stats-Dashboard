@@ -239,13 +239,20 @@ st.markdown(
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  .dm-flat-card){background:transparent !important;border:none !important;"
     "  box-shadow:none !important;padding:0 !important;}"
-    # A bubble inside a bubble just draws a box around a box — but scope this
-    # to a card's own direct children. Matching every descendant also catches
-    # anything inside st.columns, which Streamlit wraps in a layout wrapper of
-    # its own.
+    # A bubble inside a bubble just draws a box around a box. This has to
+    # reach EVERY depth inside a card, not just its direct children —
+    # Today's Games (and Game Center, Following) lay a card's contents out
+    # in st.columns, which buries them a few levels down and left them
+    # still bubbled.
+    #
+    # The "> stVerticalBlock" is what keeps this from over-reaching: a
+    # bordered st.container renders as stLayoutWrapper > stVerticalBlock,
+    # whereas st.columns renders as stLayoutWrapper > stHorizontalBlock. So
+    # this matches only things genuinely inside a card, and top-level
+    # columns (Home's Team Snapshot and Standings) keep their own bubbles.
     "[data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock'] "
-    "  > [data-testid='stElementContainer']{background:transparent !important;"
-    "  box-shadow:none !important;padding:0 !important;}"
+    "  [data-testid='stElementContainer']{background:transparent !important;"
+    "  box-shadow:none !important;border:none !important;padding:0 !important;}"
 
     # Every st.markdown("<style>") and every localStorage-bridge component
     # renders nothing, but Streamlit still gives each one a slot in the
