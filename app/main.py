@@ -147,7 +147,11 @@ st.markdown(
 # hairline border stands in instead, since dark-mode card vs. page background
 # is too close in value on its own for a bubble edge to read clearly.
 _CARD_SHADOW = (
-    "box-shadow:0 1px 2px rgba(12,23,37,0.06);" if _theme_type == "light"
+    # Light mode: a faint grey hairline as well as the shadow. The cards are
+    # near-white on a grey page, so the shadow alone left the edge to be
+    # inferred from a very small value difference; the line states it.
+    "box-shadow:0 1px 2px rgba(12,23,37,0.06);border:1px solid rgba(12,23,37,0.10);"
+    if _theme_type == "light"
     else "border:1px solid rgba(255,255,255,0.06);"
 )
 st.markdown(
@@ -690,37 +694,32 @@ st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
 
 pg.run()
 
-# --- keep STREAMLIT'S OWN theme in step with the visitor's choice ---------
-# Everything above only *paints over* Streamlit's theme; it never changes it.
-# That's enough for HTML we control, but not for anything Streamlit renders
-# itself — most visibly st.dataframe, which draws to a <canvas> that no CSS
-# can reach. With Streamlit left on "System" it follows the OS, so a
-# dark-OS visitor who picked Light got light pages with dark TABLES on them.
+# NOTE: an earlier attempt here also wrote Streamlit's own
+# stActiveTheme-<path>-v2 localStorage keys, to make st.dataframe (which
+# draws to a <canvas> no CSS can reach) follow the visitor's Light/Dark
+# choice instead of the OS. It was REVERTED: Streamlit writes those keys
+# itself on load, so our value and its value never settled, every render
+# counted as "changed", and the page kept navigating — which showed up as
+# the site constantly reloading and search being unusable (a reload
+# mid-typing throws the query away).
 #
-# Streamlit persists its active theme in localStorage under
-# stActiveTheme-<path>-v2 ("Light" / "Dark" / "System"), read once per page
-# load. Writing it for every route makes Streamlit itself switch, which
-# fixes the tables at the source. On "Match my device" we write "System"
-# back, so clearing the preference genuinely hands control to the OS.
-#
-# These are handed to localstorage_bridge.redirect() rather than written by
-# a script of our own ON PURPOSE: they need a reload to take effect, and the
-# bridge is already the page's one and only navigator. Giving the page a
-# second one raced this against the query-param hydration — whichever won,
-# the other's work was lost, which showed up as the page randomly reloading
-# and coming back in the wrong colours.
-#
-# This is Streamlit-internal storage, not a public API — if a future version
-# renames the key this silently stops working (tables would go back to
-# following the OS), so it's deliberately additive: nothing depends on it.
-_ST_THEME = {"light": "Light", "dark": "Dark"}.get(prefs.theme_preference(), "System")
-_theme_keys = {
-    f"stActiveTheme-{path}-v2": json.dumps(_ST_THEME)
-    for path in {"/"} | {f"/{p.url_path}" for p in PAGES + NHL_PAGES if getattr(p, "url_path", "")}
-}
+# Don't reintroduce it without first confirming, in the browser, exactly
+# what Streamlit stores in that key and that a value we write survives a
+# reload untouched. The dropdown/input theming is handled with CSS instead
+# (see the widget block above), which needs no navigation at all.
 
 # One localStorage -> query-param redirect for every registered key, fired
 # once, after the routed page has rendered. See the note beside the
 # bootstrap() calls at the top for why this lives here rather than in each
 # page, and localstorage_bridge.py for why there must only ever be one.
-localstorage_bridge.redirect(also_set=_theme_keys)
+#
+# ONCE PER SESSION, not once per render. Streamlit's own client-side page
+# navigation drops our query params, so an unconditional call here re-added
+# them by NAVIGATING — turning every single nav click into a full page
+# reload, and destroying st.switch_page (the search box's result click ran
+# the player page, then this bounced the browser back to the URL-resolved
+# page). Hydration only has to happen while session_state is still empty;
+# after that Streamlit carries it across client-side navigation by itself.
+if not st.session_state.get("_ls_hydrated"):
+    st.session_state["_ls_hydrated"] = True
+    localstorage_bridge.redirect()
