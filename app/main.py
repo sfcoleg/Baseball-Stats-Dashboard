@@ -700,54 +700,27 @@ pg.run()
 # Streamlit persists its active theme in localStorage under
 # stActiveTheme-<path>-v2 ("Light" / "Dark" / "System"), read once per page
 # load. Writing it for every route makes Streamlit itself switch, which
-# fixes the tables at the source and makes all the CSS above belt-and-braces
-# rather than load-bearing. On "Match my device" we write "System" back, so
-# clearing the preference genuinely hands control back to the OS.
+# fixes the tables at the source. On "Match my device" we write "System"
+# back, so clearing the preference genuinely hands control to the OS.
+#
+# These are handed to localstorage_bridge.redirect() rather than written by
+# a script of our own ON PURPOSE: they need a reload to take effect, and the
+# bridge is already the page's one and only navigator. Giving the page a
+# second one raced this against the query-param hydration — whichever won,
+# the other's work was lost, which showed up as the page randomly reloading
+# and coming back in the wrong colours.
 #
 # This is Streamlit-internal storage, not a public API — if a future version
 # renames the key this silently stops working (tables would go back to
-# following the OS), so it's deliberately additive: nothing else depends on
-# it succeeding.
-_ST_THEME = {"light": "Light", "dark": "Dark"}.get(
-    prefs.theme_preference() if prefs.theme_preference() in ("light", "dark") else "", "System"
-)
-_theme_paths = ["/"] + [f"/{p.url_path}" for p in PAGES + NHL_PAGES if getattr(p, "url_path", "")]
-components.html(
-    f"""
-    <script>
-    (function() {{
-        const desired = {json.dumps(_ST_THEME)};
-        const paths = {json.dumps(sorted(set(_theme_paths)))};
-        const want = JSON.stringify(desired);
-        let currentChanged = false;
-        const here = window.parent.location.pathname;
-        paths.forEach(function(p) {{
-            const key = 'stActiveTheme-' + p + '-v2';
-            if (localStorage.getItem(key) !== want) {{
-                localStorage.setItem(key, want);
-                if (p === here) currentChanged = true;
-            }}
-        }});
-        // Streamlit only reads that key on load, so the page currently on
-        // screen is still using the old theme — reload it once. Guarded per
-        // desired theme so switching Light->Dark can reload again, but a
-        // steady state never can, which rules out a reload loop.
-        const guard = 'dm_theme_synced_' + desired;
-        if (currentChanged && !sessionStorage.getItem(guard)) {{
-            sessionStorage.setItem(guard, '1');
-            const a = window.parent.document.createElement('a');
-            a.href = window.parent.location.href;
-            window.parent.document.body.appendChild(a);
-            a.click();
-        }}
-    }})();
-    </script>
-    """,
-    height=0,
-)
+# following the OS), so it's deliberately additive: nothing depends on it.
+_ST_THEME = {"light": "Light", "dark": "Dark"}.get(prefs.theme_preference(), "System")
+_theme_keys = {
+    f"stActiveTheme-{path}-v2": json.dumps(_ST_THEME)
+    for path in {"/"} | {f"/{p.url_path}" for p in PAGES + NHL_PAGES if getattr(p, "url_path", "")}
+}
 
 # One localStorage -> query-param redirect for every registered key, fired
 # once, after the routed page has rendered. See the note beside the
 # bootstrap() calls at the top for why this lives here rather than in each
 # page, and localstorage_bridge.py for why there must only ever be one.
-localstorage_bridge.redirect()
+localstorage_bridge.redirect(also_set=_theme_keys)
