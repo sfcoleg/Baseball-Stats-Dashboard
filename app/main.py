@@ -280,6 +280,20 @@ st.markdown(
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  [data-testid='stMarkdown'] div[style]){"
     f"  background:var(--dm-surface);border-radius:14px;padding:20px 22px;{_CARD_SHADOW}}}"
+    # Keep a wide table INSIDE its bubble. The bubbles are flex children, and
+    # a flex child defaults to min-width:auto — meaning it refuses to shrink
+    # below its content's intrinsic width, so a table with many columns pushes
+    # the bubble wider than the page instead of scrolling within it. min-width:0
+    # is the standard release valve; the max-width belt-and-braces stops the
+    # grid itself from exceeding the padded content box.
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']{min-width:0;}"
+    "[data-testid='stMainBlockContainer'] [data-testid='stDataFrame'],"
+    "[data-testid='stMainBlockContainer'] [data-testid='stPlotlyChart']{max-width:100% !important;}"
+    # Hand-written HTML tables (standings, schedule, playoff odds) aren't
+    # canvas-based and will happily run past the edge — give them their own
+    # scroll rather than letting them stretch the card.
+    "[data-testid='stMainBlockContainer'] [data-testid='stMarkdown'] table{"
+    "  max-width:100%;display:block;overflow-x:auto;}"
     # Rows that are already their own card (Injury Report, Transactions) opt
     # out of the generic HTML-card bubble above — a bubble around a row that's
     # already got its own background just draws a box around a box, one per
