@@ -29,9 +29,9 @@ season = db.get_seasons("batting")[0]
 _detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
 _THEME = prefs.resolve_theme(_detected)
 
-# Normally seeded by following.bootstrap() in main.py, but Streamlit's legacy
-# pages/-folder auto-discovery can route a direct URL hit straight to this
-# page's script (bypassing main.py entirely) — so bootstrap defensively here too.
+# Normally seeded by following.bootstrap() in main.py. Kept here as a cheap
+# no-op safeguard — see the note in views/8_Todays_Games.py for why this used
+# to be load-bearing and no longer is.
 following.bootstrap()
 # The actual localStorage->query-param redirect (not just the bootstrap()
 # read) has to run from HERE, not main.py — components.html() calls made
@@ -41,7 +41,6 @@ following.bootstrap()
 # "following" is now effectively unused dead weight from that same lesson,
 # but harmless to leave — it's pure Python, not a render).
 localstorage_bridge.register("following", following.STORAGE_KEY)
-localstorage_bridge.redirect()
 followed_teams = st.session_state["followed_teams"]  # [{"abbr", "nickname"}, ...]
 followed_players = st.session_state["followed_players"]  # [{"mlbID", "name"}, ...]
 

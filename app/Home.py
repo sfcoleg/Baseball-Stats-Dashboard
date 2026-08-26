@@ -21,7 +21,6 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 # another page. register() was already called once in main.py — calling it
 # again here is a harmless no-op (plain dict assignment, not a render).
 localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
-localstorage_bridge.redirect()
 
 # db.today_pacific() is the one source of truth for "what day is it"
 # anywhere on this page — see its docstring for why plain date.today()

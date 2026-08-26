@@ -15,15 +15,15 @@ import teams
 
 st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
-# Normally seeded by predictions.bootstrap() in main.py, but Streamlit's
-# legacy pages/-folder auto-discovery can route a direct URL hit straight to
-# this page's script (bypassing main.py entirely) — so bootstrap defensively
-# here too. The actual localStorage->query-param redirect has to run from
+# Normally seeded by predictions.bootstrap() in main.py. Kept here as a
+# cheap no-op safeguard: it used to be load-bearing, back when the page
+# scripts lived in app/pages/ and every one of them had a second URL that
+# bypassed main.py (see main.py's module docstring). Nothing routes around
+# main.py now, but bootstrap() is idempotent, so this costs nothing. The actual localStorage->query-param redirect has to run from
 # HERE (not main.py) — see following.py's identical comment on this in
 # pages/13_Following.py for why.
 predictions.bootstrap()
 localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
-localstorage_bridge.redirect()
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -213,7 +213,7 @@ def render_games():
                         st.session_state["selected_game_home_abbr"] = row["home_abbr"]
                         st.session_state["selected_game_away_team"] = row["away_team"]
                         st.session_state["selected_game_home_team"] = row["home_team"]
-                        st.switch_page("pages/_Game_Detail.py")
+                        st.switch_page("views/_Game_Detail.py")
 
             with hcol:
                 logo_html = (

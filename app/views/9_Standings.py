@@ -13,7 +13,7 @@ st.set_page_config(page_title="Standings | Diamond Metrics", layout="wide")
 clicked_team = st.query_params.get("team")
 if clicked_team:
     st.session_state["team_page_selected_team"] = clicked_team
-    st.switch_page("pages/4_Team.py")
+    st.switch_page("views/4_Team.py")
 
 st.title("Standings")
 if not db.DB_PATH.exists():

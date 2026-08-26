@@ -33,7 +33,6 @@ if not db.DB_PATH.exists():
 # None/None from bootstrap() — see localstorage_bridge.py's docstring for
 # why this can't be done from main.py.
 localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
-localstorage_bridge.redirect()
 
 style.colored_header("Defaults", "headliners")
 
@@ -104,7 +103,7 @@ if followed_teams or followed_players:
     )
 else:
     st.caption("Not following any teams or players yet.")
-st.page_link("pages/13_Following.py", label="Manage who you follow →")
+st.page_link("views/13_Following.py", label="Manage who you follow →")
 
 style.colored_header("Reset", "chart")
 st.caption(

@@ -15,7 +15,7 @@ st.set_page_config(page_title="Playoffs | Diamond Metrics", layout="wide")
 clicked_team = st.query_params.get("team")
 if clicked_team:
     st.session_state["team_page_selected_team"] = clicked_team
-    st.switch_page("pages/4_Team.py")
+    st.switch_page("views/4_Team.py")
 
 # The bracket reseeds itself from live standings on every load (see
 # db.current_playoff_picture — no stored state), so it tracks the races as

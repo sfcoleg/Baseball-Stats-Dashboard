@@ -20,17 +20,14 @@ if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
 
-# Normally seeded by following.bootstrap() in main.py, but Streamlit's
-# legacy pages/-folder auto-discovery can route a shared ?mlbid= link
-# straight to this script (bypassing main.py entirely) — so bootstrap
-# defensively here too. It also has to run on EVERY rerun, not just the
-# first: bootstrap() is what flips _following_safe_to_save on after the
-# initial render, which is what lets the Follow button below actually
-# persist. The localStorage->query-param redirect has to be fired from
-# this page's own script rather than main.py — see localstorage_bridge.
+# Normally seeded by following.bootstrap() in main.py; repeated here because
+# it has to run on EVERY rerun, not just the first — bootstrap() is what
+# flips _following_safe_to_save on after the initial render, and that's what
+# lets the Follow button below actually persist. The localStorage->query-param
+# redirect has to be fired from this page's own script rather than main.py —
+# see localstorage_bridge.
 following.bootstrap()
 localstorage_bridge.register("following", following.STORAGE_KEY)
-localstorage_bridge.redirect()
 
 # Hydrates a shared link (?mlbid=...&season=...) into session_state — the
 # normal path only ever gets here via the sidebar search setting

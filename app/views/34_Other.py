@@ -15,15 +15,15 @@ st.set_page_config(page_title="Other | Diamond Metrics", layout="wide")
 st.title("Other")
 
 SECTIONS = [
-    ("pages/30_League_Trends.py", "League Trends"),
-    ("pages/33_Ballparks.py", "Ballparks"),
-    ("pages/23_Umpires.py", "Umpires"),
-    ("pages/29_Around_the_League.py", "Around the League"),
-    ("pages/18_Minor_Leagues.py", "Minor Leagues"),
-    ("pages/22_Box_Score_Search.py", "Box Score Search"),
+    ("views/30_League_Trends.py", "League Trends"),
+    ("views/33_Ballparks.py", "Ballparks"),
+    ("views/23_Umpires.py", "Umpires"),
+    ("views/29_Around_the_League.py", "Around the League"),
+    ("views/18_Minor_Leagues.py", "Minor Leagues"),
+    ("views/22_Box_Score_Search.py", "Box Score Search"),
 ]
 if st.session_state.get("_show_free_agency"):
-    SECTIONS.append(("pages/21_Free_Agency.py", "Free Agency"))
+    SECTIONS.append(("views/21_Free_Agency.py", "Free Agency"))
 
 for path, title in SECTIONS:
     # One per row (not st.columns(), which stacks column-major on mobile —

@@ -98,7 +98,7 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
             st.session_state["selected_mlbID"] = int(row["mlbID"])
             st.session_state["selected_name"] = row["Name"]
             st.session_state["selected_season"] = int(row["season"])
-            st.switch_page("pages/_Player.py")
+            st.switch_page("views/_Player.py")
 
     if len(matches) > 8:
         target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")

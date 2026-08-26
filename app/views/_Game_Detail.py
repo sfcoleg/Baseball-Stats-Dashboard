@@ -23,7 +23,7 @@ if "selected_game_pk" not in st.session_state:
     st.title("Game Center")
     st.info("Pick a game from Today's Games to see its live tracker, win probability, and box score here.")
     if st.button("Go to Today's Games"):
-        st.switch_page("pages/8_Todays_Games.py")
+        st.switch_page("views/8_Todays_Games.py")
     st.stop()
 
 game_pk = st.session_state["selected_game_pk"]
@@ -34,7 +34,7 @@ away_team = st.session_state["selected_game_away_team"]
 home_team = st.session_state["selected_game_home_team"]
 
 if st.button("← Back to Today's Games"):
-    st.switch_page("pages/8_Todays_Games.py")
+    st.switch_page("views/8_Todays_Games.py")
 
 season = db.get_seasons("batting")[0]
 mtime = db.db_mtime()

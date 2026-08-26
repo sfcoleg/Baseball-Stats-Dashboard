@@ -1,13 +1,26 @@
 """Real entry point for the app (run via `streamlit run app/main.py`, not
-Home.py directly). Uses st.navigation()/st.Page() instead of Streamlit's
-classic pages/-folder auto-discovery, specifically so:
+Home.py directly).
+
+The page scripts live in app/views/, NOT app/pages/, and the name matters:
+Streamlit's classic multi-page auto-discovery triggers on a folder literally
+named `pages/` next to the entrypoint. While it was named that, EVERY page
+had a second URL (/Settings, /Batting, /Player, ...) that served the page
+script directly and never ran this file — so none of the design system below
+(theme tokens, component CSS, the Light/Dark override) applied, and those
+routes silently fell back to Streamlit's own OS-driven theme. That was the
+"dropdowns are dark in light mode" bug: any full-page navigation (a refresh,
+a bookmark, a ?team= badge link, a localstorage_bridge redirect) landed on
+one of those bypass routes. Renaming the folder removes the duplicate router
+entirely, so every URL goes through st.navigation() here.
+
+Uses st.navigation()/st.Page() rather than that classic system, specifically so:
   1. The sidebar search box can render ABOVE the page nav. Neither the
      classic system nor st.navigation()'s own auto-rendered menu (position=
      "sidebar") support this — both always claim the very top of the
      sidebar regardless of script call order. The fix is position="hidden"
      (suppresses the automatic menu entirely) plus building the nav links
      ourselves with st.sidebar.page_link(), placed after the search box.
-  2. The hidden player-profile page (pages/_Player.py) can be fully
+  2. The hidden player-profile page (views/_Player.py) can be fully
      excluded from the visible menu simply by not creating a page_link for
      it — it's still registered as a valid destination (it's in the list
      passed to st.navigation()), just not listed as a clickable link, so
@@ -36,14 +49,17 @@ st.set_page_config(page_title="Diamond Metrics", layout="wide")
 # (see following.py) — must run before any page can read them. Each
 # bootstrap() only reads whatever ?param= is already in the URL; it does
 # NOT fire the actual localStorage->query-param redirect itself (see
-# localstorage_bridge.py's register()/redirect()) — that has to be called
-# from WITHIN a routed page's own script (see e.g. pages/13_Following.py
-# and pages/8_Todays_Games.py), not from here. Empirically, anything
-# main.py components.html()'s outside of pg.run()'s execution — before OR
-# after it — never actually executes its script in the browser; only
-# components.html calls made from inside the routed page itself reliably
-# run. register() itself is just plain Python (no rendering), so it's safe
-# to call here regardless.
+# localstorage_bridge.py's register()/redirect()) — that happens ONCE, at
+# the very bottom of this file, after pg.run().
+#
+# It used to have to be called from within each routed page's own script:
+# a components.html() issued by main.py reportedly never executed in the
+# browser. That is no longer true — verified on Streamlit 1.59 by deep-
+# linking to /Batting and confirming ?prefs= arrives and the saved Light
+# theme applies. Firing it once centrally is what the bridge wants anyway
+# (see its docstring: there must only ever be ONE navigation), and it
+# means a deep link to any page keeps the visitor's theme instead of
+# falling back to the OS scheme.
 following.bootstrap()
 localstorage_bridge.register("following", following.STORAGE_KEY)
 # Same localStorage pattern for the prediction game's picks (see
@@ -51,10 +67,7 @@ localstorage_bridge.register("following", following.STORAGE_KEY)
 predictions.bootstrap()
 localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
 # Same pattern again for site-wide preferences (default season, favorite
-# team — see prefs.py). Unlike following/predictions, prefs are read by
-# nearly every page, so the actual redirect() fires from Home.py (the
-# default landing page) as well as the Settings page itself, rather than
-# just one dedicated page.
+# team, Light/Dark — see prefs.py).
 prefs.bootstrap()
 localstorage_bridge.register("prefs", prefs.STORAGE_KEY)
 # The bracket predictor's picks (see bracket_picks.py) are URL-based, not
@@ -274,11 +287,45 @@ st.markdown(
     "[data-testid='stHeader']{background:transparent !important;height:0 !important;}"
     "[data-testid='stToolbar']{z-index:999999;}"
     # --- inputs: light grey fields rather than stark white or dark ---------
+    # Streamlit 1.59 moved its widgets off BaseWeb and onto React Aria: a
+    # selectbox now renders as .react-aria-ComboBox with NO data-baseweb
+    # attribute anywhere in it. Every [data-baseweb='...'] selector here
+    # therefore matches nothing on this version, which is why closed
+    # dropdowns and text fields kept Streamlit's own theme — and that theme
+    # follows the OS, not our resolved one, so on a dark-OS machine they
+    # stayed dark on a light page no matter what the Light setting said.
+    #
+    # The selectors doing the actual work now are Streamlit's own stable
+    # data-testids plus React Aria's semantic class names. The baseweb ones
+    # are kept alongside purely as a fallback in case a Streamlit version
+    # renders BaseWeb again; a selector that matches nothing costs nothing.
+    #
+    # NB: the painted surface is the input's ROOT wrapper, not the <input>
+    # itself — styling only the inner <input> (as this block used to) left
+    # the visible box its original colour.
+    "[data-testid='stSelectbox'] [role='group'],"
+    "[data-testid='stMultiSelect'] [role='group'],"
+    "[data-testid='stDateInput'] [role='group'],"
+    "[data-testid='stTextInputRootElement'],"
+    "[data-testid='stNumberInputContainer'],"
+    ".react-aria-ComboBox [role='group'],"
     "[data-baseweb='select'] > div,[data-baseweb='input'],"
     "[data-testid='stTextInput'] input,[data-testid='stNumberInput'] input,"
     "[data-testid='stDateInput'] input{"
     "  background:var(--dm-field) !important;border-color:var(--dm-line) !important;"
     "  color:var(--dm-text) !important;}"
+    # The inner <input> sits on top of that wrapper and carries its own
+    # colour, so it needs the text colour too or it stays light-on-light.
+    "[data-testid='stSelectbox'] input,[data-testid='stMultiSelect'] input,"
+    "[data-testid='stTextInputRootElement'] input{"
+    "  background:transparent !important;color:var(--dm-text) !important;}"
+    # Secondary buttons are the last widget still painting itself from
+    # Streamlit's own (OS-driven) theme rather than ours. Primary buttons
+    # are left alone — they carry the accent colour on purpose.
+    "[data-testid='stBaseButton-secondary']{background:var(--dm-field) !important;"
+    "  color:var(--dm-text) !important;border-color:var(--dm-line) !important;}"
+    "[data-testid='stBaseButton-secondary']:hover{"
+    "  background:var(--dm-surface-mute) !important;}"
     # The open dropdown panel. Streamlit 1.59 renders selectbox menus as
     # [data-testid='stSelectboxVirtualDropdown'], NOT the data-baseweb
     # popover/menu the older selectors assumed — those matched nothing, so
@@ -512,35 +559,35 @@ st.session_state["_show_free_agency"] = SHOW_FREE_AGENCY  # read by pages/34_Oth
 
 PAGES = [
     st.Page("Home.py", title="Home", default=True),
-    st.Page("pages/12_Daily_Digest.py", title="Clubhouse Report"),
-    st.Page("pages/13_Following.py", title="Following"),
-    st.Page("pages/1_Batting.py", title="Batting"),
-    st.Page("pages/2_Pitching.py", title="Pitching"),
-    st.Page("pages/3_Fielding.py", title="Fielding"),
-    st.Page("pages/6_Baserunning.py", title="Baserunning"),
-    st.Page("pages/4_Team.py", title="Team"),
-    st.Page("pages/5_Compare.py", title="Compare"),
-    st.Page("pages/8_Todays_Games.py", title="Today's Games"),
-    st.Page("pages/31_Schedule.py", title="Schedule"),
-    st.Page("pages/9_Standings.py", title="Standings"),
-    st.Page("pages/17_Playoffs.py", title="Playoffs"),
-    st.Page("pages/34_Other.py", title="Other"),
+    st.Page("views/12_Daily_Digest.py", title="Clubhouse Report"),
+    st.Page("views/13_Following.py", title="Following"),
+    st.Page("views/1_Batting.py", title="Batting"),
+    st.Page("views/2_Pitching.py", title="Pitching"),
+    st.Page("views/3_Fielding.py", title="Fielding"),
+    st.Page("views/6_Baserunning.py", title="Baserunning"),
+    st.Page("views/4_Team.py", title="Team"),
+    st.Page("views/5_Compare.py", title="Compare"),
+    st.Page("views/8_Todays_Games.py", title="Today's Games"),
+    st.Page("views/31_Schedule.py", title="Schedule"),
+    st.Page("views/9_Standings.py", title="Standings"),
+    st.Page("views/17_Playoffs.py", title="Playoffs"),
+    st.Page("views/34_Other.py", title="Other"),
     # Everything below is reached through the Other hub page above, not its
     # own sidebar slot — still registered here (so their URLs/page_links
     # resolve), just excluded from the main nav loop below.
-    st.Page("pages/30_League_Trends.py", title="League Trends"),
-    st.Page("pages/33_Ballparks.py", title="Ballparks"),
-    st.Page("pages/23_Umpires.py", title="Umpires"),
-    st.Page("pages/29_Around_the_League.py", title="Around the League"),
-    st.Page("pages/18_Minor_Leagues.py", title="Minor Leagues"),
-    st.Page("pages/22_Box_Score_Search.py", title="Box Score Search"),
-    st.Page("pages/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
-    st.Page("pages/26_Settings.py", title="Settings"),  # same — its own small button, not in the main nav loop
-    st.Page("pages/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
-    st.Page("pages/_Game_Detail.py", title="Game Center"),  # same — reached only via Today's Games' button
+    st.Page("views/30_League_Trends.py", title="League Trends"),
+    st.Page("views/33_Ballparks.py", title="Ballparks"),
+    st.Page("views/23_Umpires.py", title="Umpires"),
+    st.Page("views/29_Around_the_League.py", title="Around the League"),
+    st.Page("views/18_Minor_Leagues.py", title="Minor Leagues"),
+    st.Page("views/22_Box_Score_Search.py", title="Box Score Search"),
+    st.Page("views/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
+    st.Page("views/26_Settings.py", title="Settings"),  # same — its own small button, not in the main nav loop
+    st.Page("views/_Player.py", title="Player"),  # deliberately no page_link below -> not shown in nav
+    st.Page("views/_Game_Detail.py", title="Game Center"),  # same — reached only via Today's Games' button
 ]
 if SHOW_FREE_AGENCY:
-    PAGES.insert(-1, st.Page("pages/21_Free_Agency.py", title="Free Agency"))
+    PAGES.insert(-1, st.Page("views/21_Free_Agency.py", title="Free Agency"))
 
 # NHL pages live under url_paths starting with "nhl" — that prefix is how
 # the active sport is derived (from the URL, so deep links and bookmarks
@@ -641,3 +688,9 @@ settings_page = next(p_ for p_ in PAGES if p_.title == "Settings")
 st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
 
 pg.run()
+
+# One localStorage -> query-param redirect for every registered key, fired
+# once, after the routed page has rendered. See the note beside the
+# bootstrap() calls at the top for why this lives here rather than in each
+# page, and localstorage_bridge.py for why there must only ever be one.
+localstorage_bridge.redirect()

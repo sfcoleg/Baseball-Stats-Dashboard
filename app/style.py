@@ -183,7 +183,7 @@ def glossary_link():
         "</style>",
         unsafe_allow_html=True,
     )
-    st.page_link("pages/25_Glossary.py", label="ℹ️ What do these stats mean?", use_container_width=False)
+    st.page_link("views/25_Glossary.py", label="ℹ️ What do these stats mean?", use_container_width=False)
 
 
 def batting_day_stat_line(row) -> str:
