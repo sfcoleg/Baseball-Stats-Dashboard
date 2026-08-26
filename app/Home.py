@@ -210,8 +210,8 @@ pitching = db.load_pitching(season, mtime)
 
 st.divider()
 
-qualified_batters = batting[batting["PA"] >= 50].sort_values("OPS", ascending=False)
-qualified_pitchers = pitching[pitching["IP"] >= 20].sort_values("ERA", ascending=True)
+qualified_batters = batting[batting["PA"] >= db.QUALIFIED_MIN_PA].sort_values("OPS", ascending=False)
+qualified_pitchers = pitching[pitching["IP"] >= db.QUALIFIED_MIN_IP].sort_values("ERA", ascending=True)
 
 recent_batting = db.load_recent_batting(season, mtime)
 recent_pitching = db.load_recent_pitching(season, mtime)
@@ -363,7 +363,7 @@ else:
 
 st.divider()
 
-style.colored_header("Batting Leaders (min 50 PA)", "batting")
+style.colored_header(f"Batting Leaders (min {db.QUALIFIED_MIN_PA} PA)", "batting")
 st.caption(f"Top 50 of {len(qualified_batters)} qualified batters by OPS — see the Batting page for the full filterable list.")
 batting_display = teams.add_team_abbr(qualified_batters.head(50))[
     ["Name", "Age", "Tm", "G", "PA", "HR", "RBI", "SB", "BA", "OBP", "SLG", "OPS"]
@@ -380,7 +380,7 @@ st.dataframe(
     height=400,
 )
 
-style.colored_header("Pitching Leaders (min 20 IP)", "pitching")
+style.colored_header(f"Pitching Leaders (min {db.QUALIFIED_MIN_IP} IP)", "pitching")
 st.caption(f"Top 50 of {len(qualified_pitchers)} qualified pitchers by ERA — see the Pitching page for the full filterable list.")
 pitching_display = teams.add_team_abbr(qualified_pitchers.head(50))[
     ["Name", "Age", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO"]

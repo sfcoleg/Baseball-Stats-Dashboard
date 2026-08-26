@@ -28,7 +28,7 @@ with col1:
     team_options = ["All"] + sorted(pitching["Tm"].dropna().unique().tolist())
     team = st.selectbox("Team", team_options)
 with col2:
-    min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
+    min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), db.QUALIFIED_MIN_IP)
 with col3:
     sort_by = st.selectbox(
         "Sort by", ["ERA", "FIP", "xFIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "dWAR", "fWAR", "WAR", "ERA_plus"], index=0,

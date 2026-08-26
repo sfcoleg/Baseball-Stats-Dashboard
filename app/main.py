@@ -230,6 +230,17 @@ st.markdown(
     # st.container() like any other, so the bordered-container bubble rule
     # above would otherwise wrap it in a full padded card — override that
     # back to a bare, compact box that just holds the input.
+    # Sport switch: banner row, immediately left of the 200px search box.
+    ".st-key-dm_sport{position:fixed;top:0.5rem;right:226px;z-index:999996;width:auto !important;"
+    "  background:transparent !important;padding:0 !important;border:none !important;"
+    "  box-shadow:none !important;}"
+    ".st-key-dm_sport [data-testid='stElementContainer']{width:auto !important;}"
+    ".st-key-dm_sport [data-testid='stPageLink'] a{padding:4px 11px;border-radius:8px;"
+    "  background:var(--dm-surface);border:1px solid var(--dm-line);}"
+    ".st-key-dm_sport [data-testid='stPageLink'] p{font-family:'Archivo Narrow',sans-serif;"
+    "  font-weight:700;font-size:0.86rem;letter-spacing:0.5px;margin:0;white-space:nowrap;"
+    "  color:var(--dm-text);}"
+    ".st-key-dm_sport [data-testid='stPageLink'] a:hover{background:var(--dm-surface-mute);}"
     ".st-key-dm_search{position:fixed;top:0.5rem;right:14px;width:200px;z-index:999995;"
     "  background:transparent !important;padding:0 !important;border:none !important;"
     "  box-shadow:none !important;max-height:85vh;overflow-y:auto;}"
@@ -301,7 +312,7 @@ st.markdown(
     "  display:none !important;}"
     "@media (min-width:641px){[data-testid='stSidebar']{display:none !important;}"
     "  [data-testid='stSidebarCollapsedControl']{display:none !important;}}"
-    "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search,.dm-banner{display:none !important;}"
+    "@media (max-width:640px){.st-key-dm_nav,.st-key-dm_search,.st-key-dm_sport,.dm-banner{display:none !important;}"
     "  [data-testid='stMainBlockContainer']{margin:0 !important;padding-top:2.5rem !important;"
     "    border-radius:0;}}"
     # Streamlit's own header bar sits between our banner and the tab row and
@@ -705,10 +716,21 @@ with _bar:
                             st.page_link(_sub_page, label=_sub)
             continue
         st.page_link(pg_, label=pg_.title.replace("NHL ", ""))
-    # Sport switch and Settings ride at the right-hand end of the tab row.
-    other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
-    st.page_link(other_home, label="\U0001F3D2 NHL" if active_sport == "mlb" else "\u26be MLB")
+    # Settings rides at the right-hand end of the tab row. The sport switch
+    # used to sit here too, but it belongs with the site-wide furniture
+    # (brand, search) in the banner rather than in a strip of MLB pages —
+    # it isn't a page, it's a mode. Rendered below, positioned by CSS.
     st.page_link(next(p_ for p_ in PAGES if p_.title == "Settings"), label="Settings")
+
+# The sport switch lives in the BANNER (top row), left of the search box.
+# Same trick as the search: the banner is static HTML and can't host a
+# widget, so this renders as its own container that CSS positions into it.
+# Still an st.page_link rather than an <a> — a plain anchor would full-page
+# load and drop out of Streamlit's router.
+_sport_box = st.container(key="dm_sport")
+with _sport_box:
+    _other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
+    st.page_link(_other_home, label="\U0001F3D2 NHL" if active_sport == "mlb" else "\u26be MLB")
 
 # The bar can't host a widget, so search renders as its own container that CSS
 # lifts into the slot reserved at the bar's right edge.

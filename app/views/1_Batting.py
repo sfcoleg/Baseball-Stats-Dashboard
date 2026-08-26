@@ -33,7 +33,7 @@ with col1:
     team_options = ["All"] + sorted(batting["Tm"].dropna().unique().tolist())
     team = st.selectbox("Team", team_options)
 with col2:
-    min_pa = st.slider("Minimum PA", 0, int(batting["PA"].max()), 50)
+    min_pa = st.slider("Minimum PA", 0, int(batting["PA"].max()), db.QUALIFIED_MIN_PA)
 with col3:
     sort_by = st.selectbox(
         "Sort by",

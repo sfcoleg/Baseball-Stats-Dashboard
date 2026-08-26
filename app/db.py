@@ -123,6 +123,17 @@ def load_fielding(season: int, db_mtime_val: float) -> pd.DataFrame:
     return _downcast(df)
 
 
+# What counts as a "qualified" player for leaderboards, percentile pools and
+# the default filter on each stat page. 50 PA / 20 IP let part-time players
+# with tiny samples top the leaderboards on rate stats; 200 PA / 50 IP is a
+# real regular. MVP_MIN_PA below already used 200, so this brings the rest of
+# the app in line with a bar it had already settled on.
+#
+# Deliberately NOT applied to RECENT_MIN_PA/RECENT_MIN_IP just below — those
+# grade a single day/week/month, where a 200 PA floor would empty the table.
+QUALIFIED_MIN_PA = 200
+QUALIFIED_MIN_IP = 50
+
 RECENT_MIN_PA = {"day": 3, "week": 15, "month": 50}
 RECENT_MIN_IP = {"day": 1, "week": 8, "month": 20}
 
@@ -3492,8 +3503,8 @@ SIMILARITY_BATTING_STATS = [
 SIMILARITY_PITCHING_STATS = [
     "ERA", "FIP", "WHIP", "K_9", "BB_9", "ERA_plus", "xERA", "hard_hit_pct_against",
 ]
-SIMILARITY_MIN_PA = 50
-SIMILARITY_MIN_IP = 20
+SIMILARITY_MIN_PA = QUALIFIED_MIN_PA
+SIMILARITY_MIN_IP = QUALIFIED_MIN_IP
 
 
 def similar_players(mlbID: int, season: int, is_batter: bool, db_mtime_val: float, n: int = 5) -> pd.DataFrame:

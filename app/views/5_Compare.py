@@ -92,9 +92,9 @@ fielding_a = db.get_player_fielding(id_a, season, mtime)
 fielding_b = db.get_player_fielding(id_b, season, mtime)
 
 qualified_batting = db.load_batting(season, mtime)
-qualified_batting = qualified_batting[qualified_batting["PA"] >= 50]
+qualified_batting = qualified_batting[qualified_batting["PA"] >= db.QUALIFIED_MIN_PA]
 qualified_pitching = db.load_pitching(season, mtime)
-qualified_pitching = qualified_pitching[qualified_pitching["IP"] >= 20]
+qualified_pitching = qualified_pitching[qualified_pitching["IP"] >= db.QUALIFIED_MIN_IP]
 
 # Role gates — a pitcher's incidental PA shouldn't trigger batting sections
 # (mirrors _Player.py; two-way players pass both).
@@ -162,7 +162,7 @@ if batting_role_a is not None and batting_role_b is not None:
     ]
     values_a = [db.percentile_rank(qualified_batting[col], batting_role_a[col], lower) or 0 for _, col, lower in radar_fields]
     values_b = [db.percentile_rank(qualified_batting[col], batting_role_b[col], lower) or 0 for _, col, lower in radar_fields]
-    st.caption("Percentile rank (0-100) against qualified batters (min 50 PA) league-wide.")
+    st.caption(f"Percentile rank (0-100) against qualified batters (min {db.QUALIFIED_MIN_PA} PA) league-wide.")
     st.plotly_chart(
         style.radar_chart([label for label, _, _ in radar_fields], values_a, values_b,
                           name_a, name_b, color_a, color_b),
@@ -178,7 +178,7 @@ if pitching_role_a is not None and pitching_role_b is not None:
     ]
     values_a = [db.percentile_rank(qualified_pitching[col], pitching_role_a[col], lower) or 0 for _, col, lower in radar_fields]
     values_b = [db.percentile_rank(qualified_pitching[col], pitching_role_b[col], lower) or 0 for _, col, lower in radar_fields]
-    st.caption("Percentile rank (0-100) against qualified pitchers (min 20 IP) league-wide.")
+    st.caption(f"Percentile rank (0-100) against qualified pitchers (min {db.QUALIFIED_MIN_IP} IP) league-wide.")
     st.plotly_chart(
         style.radar_chart([label for label, _, _ in radar_fields], values_a, values_b,
                           name_a, name_b, color_a, color_b),

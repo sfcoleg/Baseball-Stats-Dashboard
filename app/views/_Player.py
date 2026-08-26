@@ -170,8 +170,8 @@ def _stat_table(row, spec):
 
 all_batting = db.load_batting(season, mtime)
 all_pitching = db.load_pitching(season, mtime)
-qualified_batting = all_batting[all_batting["PA"] >= 50]
-qualified_pitching = all_pitching[all_pitching["IP"] >= 20]
+qualified_batting = all_batting[all_batting["PA"] >= db.QUALIFIED_MIN_PA]
+qualified_pitching = all_pitching[all_pitching["IP"] >= db.QUALIFIED_MIN_IP]
 
 st.divider()
 
@@ -841,7 +841,7 @@ if batting is not None or pitching is not None:
     style.colored_header("League Distribution", "chart")
     if batting is not None and is_batter_role:
         dist_df = qualified_batting.dropna(subset=["OPS"])
-        fig = px.histogram(dist_df, x="OPS", nbins=40, labels={"OPS": "OPS (min 50 PA)"})
+        fig = px.histogram(dist_df, x="OPS", nbins=40, labels={"OPS": f"OPS (min {db.QUALIFIED_MIN_PA} PA)"})
         fig.add_vline(x=batting["OPS"], line_color="#3B82F6", line_width=3)
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
@@ -852,7 +852,7 @@ if batting is not None or pitching is not None:
         st.plotly_chart(fig, use_container_width=True)
     if pitching is not None and is_pitcher_role:
         dist_df = qualified_pitching.dropna(subset=["ERA"])
-        fig = px.histogram(dist_df, x="ERA", nbins=40, labels={"ERA": "ERA (min 20 IP)"})
+        fig = px.histogram(dist_df, x="ERA", nbins=40, labels={"ERA": f"ERA (min {db.QUALIFIED_MIN_IP} IP)"})
         fig.add_vline(x=pitching["ERA"], line_color="#3B82F6", line_width=3)
         fig.update_layout(
             height=320, margin=dict(l=0, r=0, t=10, b=0),
