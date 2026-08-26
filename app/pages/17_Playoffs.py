@@ -25,7 +25,15 @@ if clicked_team:
 # has since changed are dropped rather than trusted (see _pick_row).
 SHOW_BRACKET_FEATURES = True
 
-if SHOW_BRACKET_FEATURES:
+# The interactive predictor is gated separately from the bracket itself.
+# Picking series winners only means something once the field is actually
+# set — until then the seeding it's built on still moves underneath the
+# picks, so a filled-in bracket half-invalidates itself overnight (see
+# _pick_row, which drops picks whose matchup no longer exists). Flip this
+# on when the postseason field is locked.
+SHOW_BRACKET_PREDICTOR = False
+
+if SHOW_BRACKET_FEATURES and SHOW_BRACKET_PREDICTOR:
     bracket_picks.bootstrap()
 
 st.title("Playoffs")
@@ -72,14 +80,15 @@ def _render_bracket_features(standings, playoff_odds, mtime):
 
     st.divider()
 
-    style.colored_header("Predict the Bracket", "headliners")
-    st.caption(
-        "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
-        "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
-        "unlock as you fill in the ones before them."
-    )
-    _render_bracket_predictor(picture)
-    st.divider()
+    if SHOW_BRACKET_PREDICTOR:
+        style.colored_header("Predict the Bracket", "headliners")
+        st.caption(
+            "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
+            "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
+            "unlock as you fill in the ones before them."
+        )
+        _render_bracket_predictor(picture)
+        st.divider()
 
     style.colored_header("Matchup Preview", "batting")
     st.caption("Stat-driven strengths/weaknesses for any two playoff teams — offense, rotation, bullpen, and defense.")
