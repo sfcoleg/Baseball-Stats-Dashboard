@@ -15,14 +15,11 @@ import teams
 
 st.set_page_config(page_title="Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
-# Normally seeded by predictions.bootstrap() in main.py. Kept here as a
-# cheap no-op safeguard: it used to be load-bearing, back when the page
-# scripts lived in app/pages/ and every one of them had a second URL that
-# bypassed main.py (see main.py's module docstring). Nothing routes around
-# main.py now, but bootstrap() is idempotent, so this costs nothing. The actual localStorage->query-param redirect has to run from
-# HERE (not main.py) — see following.py's identical comment on this in
-# pages/13_Following.py for why.
-predictions.bootstrap()
+# NOTE: deliberately does NOT call predictions.bootstrap() — main.py already
+# does, once per rerun, and bootstrap() is NOT idempotent within a run: a
+# second call takes its early-return branch and flips _safe_to_save on
+# before localStorage has been read, so save() would then overwrite real
+# picks with the empty placeholder. See the fuller note in views/_Player.py.
 localstorage_bridge.register("predictions", predictions.STORAGE_KEY)
 
 if not db.DB_PATH.exists():

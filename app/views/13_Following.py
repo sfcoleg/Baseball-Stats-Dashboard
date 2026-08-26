@@ -29,17 +29,15 @@ season = db.get_seasons("batting")[0]
 _detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
 _THEME = prefs.resolve_theme(_detected)
 
-# Normally seeded by following.bootstrap() in main.py. Kept here as a cheap
-# no-op safeguard — see the note in views/8_Todays_Games.py for why this used
-# to be load-bearing and no longer is.
-following.bootstrap()
-# The actual localStorage->query-param redirect (not just the bootstrap()
-# read) has to run from HERE, not main.py — components.html() calls made
-# from main.py never execute their script in the browser at all; only ones
-# made from within the routed page's own script reliably do. following's
-# key is only ever registered here (main.py's own register() call for
-# "following" is now effectively unused dead weight from that same lesson,
-# but harmless to leave — it's pure Python, not a render).
+# NOTE: deliberately does NOT call following.bootstrap() — main.py already
+# does, once per rerun, and a second call in the same run flips
+# _following_safe_to_save on before localStorage has actually been read,
+# which makes save() below overwrite the visitor's real follow list with
+# the empty placeholder. See the fuller note in views/_Player.py.
+#
+# The localStorage->query-param redirect likewise fires once from main.py
+# (after pg.run()), not from here — see localstorage_bridge for why there
+# must only ever be one navigation.
 localstorage_bridge.register("following", following.STORAGE_KEY)
 followed_teams = st.session_state["followed_teams"]  # [{"abbr", "nickname"}, ...]
 followed_players = st.session_state["followed_players"]  # [{"mlbID", "name"}, ...]

@@ -28,6 +28,7 @@ Uses st.navigation()/st.Page() rather than that classic system, specifically so:
      control (an underscore-prefixed filename does NOT hide a page from
      nav there, despite old docs/folklore suggesting it does).
 """
+import json
 import sys
 from pathlib import Path
 
@@ -688,6 +689,62 @@ settings_page = next(p_ for p_ in PAGES if p_.title == "Settings")
 st.sidebar.page_link(settings_page, label="Settings", use_container_width=False)
 
 pg.run()
+
+# --- keep STREAMLIT'S OWN theme in step with the visitor's choice ---------
+# Everything above only *paints over* Streamlit's theme; it never changes it.
+# That's enough for HTML we control, but not for anything Streamlit renders
+# itself — most visibly st.dataframe, which draws to a <canvas> that no CSS
+# can reach. With Streamlit left on "System" it follows the OS, so a
+# dark-OS visitor who picked Light got light pages with dark TABLES on them.
+#
+# Streamlit persists its active theme in localStorage under
+# stActiveTheme-<path>-v2 ("Light" / "Dark" / "System"), read once per page
+# load. Writing it for every route makes Streamlit itself switch, which
+# fixes the tables at the source and makes all the CSS above belt-and-braces
+# rather than load-bearing. On "Match my device" we write "System" back, so
+# clearing the preference genuinely hands control back to the OS.
+#
+# This is Streamlit-internal storage, not a public API — if a future version
+# renames the key this silently stops working (tables would go back to
+# following the OS), so it's deliberately additive: nothing else depends on
+# it succeeding.
+_ST_THEME = {"light": "Light", "dark": "Dark"}.get(
+    prefs.theme_preference() if prefs.theme_preference() in ("light", "dark") else "", "System"
+)
+_theme_paths = ["/"] + [f"/{p.url_path}" for p in PAGES + NHL_PAGES if getattr(p, "url_path", "")]
+components.html(
+    f"""
+    <script>
+    (function() {{
+        const desired = {json.dumps(_ST_THEME)};
+        const paths = {json.dumps(sorted(set(_theme_paths)))};
+        const want = JSON.stringify(desired);
+        let currentChanged = false;
+        const here = window.parent.location.pathname;
+        paths.forEach(function(p) {{
+            const key = 'stActiveTheme-' + p + '-v2';
+            if (localStorage.getItem(key) !== want) {{
+                localStorage.setItem(key, want);
+                if (p === here) currentChanged = true;
+            }}
+        }});
+        // Streamlit only reads that key on load, so the page currently on
+        // screen is still using the old theme — reload it once. Guarded per
+        // desired theme so switching Light->Dark can reload again, but a
+        // steady state never can, which rules out a reload loop.
+        const guard = 'dm_theme_synced_' + desired;
+        if (currentChanged && !sessionStorage.getItem(guard)) {{
+            sessionStorage.setItem(guard, '1');
+            const a = window.parent.document.createElement('a');
+            a.href = window.parent.location.href;
+            window.parent.document.body.appendChild(a);
+            a.click();
+        }}
+    }})();
+    </script>
+    """,
+    height=0,
+)
 
 # One localStorage -> query-param redirect for every registered key, fired
 # once, after the routed page has rendered. See the note beside the

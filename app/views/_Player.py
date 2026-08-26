@@ -20,13 +20,17 @@ if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
     st.stop()
 
-# Normally seeded by following.bootstrap() in main.py; repeated here because
-# it has to run on EVERY rerun, not just the first — bootstrap() is what
-# flips _following_safe_to_save on after the initial render, and that's what
-# lets the Follow button below actually persist. The localStorage->query-param
-# redirect has to be fired from this page's own script rather than main.py —
-# see localstorage_bridge.
-following.bootstrap()
+# NOTE: deliberately does NOT call following.bootstrap() — main.py already
+# does, once per rerun, and calling it a second time in the same run is
+# actively destructive. Its guard is:
+#     if "followed_teams" in st.session_state:
+#         st.session_state["_following_safe_to_save"] = True; return
+# On a fresh session main.py's call seeds empty placeholder lists and sets
+# that flag FALSE (real data hasn't been read out of localStorage yet). A
+# second call sees the key it just wrote, takes the early return, and flips
+# the flag to True — so save() at the bottom of this script then writes the
+# empty placeholder over the visitor's actual follow list. That is exactly
+# the clobber the flag exists to prevent.
 localstorage_bridge.register("following", following.STORAGE_KEY)
 
 # Hydrates a shared link (?mlbid=...&season=...) into session_state — the
