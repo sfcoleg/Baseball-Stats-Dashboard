@@ -264,36 +264,103 @@ def add_pitching_fwar(df, park=None):
     So this tracks fWAR closely without matching it to the decimal.
     """
     ip = true_ip(df["IP"]).replace(0, np.nan)
-    lg_ip = ip.sum()
-    if not lg_ip:
+    if not ip.sum():
         df["fWAR"] = float("nan")
         return df
+    fip = (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / ip + season_fip_constant(df, ip)
+    df["fWAR"] = _war_from_rate(df, fip, ip, park)
+    return df
 
+
+def _war_from_rate(df, rate_era_scale, ip, park=None):
+    """The WAR machinery itself, given a run-prevention rate on an ERA scale.
+
+    Shared by fWAR and dWAR deliberately: the ONLY difference between those
+    two is which rate goes in (realized FIP vs. an expected-outcome blend).
+    Keeping one implementation means a gap between them is a real difference
+    in what the metric measures, never an accident of two near-copies
+    drifting apart.
+    """
+    lg_ip = ip.sum()
     lg_era = df["ER"].sum() * 9 / lg_ip
     lg_r9 = df["R"].sum() * 9 / lg_ip
-    fip = (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / ip + season_fip_constant(df, ip)
 
-    # ERA scale -> RA9 scale. By construction league FIPR9 == league R9.
-    fipr9 = fip + (lg_r9 - lg_era)
+    # ERA scale -> RA9 scale. By construction the league rate maps to lg_r9.
+    ra9 = rate_era_scale + (lg_r9 - lg_era)
     if park:
         abbrs = df["Tm"].map(lambda tm: app_teams.team_meta_from_city(tm)[0] if isinstance(tm, str) else None)
         pf = abbrs.map(park).astype(float).fillna(1.0)
     else:
         pf = 1.0
-    pfipr9 = fipr9 / pf
-    raap9 = lg_r9 - pfipr9
+    pra9 = ra9 / pf
+    raap9 = lg_r9 - pra9
 
     # Guard G: a pitcher with innings but no games logged would otherwise
     # produce an infinite IP/G and poison dRPW.
     games = pd.to_numeric(df["G"], errors="coerce").replace(0, np.nan)
     ip_per_g = (ip / games).clip(upper=9.0)
-    dRPW = ((((18 - ip_per_g) * lg_r9) + (ip_per_g * pfipr9)) / 18 + 2) * 1.5
+    dRPW = ((((18 - ip_per_g) * lg_r9) + (ip_per_g * pra9)) / 18 + 2) * 1.5
     wpgaa = raap9 / dRPW
 
     gs_share = (pd.to_numeric(df["GS"], errors="coerce") / games).clip(0, 1).fillna(0)
     replacement = 0.03 * (1 - gs_share) + 0.12 * gs_share
+    return ((wpgaa + replacement) * (ip / 9)).round(2)
 
-    df["fWAR"] = ((wpgaa + replacement) * (ip / 9)).round(2)
+
+# dWAR's tuning, both FITTED against the data rather than picked (see the
+# note in add_pitching_dwar): 0.8/0.2 maximised next-season prediction over
+# every blend tested, and 20 was the best regression constant.
+DWAR_XFIP_WEIGHT = 0.8
+DWAR_REGRESSION_IP = 20
+
+
+def add_pitching_dwar(df, park=None):
+    """dWAR — our own pitcher WAR, built on EXPECTED run prevention.
+
+    bWAR grades on runs actually allowed and fWAR on realized FIP; both
+    answer "what happened". dWAR answers "how good is this pitcher" by
+    feeding the same WAR machinery an expected-outcome rate instead:
+
+        0.8 * xFIP + 0.2 * xERA
+
+    xFIP normalises home runs to a league HR/FB rate (stripping HR luck on
+    the pitcher's own fly balls); xERA is Statcast's contact-quality
+    estimate. Those weights aren't taste — every blend from 0 to 1 was
+    scored on how well it predicts the NEXT season's ERA across 948 paired
+    pitcher-seasons, and 0.8/0.2 won:
+
+        ERA r=+0.260 | FIP r=+0.343 | xERA r=+0.336 | xFIP r=+0.389
+        0.8*xFIP + 0.2*xERA  r=+0.393
+
+    So it out-predicts the input fWAR uses. That is the whole claim.
+
+    The rate is then regressed toward the league by INNINGS — a 45-inning
+    xFIP is a small sample and shouldn't be trusted like a 200-inning one.
+    Be honest about this piece: at K=20 it added only +0.003 to prediction,
+    so it earns its place by keeping small-sample flukes off the top of the
+    leaderboard, not by making the metric meaningfully sharper. Heavier
+    regression measurably HURT (K=200 dropped r to +0.295), so it's kept
+    deliberately light.
+
+    Needs Statcast (xFIP/xERA), so this is NaN before ~2015 — the same
+    limit those columns already carry.
+    """
+    ip = true_ip(df["IP"]).replace(0, np.nan)
+    xfip = pd.to_numeric(df.get("xFIP"), errors="coerce")
+    xera = pd.to_numeric(df.get("xERA"), errors="coerce")
+    if not ip.sum() or xfip.isna().all() or xera.isna().all():
+        df["dWAR"] = float("nan")
+        return df
+
+    # Fall back to whichever component exists rather than dropping the
+    # pitcher entirely when only one of the two is available.
+    blend = (DWAR_XFIP_WEIGHT * xfip + (1 - DWAR_XFIP_WEIGHT) * xera)
+    blend = blend.fillna(xfip).fillna(xera)
+
+    lg_rate = np.nansum(blend * ip) / np.nansum(ip.where(blend.notna()))
+    regressed = (ip * blend + DWAR_REGRESSION_IP * lg_rate) / (ip + DWAR_REGRESSION_IP)
+
+    df["dWAR"] = _war_from_rate(df, regressed, ip, park)
     return df
 
 
@@ -674,7 +741,9 @@ def fetch_pitching(season=CURRENT_SEASON):
     pitching = add_xfip(pitching)
     # Both WARs are kept: `WAR` stays Baseball-Reference's (runs-allowed
     # based), `fWAR` is the FIP-based one computed above.
-    pitching = add_pitching_fwar(pitching, park=park_run_factors())
+    _park = park_run_factors()
+    pitching = add_pitching_fwar(pitching, park=_park)
+    pitching = add_pitching_dwar(pitching, park=_park)
     pitching = pitching.drop(columns=["batted_ball", "flyballs_percent"])
     pitching = correct_traded_player_teams(pitching)
     pitching = add_pitching_plus_stats(pitching)

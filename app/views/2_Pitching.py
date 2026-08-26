@@ -31,7 +31,7 @@ with col2:
     min_ip = st.slider("Minimum IP", 0, int(pitching["IP"].max()), 20)
 with col3:
     sort_by = st.selectbox(
-        "Sort by", ["ERA", "FIP", "xFIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "fWAR", "WAR", "ERA_plus"], index=0,
+        "Sort by", ["ERA", "FIP", "xFIP", "xERA", "WHIP", "SO", "W", "SV", "IP", "K_9", "dWAR", "fWAR", "WAR", "ERA_plus"], index=0,
         format_func=lambda s: db.STAT_DISPLAY_LABELS.get(s, s),
     )
 
@@ -154,17 +154,17 @@ with advanced1_tab:
     # Run-prevention value: the rate/value stats a pitcher's overall
     # effectiveness boils down to.
     display = teams.add_team_abbr(adv_rows)[
-        ["Name", "Age", "Tm", "IP", "FIP", "xFIP", "ERA_plus", "fWAR", "WAR", "PROP+"]
+        ["Name", "Age", "Tm", "IP", "FIP", "xFIP", "ERA_plus", "dWAR", "fWAR", "WAR", "PROP+"]
     ].rename(columns={"ERA_plus": "ERA+", "WAR": "bWAR"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["fWAR", "bWAR", "ERA+", "PROP+"],
+            higher_better=["dWAR", "fWAR", "bWAR", "ERA+", "PROP+"],
             lower_better=["FIP", "xFIP"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "FIP": "{:.2f}", "xFIP": "{:.2f}", "fWAR": "{:.1f}", "bWAR": "{:.1f}",
+                "FIP": "{:.2f}", "xFIP": "{:.2f}", "dWAR": "{:.1f}", "fWAR": "{:.1f}", "bWAR": "{:.1f}",
                 "ERA+": "{:.0f}", "PROP+": "{:.0f}",
             },
         ),

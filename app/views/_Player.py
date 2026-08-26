@@ -475,7 +475,7 @@ if pitching is not None and is_pitcher_role:
             ("FIP", "FIP"), ("xFIP", "xFIP"), ("xERA", "xERA"),
             ("K_9", "K/9"), ("BB_9", "BB/9"), ("K_BB", "K/BB"),
             ("BAbip", "BABIP"), ("GB_FB", "GB/FB"),
-            ("ERA_plus", "ERA+"), ("fWAR", "fWAR"), ("WAR", "bWAR"),
+            ("ERA_plus", "ERA+"), ("dWAR", "dWAR"), ("fWAR", "fWAR"), ("WAR", "bWAR"),
         ])
     with sc_tab:
         _stat_table(pitching, [
