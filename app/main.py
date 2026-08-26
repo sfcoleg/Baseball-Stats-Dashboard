@@ -207,6 +207,25 @@ st.markdown(
     "  font-weight:600;font-size:0.92rem;letter-spacing:0.4px;text-transform:uppercase;"
     "  color:var(--dm-dim);margin:0;white-space:nowrap;}"
     ".st-key-dm_nav [data-testid='stPageLink'] a:hover p{color:var(--dm-text);}"
+    # --- the Other tab's hover menu ----------------------------------------
+    # The bar scrolls horizontally (overflow-x:auto), and an overflow that
+    # isn't `visible` on one axis forces the other axis to clip too — so an
+    # absolutely-positioned dropdown would be cut off at the bar's bottom
+    # edge. :has() lets the bar drop its clipping ONLY while Other is
+    # hovered, keeping the scrollability the rest of the time.
+    ".st-key-dm_nav:has(.st-key-dm_nav_other:hover){overflow:visible;}"
+    ".st-key-dm_nav_other{position:relative;flex:0 0 auto;width:auto !important;}"
+    ".st-key-dm_nav_other_menu{display:none;position:absolute;top:100%;left:0;"
+    "  z-index:999999;background:var(--dm-surface);border:1px solid var(--dm-line);"
+    "  border-radius:10px;padding:6px;min-width:200px;gap:0 !important;"
+    f"  box-shadow:0 6px 18px rgba(12,23,37,{'0.45' if _theme_type == 'dark' else '0.16'});}}"
+    ".st-key-dm_nav_other:hover .st-key-dm_nav_other_menu{display:flex;flex-direction:column;}"
+    ".st-key-dm_nav_other_menu [data-testid='stElementContainer']{width:100% !important;}"
+    ".st-key-dm_nav_other_menu [data-testid='stPageLink'] a{padding:6px 10px;width:100%;}"
+    ".st-key-dm_nav_other_menu [data-testid='stPageLink'] p{white-space:nowrap;"
+    "  text-transform:none;font-size:0.86rem;letter-spacing:0.2px;}"
+    ".st-key-dm_nav_other_menu [data-testid='stPageLink'] a:hover{"
+    "  background:var(--dm-surface-mute);}"
     # Search sits permanently in the banner's right end. It's a
     # st.container() like any other, so the bordered-container bubble rule
     # above would otherwise wrap it in a full padded card — override that
@@ -583,7 +602,9 @@ PAGES = [
     st.Page("views/30_League_Trends.py", title="League Trends"),
     st.Page("views/33_Ballparks.py", title="Ballparks"),
     st.Page("views/23_Umpires.py", title="Umpires"),
-    st.Page("views/29_Around_the_League.py", title="Around the League"),
+    st.Page("views/27_Injury_Report.py", title="Injury Report"),
+    st.Page("views/28_Transactions.py", title="Transactions"),
+    st.Page("views/29_Awards_Race.py", title="Awards Race"),
     st.Page("views/18_Minor_Leagues.py", title="Minor Leagues"),
     st.Page("views/22_Box_Score_Search.py", title="Box Score Search"),
     st.Page("views/25_Glossary.py", title="Glossary"),  # linked separately below, not in the main nav loop
@@ -623,7 +644,8 @@ active_sport = "nhl" if (pg.url_path or "").startswith("nhl") else "mlb"
 
 _MLB_NAV_HIDDEN = (
     "Player", "Game Center", "Glossary", "Settings",
-    "League Trends", "Ballparks", "Umpires", "Around the League", "Minor Leagues",
+    "League Trends", "Ballparks", "Umpires", "Injury Report", "Transactions",
+    "Awards Race", "Minor Leagues",
     "Box Score Search", "Free Agency",
 )
 # Daily Digest stays registered (so /nhl-digest resolves for previews) but off
@@ -657,9 +679,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# The pages the Other hub collects. Kept in one place so the hover menu in
+# the tab bar and the hub page itself can never drift apart.
+OTHER_SUBPAGE_TITLES = [
+    "League Trends", "Ballparks", "Umpires", "Injury Report", "Transactions",
+    "Awards Race", "Minor Leagues", "Box Score Search",
+] + (["Free Agency"] if SHOW_FREE_AGENCY else [])
+
 _bar = st.container(key="dm_nav")
 with _bar:
     for pg_ in _nav_pages:
+        if pg_.title == "Other" and active_sport == "mlb":
+            # Other gets a hover menu listing what's inside it, so those
+            # pages are one click away instead of two. The submenu is a
+            # nested container purely so ONE CSS rule can show/hide the
+            # whole group; each entry is still a real st.page_link, which
+            # routes through Streamlit rather than doing a full page load
+            # (see the note above about plain <a> tags).
+            with st.container(key="dm_nav_other"):
+                st.page_link(pg_, label=pg_.title)
+                with st.container(key="dm_nav_other_menu"):
+                    for _sub in OTHER_SUBPAGE_TITLES:
+                        _sub_page = next((p2 for p2 in PAGES if p2.title == _sub), None)
+                        if _sub_page is not None:
+                            st.page_link(_sub_page, label=_sub)
+            continue
         st.page_link(pg_, label=pg_.title.replace("NHL ", ""))
     # Sport switch and Settings ride at the right-hand end of the tab row.
     other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]

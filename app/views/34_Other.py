@@ -1,5 +1,6 @@
 """Other — a hub for the lower-traffic pages (League Trends, Ballparks,
-Umpires, Around the League, Minor Leagues, Box Score Search), which used
+Umpires, Injury Report, Transactions, Awards Race, Minor Leagues, Box
+Score Search), which used
 to each get their own sidebar entry. Consolidated into one link so the
 sidebar itself stays short — the pages themselves are untouched, this is
 just a single tap away from each instead of six competing for space."""
@@ -18,7 +19,9 @@ SECTIONS = [
     ("views/30_League_Trends.py", "League Trends"),
     ("views/33_Ballparks.py", "Ballparks"),
     ("views/23_Umpires.py", "Umpires"),
-    ("views/29_Around_the_League.py", "Around the League"),
+    ("views/27_Injury_Report.py", "Injury Report"),
+    ("views/28_Transactions.py", "Transactions"),
+    ("views/29_Awards_Race.py", "Awards Race"),
     ("views/18_Minor_Leagues.py", "Minor Leagues"),
     ("views/22_Box_Score_Search.py", "Box Score Search"),
 ]
