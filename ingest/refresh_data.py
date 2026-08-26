@@ -195,7 +195,45 @@ def add_xfip(df):
     return df
 
 
-def add_pitching_fwar(df):
+def park_run_factors():
+    """Runs-per-game park factors from our own game log (the park_games
+    table), indexed to 1.0 = neutral, keyed by team abbreviation.
+
+    Same home-vs-road-for-the-same-team construction park_factors() uses in
+    the app, and pooled across every season in the table rather than one —
+    a single year of ~81 home games is far too noisy to adjust WAR with.
+
+    HALF-WEIGHTED on purpose: a pitcher throws only about half his innings
+    in his own park, so a park that inflates runs 10% inflates HIS line by
+    roughly 5%. Applying the raw factor would double-count the effect.
+
+    Returns {} if the table isn't there, which makes the caller fall back to
+    neutral rather than fail.
+    """
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            games = pd.read_sql("SELECT home_team, away_team, home_final, away_final FROM park_games", conn)
+        finally:
+            conn.close()
+    except Exception:
+        return {}
+    if games.empty:
+        return {}
+    games = games.assign(total=games["home_final"] + games["away_final"])
+    factors = {}
+    for team in games["home_team"].dropna().unique():
+        home = games[games["home_team"] == team]["total"]
+        road = games[games["away_team"] == team]["total"]
+        # Same 50-game floor the app's version uses.
+        if len(home) < 50 or len(road) < 50 or not road.mean():
+            continue
+        raw = home.mean() / road.mean()
+        factors[team] = 1 + (raw - 1) / 2
+    return factors
+
+
+def add_pitching_fwar(df, park=None):
     """FanGraphs' pitcher WAR, following their published methodology step
     for step. The point of fWAR for pitchers (vs. bWAR) is that it grades
     on FIP — strikeouts, walks, home runs — rather than on runs actually
@@ -218,13 +256,12 @@ def add_pitching_fwar(df):
       7. Scale by innings.
 
     Two deliberate deviations, both documented rather than hidden:
-      - PARK FACTORS default to neutral. FanGraphs uses a five-year
-        regressed factor; the single-season one this app computes is noisy
-        enough that applying it would add more error than it removes.
+      - PARK FACTORS are our own (see park_run_factors), pooled over every
+        season of our game log and half-weighted, rather than FanGraphs'
+        five-year regressed figure. Same idea, different arithmetic.
       - No final league-adjustment constant (FanGraphs nudges the totals so
         league-wide WAR ties to a target split with position players).
-    Both shift results slightly, so this will track fWAR closely without
-    matching it to the decimal.
+    So this tracks fWAR closely without matching it to the decimal.
     """
     ip = true_ip(df["IP"]).replace(0, np.nan)
     lg_ip = ip.sum()
@@ -238,8 +275,12 @@ def add_pitching_fwar(df):
 
     # ERA scale -> RA9 scale. By construction league FIPR9 == league R9.
     fipr9 = fip + (lg_r9 - lg_era)
-    park = 1.0  # see docstring
-    pfipr9 = fipr9 / park
+    if park:
+        abbrs = df["Tm"].map(lambda tm: app_teams.team_meta_from_city(tm)[0] if isinstance(tm, str) else None)
+        pf = abbrs.map(park).astype(float).fillna(1.0)
+    else:
+        pf = 1.0
+    pfipr9 = fipr9 / pf
     raap9 = lg_r9 - pfipr9
 
     # Guard G: a pitcher with innings but no games logged would otherwise
@@ -633,7 +674,7 @@ def fetch_pitching(season=CURRENT_SEASON):
     pitching = add_xfip(pitching)
     # Both WARs are kept: `WAR` stays Baseball-Reference's (runs-allowed
     # based), `fWAR` is the FIP-based one computed above.
-    pitching = add_pitching_fwar(pitching)
+    pitching = add_pitching_fwar(pitching, park=park_run_factors())
     pitching = pitching.drop(columns=["batted_ball", "flyballs_percent"])
     pitching = correct_traded_player_teams(pitching)
     pitching = add_pitching_plus_stats(pitching)
