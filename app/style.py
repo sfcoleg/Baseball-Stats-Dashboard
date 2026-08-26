@@ -1103,18 +1103,36 @@ def style_comparison(df, higher_better=None, lower_better=None):
     Highlights whichever cell in each row is the better value."""
     higher_better = set(higher_better or [])
     lower_better = set(lower_better or [])
-    win_style = "background-color: var(--dm-green-soft); color: var(--dm-green); font-weight: 700"
+
+    # LITERAL colours, not var(--dm-*). st.dataframe renders to a <canvas>,
+    # where CSS custom properties don't resolve at all — the winning cell was
+    # asking for a variable the canvas can't see, so it fell through to
+    # Streamlit's own (OS-driven) theme and came out dark instead of green.
+    # Same reason style_stats_table sets literals.
+    #
+    # The loser cell can't be left blank for the same reason: an unstyled
+    # cell inherits Streamlit's theme, which on a dark OS with the app set to
+    # Light is near-white text on a white grid.
+    theme_type = _session_theme()
+    if theme_type == "dark":
+        base_bg, base_text = "#1E2735", "#EFF3F9"
+        win_bg, win_text = "#1B4D2B", "#8FE3A4"      # deep green, light text
+    else:
+        base_bg, base_text = "#FBFCFE", "#0C1725"
+        win_bg, win_text = "#DCF3E1", "#1B5E20"      # pale green, dark text
+    plain = f"background-color: {base_bg}; color: {base_text}"
+    win_style = f"background-color: {win_bg}; color: {win_text}; font-weight: 700"
 
     def highlight_row(row):
         stat = row.name
         vals = row.values
-        blank = ["", ""]
+        blank = [plain, plain]
         if stat not in higher_better and stat not in lower_better:
             return blank
         if pd.isna(vals[0]) or pd.isna(vals[1]) or vals[0] == vals[1]:
             return blank
         better_is_first = vals[0] > vals[1] if stat in higher_better else vals[0] < vals[1]
-        return [win_style, ""] if better_is_first else ["", win_style]
+        return [win_style, plain] if better_is_first else [plain, win_style]
 
     return df.style.apply(highlight_row, axis=1).format(_fmt_compare_value, na_rep="—")
 
