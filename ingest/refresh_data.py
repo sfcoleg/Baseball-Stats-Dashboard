@@ -19,6 +19,7 @@ import sys
 from datetime import date, timedelta
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import requests
 from pybaseball import (
@@ -109,15 +110,61 @@ def add_batting_sabermetrics(df):
     return df
 
 
+# Fallback only — used when a season's own field can't produce a constant
+# (no innings at all). The real constant is derived per season; see
+# season_fip_constant.
 FIP_CONSTANT = 3.10
 
 
+def season_fip_constant(df, ip):
+    """FIP's additive constant for THIS season's field, defined the standard
+    way: the value that makes league FIP equal league ERA. FanGraphs
+    publishes one of these per season for exactly this reason — a fixed
+    3.10 silently mis-scales FIP in any run environment that isn't the one
+    it came from."""
+    lg_ip = ip.sum()
+    if not lg_ip:
+        return FIP_CONSTANT
+    lg_era = df["ER"].sum() * 9 / lg_ip
+    return lg_era - (
+        (13 * df["HR"].sum() + 3 * (df["BB"].sum() + df["HBP"].sum()) - 2 * df["SO"].sum()) / lg_ip
+    )
+
+
+def true_ip(ip):
+    """Baseball-Reference reports innings in BASEBALL notation, where the
+    digit after the decimal point is OUTS, not a fraction: "223.2" means
+    223 and 2/3 innings, not 223.2. Confirmed against the raw feed — the
+    only fractional digits that ever appear are .0/.1/.2.
+
+    Every per-inning rate has to divide by the real inning count. Using the
+    printed number instead understates workload by up to a third of an
+    inning, which systematically inflates K/9, BB/9 and FIP (a smaller
+    denominator on the same counting stats). Small on a 200-inning starter,
+    ~1% on a 40-inning reliever, and it compounds straight into WAR.
+
+    The stored IP column deliberately keeps the printed form — "85.2" is
+    what a box score shows and what people expect to read — so this
+    conversion is applied at the point of calculation, not to the column."""
+    ip = pd.to_numeric(ip, errors="coerce")
+    whole = np.floor(ip)
+    outs = ((ip - whole) * 10).round()
+    return whole + outs / 3
+
+
 def add_pitching_sabermetrics(df):
-    df["K_9"] = (df["SO"] * 9 / df["IP"]).round(2)
-    df["BB_9"] = (df["BB"] * 9 / df["IP"]).round(2)
+    ip = true_ip(df["IP"]).replace(0, np.nan)
+    df["K_9"] = (df["SO"] * 9 / ip).round(2)
+    df["BB_9"] = (df["BB"] * 9 / ip).round(2)
     df["K_BB"] = (df["SO"] / df["BB"].replace(0, float("nan"))).round(2)
+    # FIP's constant is not a universal 3.10 — it's defined per season so
+    # that league FIP comes out equal to league ERA. Deriving it from this
+    # season's own field (the same way OPS+/wRC+ are derived here) keeps FIP
+    # anchored to the run environment it's describing instead of drifting
+    # against a hardcoded number from some other era.
+    fip_constant = season_fip_constant(df, ip)
     df["FIP"] = (
-        (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / df["IP"] + FIP_CONSTANT
+        (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / ip + fip_constant
     ).round(2)
     return df
 
@@ -132,6 +179,7 @@ def add_xfip(df):
     Statcast's batted-ball-profile leaderboard instead (see fetch_pitching):
     `batted_ball` is the batted-ball-event count, `flyballs_percent` the
     share of those that were fly balls."""
+    _ip = true_ip(df["IP"]).replace(0, np.nan)
     fb = df["batted_ball"] * df["flyballs_percent"] / 100
     fb_total = fb.sum()
     if not fb_total:
@@ -142,8 +190,69 @@ def add_xfip(df):
         return df
     lg_hr_fb = df["HR"].sum() / fb_total
     df["xFIP"] = (
-        (13 * fb * lg_hr_fb + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / df["IP"] + FIP_CONSTANT
+        (13 * fb * lg_hr_fb + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / _ip + season_fip_constant(df, _ip)
     ).round(2)
+    return df
+
+
+def add_pitching_fwar(df):
+    """FanGraphs' pitcher WAR, following their published methodology step
+    for step. The point of fWAR for pitchers (vs. bWAR) is that it grades
+    on FIP — strikeouts, walks, home runs — rather than on runs actually
+    allowed, so a pitcher isn't credited or blamed for the defense behind
+    him or for sequencing luck.
+
+    The steps, in FanGraphs' order:
+      1. FIP, using this season's own derived constant.
+      2. Put it on a RUNS-allowed scale (WAR is denominated in runs, but
+         FIP is scaled to ERA, i.e. EARNED runs): add the league's gap
+         between R/9 and ER/9.
+      3. Park-adjust.
+      4. Runs above average per 9 = league FIPR9 - this pitcher's.
+      5. A DYNAMIC runs-per-win: the run environment a pitcher creates is
+         partly his own, so a dominant arm converts runs to wins at a
+         different rate than a replacement one. This is the piece that
+         separates the real formula from a back-of-envelope version.
+      6. Replacement level, weighted by how much of his work was starting
+         (.12 wins/game for starters, .03 for relievers).
+      7. Scale by innings.
+
+    Two deliberate deviations, both documented rather than hidden:
+      - PARK FACTORS default to neutral. FanGraphs uses a five-year
+        regressed factor; the single-season one this app computes is noisy
+        enough that applying it would add more error than it removes.
+      - No final league-adjustment constant (FanGraphs nudges the totals so
+        league-wide WAR ties to a target split with position players).
+    Both shift results slightly, so this will track fWAR closely without
+    matching it to the decimal.
+    """
+    ip = true_ip(df["IP"]).replace(0, np.nan)
+    lg_ip = ip.sum()
+    if not lg_ip:
+        df["fWAR"] = float("nan")
+        return df
+
+    lg_era = df["ER"].sum() * 9 / lg_ip
+    lg_r9 = df["R"].sum() * 9 / lg_ip
+    fip = (13 * df["HR"] + 3 * (df["BB"] + df["HBP"]) - 2 * df["SO"]) / ip + season_fip_constant(df, ip)
+
+    # ERA scale -> RA9 scale. By construction league FIPR9 == league R9.
+    fipr9 = fip + (lg_r9 - lg_era)
+    park = 1.0  # see docstring
+    pfipr9 = fipr9 / park
+    raap9 = lg_r9 - pfipr9
+
+    # Guard G: a pitcher with innings but no games logged would otherwise
+    # produce an infinite IP/G and poison dRPW.
+    games = pd.to_numeric(df["G"], errors="coerce").replace(0, np.nan)
+    ip_per_g = (ip / games).clip(upper=9.0)
+    dRPW = ((((18 - ip_per_g) * lg_r9) + (ip_per_g * pfipr9)) / 18 + 2) * 1.5
+    wpgaa = raap9 / dRPW
+
+    gs_share = (pd.to_numeric(df["GS"], errors="coerce") / games).clip(0, 1).fillna(0)
+    replacement = 0.03 * (1 - gs_share) + 0.12 * gs_share
+
+    df["fWAR"] = ((wpgaa + replacement) * (ip / 9)).round(2)
     return df
 
 
@@ -522,6 +631,9 @@ def fetch_pitching(season=CURRENT_SEASON):
                 pitching[col] = pd.to_numeric(pitching[col], errors="coerce")
 
     pitching = add_xfip(pitching)
+    # Both WARs are kept: `WAR` stays Baseball-Reference's (runs-allowed
+    # based), `fWAR` is the FIP-based one computed above.
+    pitching = add_pitching_fwar(pitching)
     pitching = pitching.drop(columns=["batted_ball", "flyballs_percent"])
     pitching = correct_traded_player_teams(pitching)
     pitching = add_pitching_plus_stats(pitching)

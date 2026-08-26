@@ -79,7 +79,7 @@ BATTING_COLS = [
 PITCHING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP",
     "SO", "BB", "HR", "mlbID", "K_9", "BB_9", "K_BB", "FIP", "xFIP", "xERA", "BAbip", "GB_FB",
-    "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR",
+    "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR", "fWAR",
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
     "fastball_velo_pctile", "fastball_velo", "induced_chase_pctile", "induced_chase_pct", "season",
 ]
@@ -3354,6 +3354,7 @@ STAT_DISPLAY_LABELS = {
     "induced_chase_pct": "Induced Chase%", "induced_chase_pctile": "Induced Chase Pctile",
     "xBA_against": "xBA Against", "xSLG_against": "xSLG Against", "xwOBA_against": "xwOBA Against",
     "HVS": "HVS (Hitting Value Score)",
+    "WAR": "bWAR", "fWAR": "fWAR",
 }
 
 
