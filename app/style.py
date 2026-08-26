@@ -956,6 +956,18 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     # global.
     theme_type = _session_theme()
     grad_low, grad_high = _resolve_table_gradient(theme_type)
+    # A BASE colour on every cell, before anything else layers on top.
+    # st.dataframe renders to a <canvas>, so no CSS can reach it — whatever
+    # the Styler doesn't set explicitly falls back to STREAMLIT's own theme,
+    # and Streamlit's theme follows the OS rather than our Light/Dark
+    # setting. On a dark-OS machine with the app set to Light that left
+    # plain cells (Name, Age, any column with no gradient) as near-white
+    # text on a white grid — invisible. The gradient and the team badge
+    # below deliberately overwrite this for their own cells.
+    base_bg = "#1E2735" if theme_type == "dark" else "#FBFCFE"
+    base_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
+    styler = styler.map(lambda _v: f"background-color: {base_bg}; color: {base_text}")
+
     # background_gradient renders a NaN cell solid BLACK (matplotlib's
     # default "bad" color) with near-white text on top — worse than any
     # real value's color, and the single biggest source of "the table is
