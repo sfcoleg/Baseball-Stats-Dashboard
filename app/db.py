@@ -3563,7 +3563,8 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
         return pd.DataFrame()
 
     two_way_ids = set(bat["mlbID"]) & set(pit["mlbID"])
-    pit_war_by_id = pit.set_index("mlbID")["WAR"]
+    pit["_pwar"] = pitcher_war(pit)
+    pit_war_by_id = pit.set_index("mlbID")["_pwar"]
     if not bat.empty:
         bat["WAR"] = bat.apply(
             lambda r: r["WAR"] + pit_war_by_id.get(r["mlbID"], 0.0) if r["mlbID"] in two_way_ids else r["WAR"],
@@ -3572,7 +3573,7 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
         bat["Role"] = bat["mlbID"].apply(lambda i: "Two-Way" if i in two_way_ids else "Batter")
     pure_pit = pit[~pit["mlbID"].isin(two_way_ids)].copy()
 
-    combined_war = pd.concat([bat["WAR"], pure_pit["WAR"]], ignore_index=True).fillna(0.0)
+    combined_war = pd.concat([bat["WAR"], pure_pit["_pwar"]], ignore_index=True).fillna(0.0)
     war_mean, war_std = combined_war.mean(), combined_war.std()
 
     def _war_z(series: pd.Series) -> pd.Series:
@@ -3601,12 +3602,30 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
         pure_pit["wRC_plus"] = float("nan")
         pure_pit["baserunning_runs"] = float("nan")
         pure_pit["OAA"] = float("nan")
-        pure_pit["MVP Score"] = PITCHER_MVP_DISCOUNT * _war_z(pure_pit["WAR"])
+        pure_pit["MVP Score"] = PITCHER_MVP_DISCOUNT * _war_z(pure_pit["_pwar"])
         pure_pit["Role"] = "Pitcher"
         rows.append(pure_pit)
 
     combined = pd.concat(rows, ignore_index=True, sort=False)
     return combined.sort_values("MVP Score", ascending=False).reset_index(drop=True)
+
+
+def pitcher_war(pit: pd.DataFrame) -> pd.Series:
+    """The pitcher WAR the awards races grade on: dWAR where we have it,
+    falling back per-row to fWAR then bWAR.
+
+    dWAR is the sharpest of the three at describing a pitcher's actual
+    quality (it out-predicted both in a next-season test), so it leads. But
+    it needs Statcast and is therefore NULL before ~2015, and a straight
+    swap would have silently zeroed out every pitcher in those seasons and
+    handed the award to whoever happened to have the best rate stats. The
+    fallback is per-ROW rather than per-season so a modern pitcher missing
+    a Statcast match doesn't drop out either."""
+    war = pd.to_numeric(pit.get("dWAR"), errors="coerce")
+    for backup in ("fWAR", "WAR"):
+        if backup in pit.columns:
+            war = war.fillna(pd.to_numeric(pit[backup], errors="coerce"))
+    return war
 
 
 CY_YOUNG_RELIABILITY_IP = 100  # innings at which FIP/ERA+ get roughly half their full weight
@@ -3642,7 +3661,7 @@ def cy_young_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame
     reliability = pit["IP"] / (pit["IP"] + CY_YOUNG_RELIABILITY_IP)
 
     pit["Cy Young Score"] = (
-        0.50 * _zscore(pit["WAR"].fillna(0.0))
+        0.50 * _zscore(pitcher_war(pit).fillna(0.0))
         + 0.30 * _zscore(-fip_filled) * reliability
         + 0.20 * _zscore(era_plus_filled) * reliability
     )
