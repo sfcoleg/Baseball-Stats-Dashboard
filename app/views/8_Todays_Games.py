@@ -27,7 +27,7 @@ if not db.DB_PATH.exists():
     st.stop()
 
 mtime = db.db_mtime()
-games = db.load_todays_games(mtime)
+games = db.load_todays_games(mtime, db.today_pacific().isoformat())
 
 if games.empty:
     st.info("No games scheduled for today.")

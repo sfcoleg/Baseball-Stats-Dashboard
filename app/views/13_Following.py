@@ -106,7 +106,7 @@ style.colored_header("Today's Games", "batting")
 if not followed_teams:
     st.caption("Follow a team to see their games here.")
 else:
-    games = db.load_todays_games(mtime)
+    games = db.load_todays_games(mtime, db.today_pacific().isoformat())
     followed_abbrs = {t["abbr"] for t in followed_teams}
     my_games = games[
         games["away_abbr"].apply(teams.normalize_mlb_abbr).isin(followed_abbrs)

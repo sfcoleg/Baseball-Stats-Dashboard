@@ -35,7 +35,7 @@ def _favor_line(favor_home: int, away_abbr: str, home_abbr: str) -> str:
 
 
 # --- Live: whoever is behind the plate right now ---------------------------
-todays_games = db.load_todays_games(mtime)
+todays_games = db.load_todays_games(mtime, db.today_pacific().isoformat())
 live_scores = db.load_live_scores(today)
 in_progress = [pk for pk, g in live_scores.items() if g.get("status") == "In Progress"]
 matchup_by_pk = (

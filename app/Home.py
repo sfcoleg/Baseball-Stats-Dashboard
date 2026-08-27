@@ -54,7 +54,7 @@ def _todays_games_strip():
     without leaving Home, full detail (odds, box scores) stays on the
     Today's Games page. Reuses the same todays_games/live_scores data that
     page already fetches."""
-    games = db.load_todays_games(db.db_mtime())
+    games = db.load_todays_games(db.db_mtime(), db.today_pacific().isoformat())
     if games.empty:
         return
     live_scores = db.load_live_scores(games.iloc[0]["date"])

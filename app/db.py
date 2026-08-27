@@ -348,15 +348,84 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
     return milestones
 
 
-@st.cache_data(show_spinner=False, max_entries=2)
-def load_todays_games(db_mtime_val: float) -> pd.DataFrame:
-    """Today's schedule from the MLB Stats API (fetched daily by ingest,
-    separate from the pybaseball/bref data everything else uses)."""
+TODAYS_GAMES_COLUMNS = [
+    "date", "game_pk", "game_time", "status", "venue",
+    "away_team", "away_abbr", "away_wins", "away_losses", "away_pitcher_name", "away_pitcher_mlbID",
+    "home_team", "home_abbr", "home_wins", "home_losses", "home_pitcher_name", "home_pitcher_mlbID",
+]
+
+
+@st.cache_data(show_spinner=False, ttl=600, max_entries=4)
+def _todays_games_live(date_str: str) -> pd.DataFrame:
+    """Today's slate straight from the MLB Stats API, in exactly the shape
+    the ingest stores. Used when the stored table hasn't caught up yet —
+    see load_todays_games."""
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "date": date_str, "hydrate": "probablePitcher,team,venue"},
+            timeout=15,
+        )
+        resp.raise_for_status()
+        dates = resp.json().get("dates", [])
+    except Exception:
+        return pd.DataFrame(columns=TODAYS_GAMES_COLUMNS)
+
+    games = dates[0].get("games", []) if dates else []
+    rows = []
+    for g in games:
+        away, home = g["teams"]["away"], g["teams"]["home"]
+        ap, hp = away.get("probablePitcher") or {}, home.get("probablePitcher") or {}
+        rows.append({
+            "date": date_str,
+            "game_pk": g.get("gamePk"),
+            "game_time": g.get("gameDate"),
+            "status": g.get("status", {}).get("detailedState"),
+            "venue": g.get("venue", {}).get("name"),
+            "away_team": away["team"]["name"],
+            "away_abbr": away["team"]["abbreviation"],
+            "away_wins": away.get("leagueRecord", {}).get("wins"),
+            "away_losses": away.get("leagueRecord", {}).get("losses"),
+            "away_pitcher_name": ap.get("fullName"),
+            "away_pitcher_mlbID": ap.get("id"),
+            "home_team": home["team"]["name"],
+            "home_abbr": home["team"]["abbreviation"],
+            "home_wins": home.get("leagueRecord", {}).get("wins"),
+            "home_losses": home.get("leagueRecord", {}).get("losses"),
+            "home_pitcher_name": hp.get("fullName"),
+            "home_pitcher_mlbID": hp.get("id"),
+        })
+    return pd.DataFrame(rows, columns=TODAYS_GAMES_COLUMNS)
+
+
+@st.cache_data(show_spinner=False, ttl=600, max_entries=4)
+def load_todays_games(db_mtime_val: float, today_str: str | None = None) -> pd.DataFrame:
+    """Today's schedule, where "today" means the PACIFIC date.
+
+    The stored todays_games table is only refreshed by the nightly ingest,
+    which runs at 13:00 UTC — 6am Pacific. This used to `SELECT *` from it
+    with no date filter, so from Pacific midnight until that cron fired the
+    page served YESTERDAY's slate: the day had rolled over for the visitor
+    hours before the data did.
+
+    Now the stored rows are only used when they're actually for today;
+    otherwise today's slate is fetched live from the same MLB endpoint the
+    ingest uses. So the page turns over at Pacific midnight regardless of
+    when the cron runs. `today_str` is a parameter (not read inside) so the
+    date is part of the cache key — otherwise a session open across midnight
+    would keep serving the previous day from cache.
+    """
+    today_str = today_str or today_pacific().isoformat()
     with sqlite3.connect(DB_PATH) as conn:
         try:
-            return pd.read_sql("SELECT * FROM todays_games", conn)
+            stored = pd.read_sql(
+                "SELECT * FROM todays_games WHERE date = ?", conn, params=(today_str,)
+            )
         except pd.errors.DatabaseError:
-            return pd.DataFrame()
+            stored = pd.DataFrame()
+    if not stored.empty:
+        return stored
+    return _todays_games_live(today_str)
 
 
 @st.cache_data(show_spinner=False, ttl=20, max_entries=2)
@@ -1051,7 +1120,7 @@ def no_hitter_watch(date_str: str) -> list[dict]:
     boxscore API doesn't expose hit-by-pitch or errors, so it only checks
     hits + walks allowed — good enough for a home-page heads-up, not
     official scoring."""
-    games = load_todays_games(db_mtime())
+    games = load_todays_games(db_mtime(), today_pacific().isoformat())
     if games.empty:
         return []
     live_scores = load_live_scores(date_str)
@@ -1114,7 +1183,7 @@ def batting_milestone_watch(date_str: str) -> list[dict]:
     fresh from the still-queryable final boxscore, not stored). A stalled
     3-HR bid deliberately does NOT get an achieved entry once the game goes
     final — only an actual 4th homer keeps the banner around."""
-    games = load_todays_games(db_mtime())
+    games = load_todays_games(db_mtime(), today_pacific().isoformat())
     if games.empty:
         return []
     live_scores = load_live_scores(date_str)

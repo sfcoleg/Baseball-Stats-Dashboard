@@ -16,7 +16,8 @@ import io
 import re
 import sqlite3
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import numpy as np
@@ -1181,7 +1182,10 @@ def fetch_todays_games():
     pybaseball/Baseball-Reference/Statcast), but it's the only place that has
     a live game schedule with probable pitchers. Powers the Today's Games
     page's win predictions."""
-    today = date.today().isoformat()
+    # PACIFIC date, matching db.today_pacific() in the app. The cron fires at
+    # 13:00 UTC (6am Pacific) where the two agree, but a manual run in the
+    # evening would otherwise fetch tomorrow's slate off a UTC clock.
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
     columns = [
         "date", "game_pk", "game_time", "status", "venue",
         "away_team", "away_abbr", "away_wins", "away_losses", "away_pitcher_name", "away_pitcher_mlbID",
