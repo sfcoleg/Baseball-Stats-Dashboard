@@ -199,7 +199,7 @@ else:
                         )
 
 # --- Yesterday's performances for followed players --------------------------
-style.colored_header("Yesterday's Performances", "pitching")
+style.colored_header(f"{db.daily_label(db.data_as_of(mtime))}'s Performances", "pitching")
 if not followed_players:
     st.caption("Follow a player to see their performances here.")
 else:

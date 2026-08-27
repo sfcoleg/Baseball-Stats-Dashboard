@@ -32,6 +32,73 @@ def today_pacific() -> date:
     return datetime.now(ZoneInfo("America/Los_Angeles")).date()
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def data_as_of(db_mtime_val: float) -> date | None:
+    """The game day the site's daily sections actually describe.
+
+    today_pacific() answers "what day is it"; this answers the different
+    and equally important question "what day is our data from". The two
+    are NOT the same, and every "yesterday" on the site must anchor on
+    this one rather than on today_pacific() - 1 day.
+
+    Why: the ingest runs once a day, early Pacific morning, and pulls
+    Baseball-Reference's "last 1 day" — so a run on day D stores day D-1.
+    Between Pacific midnight and that run the stored day is still D-2,
+    while today_pacific() - 1 has already advanced to D-1. Anything
+    anchored on the wall clock therefore spends every morning labelling
+    two-day-old games "yesterday". Worse, GitHub Actions silently drops
+    scheduled runs, and then the stored day stays put for a full extra
+    day while the wall clock keeps moving.
+
+    Reading the day back off the data itself makes every section pivot
+    at the same instant — the instant new data lands — instead of each
+    one drifting on its own. Returns None in the offseason, when there
+    is no daily slice at all."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            raw = conn.execute(
+                "SELECT MAX(Date) FROM recent_batting WHERE period = 'day'"
+            ).fetchone()[0]
+    except sqlite3.Error:
+        return None
+    if not raw:
+        return None
+    try:
+        # Baseball-Reference formats this as e.g. "Aug 25, 2026".
+        return datetime.strptime(str(raw).strip(), "%b %d, %Y").date()
+    except ValueError:
+        return None
+
+
+def daily_label(as_of: date | None, today: date | None = None) -> str:
+    """How to name the day `as_of` refers to, in card titles and captions.
+
+    Says "Yesterday" only when the data really is yesterday's, and names
+    the date outright when it isn't, so a late or missed ingest reads as
+    an honest older date instead of a wrong "Yesterday"."""
+    today = today or today_pacific()
+    if as_of is None:
+        return "Yesterday"
+    delta = (today - as_of).days
+    if delta <= 1:
+        return "Yesterday"
+    return as_of.strftime("%b %-d")
+
+
+def daily_games_phrase(as_of: date | None, today: date | None = None) -> str:
+    """Prose form of daily_label() for sentence captions, e.g.
+    "yesterday's games" / "games two days ago" / "games on Aug 25"."""
+    today = today or today_pacific()
+    if as_of is None:
+        return "yesterday's games"
+    delta = (today - as_of).days
+    if delta <= 1:
+        return "yesterday's games"
+    if delta == 2:
+        return "games two days ago"
+    return f"games on {as_of.strftime('%b %-d')}"
+
+
 def normalize_text(text: str) -> str:
     """Lowercase and strip accents so 'garcia' matches 'García'."""
     if not isinstance(text, str):

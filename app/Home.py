@@ -217,9 +217,14 @@ recent_batting = db.load_recent_batting(season, mtime)
 recent_pitching = db.load_recent_pitching(season, mtime)
 
 milestones = db.get_milestones(season, mtime)
+
+# Every "yesterday" below anchors on the day the data actually covers, not
+# on today_pacific() - 1 — see db.data_as_of() for why those differ.
+as_of = db.data_as_of(mtime)
+day_label = f"Hot {db.daily_label(as_of)}"
 if milestones:
     style.colored_header("Milestones", "headliners")
-    st.caption("Notable achievements from yesterday's games.")
+    st.caption(f"Notable achievements from {db.daily_games_phrase(as_of)}.")
     milestone_cols = st.columns(min(len(milestones), 3))
     for i, m in enumerate(milestones):
         with milestone_cols[i % 3]:
@@ -232,7 +237,7 @@ if season == today_pacific().year:
     style.colored_header("Batting Headliners", "batting")
     h1, h2, h3 = st.columns(3)
     batting_override = HOT_YESTERDAY_OVERRIDES.get(today_pacific().isoformat(), {}).get("batting")
-    for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
+    for col, period, label in [(h1, "day", day_label), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
                 if period == "day" and batting_override:
@@ -253,7 +258,7 @@ if season == today_pacific().year:
     style.colored_header("Pitching Headliners", "pitching")
     p1, p2, p3 = st.columns(3)
     pitching_override = HOT_YESTERDAY_OVERRIDES.get(today_pacific().isoformat(), {}).get("pitching")
-    for col, period, label in [(p1, "day", "Hot Yesterday"), (p2, "week", "Hot This Week"), (p3, "month", "Hot This Month")]:
+    for col, period, label in [(p1, "day", day_label), (p2, "week", "Hot This Week"), (p3, "month", "Hot This Month")]:
         with col:
             with st.container(border=True):
                 if period == "day" and pitching_override:

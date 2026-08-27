@@ -49,7 +49,11 @@ def record_daily_result(daily_state: dict, today: str, correct: bool) -> None:
     yesterday (a skipped day breaks the streak even before today's guess)."""
     last_played = daily_state.get("last_played")
     if last_played and last_played != today:
-        yesterday = (date.today() - timedelta(days=1)).isoformat()
+        # Derived from the caller's `today` (Pacific) rather than
+        # date.today() — the servers run UTC, which is already "tomorrow"
+        # during Pacific evenings, and that mismatch silently broke
+        # streaks for anyone playing at night.
+        yesterday = (date.fromisoformat(today) - timedelta(days=1)).isoformat()
         if last_played != yesterday:
             daily_state["streak"] = 0
     daily_state["streak"] = daily_state["streak"] + 1 if correct else 0

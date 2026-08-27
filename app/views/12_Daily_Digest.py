@@ -15,7 +15,6 @@ st.set_page_config(page_title="Clubhouse Report | Diamond Metrics", layout="wide
 st.title("Clubhouse Report")
 
 today = db.today_pacific()
-yesterday = today - timedelta(days=1)
 
 all_articles = articles.load_articles()
 if all_articles:
@@ -38,12 +37,19 @@ if not db.DB_PATH.exists():
     st.stop()
 
 mtime = db.db_mtime()
+
+# The whole page — performances, Statcast, top plays and transactions —
+# reports on one single day, and that day is the one our data actually
+# covers rather than the wall clock's yesterday. Anchoring these on
+# different days is what let the performance sections lag a day behind
+# the transaction list. See db.data_as_of().
+yesterday = db.data_as_of(mtime) or (today - timedelta(days=1))
 season = db.get_seasons("batting")[0]
 recent_batting = db.load_recent_batting(season, mtime)
 recent_pitching = db.load_recent_pitching(season, mtime)
 milestones = db.get_milestones(season, mtime)
 
-txs = db.load_transactions(2)
+txs = db.load_transactions(max(2, (today - yesterday).days + 1))
 txs_yesterday = txs[txs["date"] == yesterday.isoformat()] if not txs.empty else txs
 il_moves = txs_yesterday[
     (txs_yesterday["type"] == "Status Change")
@@ -174,7 +180,7 @@ if milestones:
             if clip_url:
                 st.video(clip_url)
 else:
-    st.caption("Nothing notable yesterday.")
+    st.caption(f"Nothing notable in {db.daily_games_phrase(yesterday, today)}.")
 
 style.colored_header("Biggest Plays", "headliners")
 top_plays = db.load_wpa_top_plays(yesterday.year, mtime)

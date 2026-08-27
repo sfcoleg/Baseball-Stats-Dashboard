@@ -16,7 +16,7 @@ import io
 import re
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -1922,6 +1922,42 @@ def backfill_all_star(season):
     print(f"Backfilled {season} All-Star rosters: {len(roster)} players to {DB_PATH}")
 
 
+def _pacific_today() -> str:
+    from zoneinfo import ZoneInfo
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
+
+
+def record_refresh() -> None:
+    """Stamp the Pacific date of a completed refresh into the database.
+
+    This is what makes the daily job safely repeatable: the workflow runs
+    on several cron slots so a dropped or failed 6am run still lands later
+    the same morning, and this row is how a later slot knows the day's
+    refresh already happened and it should no-op instead of refetching."""
+    with sqlite3.connect(DB_PATH) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS refresh_log "
+            "(date TEXT PRIMARY KEY, finished_at TEXT)"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO refresh_log VALUES (?, ?)",
+            (_pacific_today(), datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        )
+        conn.commit()
+
+
+def refresh_done_today() -> bool:
+    """Whether a refresh has already completed today (Pacific)."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT 1 FROM refresh_log WHERE date = ?", (_pacific_today(),)
+            ).fetchone()
+    except sqlite3.Error:
+        return False
+    return row is not None
+
+
 if __name__ == "__main__":
     import sys
 
@@ -1930,5 +1966,11 @@ if __name__ == "__main__":
         backfill_season(int(sys.argv[2]))
     elif len(sys.argv) > 1 and sys.argv[1] == "--allstar":
         backfill_all_star(int(sys.argv[2]))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--check":
+        # Exit 0 = today's refresh still needs to run, 1 = already done.
+        done = refresh_done_today()
+        print("already refreshed today" if done else "refresh needed")
+        sys.exit(1 if done else 0)
     else:
         fetch_and_store()
+        record_refresh()
