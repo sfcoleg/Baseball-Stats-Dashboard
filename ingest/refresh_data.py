@@ -364,6 +364,92 @@ def add_pitching_dwar(df, park=None):
     return df
 
 
+
+# Positional adjustment in runs per 600 PA — the standard WAR values. A
+# shortstop and a first baseman with identical bats are not equally valuable,
+# because one of those positions is far harder to fill.
+POSITION_ADJUSTMENT = {
+    "C": 12.5, "SS": 7.5, "2B": 2.5, "3B": 2.5, "CF": 2.5,
+    "LF": -7.5, "RF": -7.5, "1B": -12.5, "DH": -17.5,
+}
+BATTER_REPLACEMENT_RUNS_PER_600 = 20.0
+WOBA_SCALE = 1.20  # matches add_batting_plus_stats' wRC+ scale
+
+
+def add_batting_dwar(batting, fielding=None, framing=None):
+    """dWAR for position players — the batting counterpart to the pitcher
+    version, and built on the same idea: grade EXPECTED performance rather
+    than what happened to land safely.
+
+        batting runs   (xwOBA - league xwOBA) / wOBA scale * PA
+      + baserunning    BsR
+      + fielding       FRP, plus framing runs for catchers
+      + positional     per-position runs, prorated by PA
+      + replacement    20 runs per 600 PA
+      -------------------------------------------------------
+      / runs per win   1.5 * league runs-per-game + 3
+
+    xwOBA rather than wOBA is the whole point: it prices contact quality, so
+    a hitter isn't rewarded for balls that found grass or punished for lasers
+    hit at someone.
+
+    THE DATA IS THINNER HERE THAN FOR PITCHERS, and it shows up as real
+    limitations rather than something to paper over:
+
+      - Fielding and baserunning cover ~40% of all batters, but ~83-91% of
+        regulars (300+ PA). A player with no fielding row is treated as
+        league-average afield (0 runs) rather than dropped, so his dWAR is
+        effectively bat-and-position only. That is a floor on how wrong it
+        can be, not a claim that he fields averagely.
+      - The fielding table has NO catchers in it at all. They're recovered
+        from the catcher-framing leaderboard instead, which also supplies
+        their defensive value — framing is the single biggest measurable
+        part of catcher defence, though it misses blocking and throwing.
+      - A player with neither source gets a 0 positional adjustment rather
+        than being assumed a DH; guessing -17.5 runs for someone we simply
+        have no position for would invent a penalty out of missing data.
+    """
+    df = batting
+    pa = pd.to_numeric(df["PA"], errors="coerce")
+    xwoba = pd.to_numeric(df.get("xwOBA"), errors="coerce")
+    if not pa.sum() or xwoba.isna().all():
+        df["dWAR"] = float("nan")
+        return df
+
+    lg_xwoba = np.nansum(xwoba * pa) / np.nansum(pa.where(xwoba.notna()))
+
+    # Runs per win, from this season's own run environment. ~38 PA per team
+    # per game turns league totals into a runs-per-game figure; the 1.5x + 3
+    # is the standard approximation, which lands near 10 in a normal season.
+    total_r = pd.to_numeric(df["R"], errors="coerce").sum()
+    runs_per_game = (38.0 * total_r / pa.sum()) if pa.sum() else 4.5
+    rpw = 1.5 * runs_per_game + 3.0
+
+    batting_runs = (xwoba - lg_xwoba) / WOBA_SCALE * pa
+    bsr = pd.to_numeric(df.get("baserunning_runs"), errors="coerce").fillna(0.0)
+
+    field_runs = pd.Series(0.0, index=df.index)
+    pos = pd.Series([None] * len(df), index=df.index, dtype=object)
+
+    if fielding is not None and not fielding.empty and "player_id" in fielding.columns:
+        f = fielding.assign(_frp=pd.to_numeric(fielding.get("FRP"), errors="coerce"))
+        field_runs = field_runs.add(df["mlbID"].map(f.groupby("player_id")["_frp"].sum()).fillna(0.0))
+        # Most innings first would be better; first() is fine while a player's
+        # listed position rarely changes within a season.
+        pos = df["mlbID"].map(f.dropna(subset=["Pos"]).groupby("player_id")["Pos"].first())
+
+    if framing is not None and not framing.empty and "mlbID" in framing.columns:
+        fr = framing.assign(_fr=pd.to_numeric(framing.get("framing_runs"), errors="coerce"))
+        cat_runs = df["mlbID"].map(fr.groupby("mlbID")["_fr"].sum())
+        field_runs = field_runs.add(cat_runs.fillna(0.0))
+        pos = pos.where(cat_runs.isna(), "C")
+
+    pos_adj = pos.map(POSITION_ADJUSTMENT).astype(float).fillna(0.0) * (pa / 600.0)
+    replacement = BATTER_REPLACEMENT_RUNS_PER_600 * (pa / 600.0)
+
+    df["dWAR"] = ((batting_runs + bsr + field_runs + pos_adj + replacement) / rpw).round(2)
+    return df
+
 def add_batting_plus_stats(df):
     """OPS+ and wRC+ (100 = league average, higher is better), computed from
     this same season's field rather than fetched from anywhere else, so they
@@ -1516,6 +1602,8 @@ def fetch_and_store():
     career_totals = fetch_career_totals()
     history = build_player_history(batting, pitching, recent_batting, recent_pitching)
 
+    batting = add_batting_dwar(batting, fielding, catcher_framing)
+
     conn = sqlite3.connect(DB_PATH)
     try:
         # one-time schema migration: player_history gained day_PA/day_H/day_IP/day_ER
@@ -1785,6 +1873,8 @@ def backfill_season(season):
     catcher_framing = fetch_catcher_framing(season)
     catcher_poptime = fetch_catcher_poptime(season)
     outfield_jump = fetch_outfielder_jump(season)
+
+    batting = add_batting_dwar(batting, fielding, catcher_framing)
 
     conn = sqlite3.connect(DB_PATH)
     try:

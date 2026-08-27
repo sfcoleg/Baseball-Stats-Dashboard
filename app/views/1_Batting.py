@@ -147,12 +147,12 @@ with advanced_tab:
         adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
     display = teams.add_team_abbr(adv_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
-         "WAR", "OPS_plus", "wRC_plus", "HVS", "WPA", "WPA+"]
-    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+"})
+         "dWAR", "WAR", "OPS_plus", "wRC_plus", "HVS", "WPA", "WPA+"]
+    ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+", "WAR": "bWAR"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "WAR", "OPS+", "wRC+", "HVS", "WPA", "WPA+"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "dWAR", "bWAR", "OPS+", "wRC+", "HVS", "WPA", "WPA+"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,

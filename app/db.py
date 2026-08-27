@@ -73,7 +73,7 @@ BATTING_COLS = [
     "chase_pctile", "chase_pct", "bat_speed_pctile", "bat_speed",
     "xISO_pctile", "xISO", "xOBP_pctile", "xOBP",
     "xwOBA", "xBA", "xSLG",
-    "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR",
+    "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR", "dWAR",
     "sprint_speed", "hp_to_1b", "baserunning_runs", "season",
 ]
 PITCHING_COLS = [
