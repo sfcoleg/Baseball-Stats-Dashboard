@@ -214,7 +214,18 @@ st.markdown(
     # edge. :has() lets the bar drop its clipping ONLY while Other is
     # hovered, keeping the scrollability the rest of the time.
     ".st-key-dm_nav:has(.st-key-dm_nav_other:hover){overflow:visible;}"
-    ".st-key-dm_nav_other{position:relative;flex:0 0 auto;width:auto !important;}"
+    # The wrapper exists ONLY to anchor the dropdown — it must be invisible.
+    # Being an st.container it renders as a stVerticalBlock, which the
+    # "bordered containers read as cards" rule above styles with a background,
+    # border, radius and padding. That drew a box around the Other tab and its
+    # padding knocked it off the line the other tabs sit on. Reset it all, and
+    # zero the vertical block's default 1rem gap so the hidden menu can't
+    # reserve space while collapsed.
+    ".st-key-dm_nav_other{position:relative;flex:0 0 auto;width:auto !important;"
+    "  background:transparent !important;border:none !important;"
+    "  box-shadow:none !important;padding:0 !important;border-radius:0 !important;"
+    "  gap:0 !important;}"
+    ".st-key-dm_nav_other > [data-testid='stElementContainer']{margin:0 !important;}"
     ".st-key-dm_nav_other_menu{display:none;position:absolute;top:100%;left:0;"
     "  z-index:999999;background:var(--dm-surface);border:1px solid var(--dm-line);"
     "  border-radius:10px;padding:6px;min-width:200px;gap:0 !important;"
