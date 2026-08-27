@@ -221,7 +221,19 @@ st.markdown(
     # padding knocked it off the line the other tabs sit on. Reset it all, and
     # zero the vertical block's default 1rem gap so the hidden menu can't
     # reserve space while collapsed.
-    ".st-key-dm_nav_other{position:relative;flex:0 0 auto;width:auto !important;"
+    # Streamlit 1.59 wraps each container in an stLayoutWrapper, and THAT
+    # (not the vertical block below) is the real flex item in the tab row.
+    # It collapsed to 16px because the block sizes from its child while the
+    # child stretches to the block — circular, so the browser fell back to
+    # min-content. The visible symptom was the Other tab squashed to a
+    # sliver with Settings overlapping it, which read as Settings being
+    # knocked out of line with the rest of the strip. Both levels need an
+    # explicit max-content width; sizing only the inner one leaves the
+    # wrapper at 16px and the tabs still overlap.
+    ".st-key-dm_nav [data-testid='stLayoutWrapper']:has(.st-key-dm_nav_other){"
+    "  width:max-content !important;min-width:max-content !important;flex:0 0 auto !important;}"
+    ".st-key-dm_nav_other{position:relative;flex:0 0 auto;"
+    "  width:max-content !important;min-width:max-content !important;"
     "  background:transparent !important;border:none !important;"
     "  box-shadow:none !important;padding:0 !important;border-radius:0 !important;"
     "  gap:0 !important;}"
@@ -313,10 +325,19 @@ st.markdown(
     "[data-testid='stMainBlockContainer'] [data-testid='stDataFrame'],"
     "[data-testid='stMainBlockContainer'] [data-testid='stPlotlyChart']{max-width:100% !important;}"
     # Hand-written HTML tables (standings, schedule, playoff odds) aren't
-    # canvas-based and will happily run past the edge — give them their own
-    # scroll rather than letting them stretch the card.
+    # canvas-based and will happily run past the edge — they need their own
+    # scroll rather than stretching the card. The scroll goes on the
+    # CONTAINER, not the table: display:block on a <table> switches off table
+    # layout, so the element filled the card while the actual table box
+    # shrank to its intrinsic width. A narrow table like the team schedule
+    # then drew its four columns across the left third of the bubble and
+    # left the rest empty. Keeping the table a real table (width:100%) lets
+    # its columns share the full width, and a wide one still scrolls because
+    # the container clips instead.
     "[data-testid='stMainBlockContainer'] [data-testid='stMarkdown'] table{"
-    "  max-width:100%;display:block;overflow-x:auto;}"
+    "  max-width:100%;width:100%;}"
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  [data-testid='stMarkdown'] table){overflow-x:auto;}"
     # Rows that are already their own card (Injury Report, Transactions) opt
     # out of the generic HTML-card bubble above — a bubble around a row that's
     # already got its own background just draws a box around a box, one per

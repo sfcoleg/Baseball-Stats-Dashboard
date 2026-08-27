@@ -158,7 +158,7 @@ with advanced_tab:
             team_color_fn=teams.color_for_abbr,
             precision={
                 "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "Contact%": "{:.1f}",
-                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "WAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HVS": "{:.0f}",
+                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "dWAR": "{:.1f}", "bWAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HVS": "{:.0f}",
                 "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),

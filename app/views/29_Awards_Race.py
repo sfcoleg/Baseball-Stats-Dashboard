@@ -45,6 +45,7 @@ def _mvp_table(league: str):
         ),
         use_container_width=True, hide_index=True,
     )
+    st.caption("WAR is dWAR for pitchers and bWAR for batters — the two are ranked together here.")
 
 def _cy_young_table(league: str):
     race = db.cy_young_race(season, league, mtime)
@@ -53,11 +54,11 @@ def _cy_young_table(league: str):
         return
     display = teams.add_team_abbr(race.head(5))
     cols = ["Name", "Tm", "WAR", "FIP", "ERA_plus", "IP", "Cy Young Score"]
-    display = display[cols].rename(columns={"ERA_plus": "ERA+"})
+    display = display[cols].rename(columns={"ERA_plus": "ERA+", "WAR": "dWAR"})
     st.dataframe(
         style.style_stats_table(
             display, team_col="Tm", team_color_fn=teams.color_for_abbr,
-            precision={"WAR": "{:.1f}", "FIP": "{:.2f}", "ERA+": "{:.0f}", "IP": "{:.1f}", "Cy Young Score": "{:.2f}"},
+            precision={"dWAR": "{:.1f}", "FIP": "{:.2f}", "ERA+": "{:.0f}", "IP": "{:.1f}", "Cy Young Score": "{:.2f}"},
         ),
         use_container_width=True, hide_index=True,
     )
@@ -76,6 +77,7 @@ def _roy_table(league: str):
         ),
         use_container_width=True, hide_index=True,
     )
+    st.caption("WAR is dWAR for pitchers and bWAR for batters — the two are ranked together here.")
 
 style.colored_header("MVP", "batting")
 al_col, nl_col = st.columns(2)

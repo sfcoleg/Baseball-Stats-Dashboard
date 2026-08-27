@@ -146,7 +146,7 @@ BATTING_COLS = [
 PITCHING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP",
     "SO", "BB", "HR", "mlbID", "K_9", "BB_9", "K_BB", "FIP", "xFIP", "xERA", "BAbip", "GB_FB",
-    "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR", "fWAR", "dWAR",
+    "xBA_against", "xSLG_against", "xwOBA_against", "xERA_diff", "ERA_plus", "WAR", "dWAR",
     "avg_exit_velo_against", "hard_hit_pct_against", "barrel_pct_against",
     "fastball_velo_pctile", "fastball_velo", "induced_chase_pctile", "induced_chase_pct", "season",
 ]
@@ -934,9 +934,20 @@ def _game_highlight_items(abbr: str, date_str: str) -> list:
     match = schedule[(schedule["away_abbr"] == abbr) | (schedule["home_abbr"] == abbr)]
     if match.empty:
         return []
-    game_pk = int(match.iloc[0]["game_pk"])
+    return highlight_items_by_game_pk(int(match.iloc[0]["game_pk"]))
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=64)
+def highlight_items_by_game_pk(game_pk) -> list:
+    """MLB's highlight-clip items for one game, keyed on game_pk directly.
+
+    _game_highlight_items above has to go abbr+date -> schedule -> game_pk
+    first, but any caller that already holds a game_pk (hr_log stores one
+    per home run) can skip that round-trip entirely — which also means
+    those callers keep working for seasons the schedule table doesn't
+    cover. Returns [] on any failure."""
     try:
-        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{game_pk}/content", timeout=10)
+        resp = requests.get(f"https://statsapi.mlb.com/api/v1/game/{int(game_pk)}/content", timeout=10)
         resp.raise_for_status()
         return ((resp.json().get("highlights") or {}).get("highlights") or {}).get("items", []) or []
     except Exception:
@@ -1065,6 +1076,76 @@ def find_statcast_highlight(mlbID, abbr: str, date_str: str, kind: str, detail: 
     if not tags:
         return None
     return _find_tagged_player_clip(mlbID, abbr, date_str, tags)
+
+
+HR_NUMBER_RE = re.compile(r"\((\d+)\)")
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=256)
+def find_home_run_clip(mlbID, game_pk, hr_number: int | None = None) -> str | None:
+    """Best-effort clip for one specific home run.
+
+    "home-run" is the one taxonomy tag that names the literal play (see
+    _STATCAST_HIGHLIGHT_TAGS' comment), so the player-id + tag match is
+    reliable here in a way it isn't for e.g. hardest-hit. The wrinkle is
+    a multi-homer game: two clips both match player+tag, and picking the
+    first would attach the wrong swing to the wrong row. MLB's headlines
+    carry the season total ("...home run (40)") and so does hr_log's
+    `des`, so when `hr_number` is known it disambiguates exactly.
+
+    Preference order: headline matching this home run's number, then a
+    clip tagged for this player alone, then a multi-player clip. Returns
+    None rather than raising — callers render the row without a video."""
+    number_match = single_player = multi_player = None
+    for item in highlight_items_by_game_pk(game_pk):
+        keywords = item.get("keywordsAll", [])
+        player_ids = {k["value"] for k in keywords if k.get("type") == "player_id"}
+        if str(int(mlbID)) not in player_ids:
+            continue
+        item_tags = {k["value"] for k in keywords if k.get("type") == "taxonomy"}
+        if item_tags & _NON_HIGHLIGHT_TAGS or "home-run" not in item_tags:
+            continue
+        url = _clip_mp4_url(item)
+        if not url:
+            continue
+        text = " ".join(filter(None, [item.get("headline"), item.get("description"), item.get("blurb")]))
+        if hr_number is not None and f"({int(hr_number)})" in text:
+            number_match = number_match or url
+        elif len(player_ids) == 1:
+            single_player = single_player or url
+        else:
+            multi_player = multi_player or url
+    return number_match or single_player or multi_player
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def player_home_runs(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Every home run a batter hit in `season`, newest first, from hr_log.
+
+    hr_log is Statcast-derived and starts in 2021, so earlier seasons
+    correctly come back empty rather than partially populated. `hr_number`
+    is parsed out of the description's "(n)" season total, which every row
+    carries, and is what pins each row to its own clip in
+    find_home_run_clip."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            df = pd.read_sql(
+                "SELECT game_date, game_pk, home_team, away_team, launch_speed, "
+                "launch_angle, hit_distance_sc, des FROM hr_log "
+                "WHERE batter = ? AND season = ? ORDER BY game_date DESC",
+                conn, params=(float(mlbID), int(season)),
+            )
+    except (sqlite3.Error, pd.errors.DatabaseError):
+        return pd.DataFrame()
+    if df.empty:
+        return df
+    df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
+    df["hr_number"] = (
+        df["des"].str.extract(HR_NUMBER_RE, expand=False).astype("Int64")
+    )
+    # Within a date, list the later home run first so the ordering still
+    # reads newest-first for multi-homer games.
+    return df.sort_values(["game_date", "hr_number"], ascending=[False, False]).reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False, ttl=60, max_entries=20)
@@ -3501,7 +3582,7 @@ STAT_DISPLAY_LABELS = {
     "induced_chase_pct": "Induced Chase%", "induced_chase_pctile": "Induced Chase Pctile",
     "xBA_against": "xBA Against", "xSLG_against": "xSLG Against", "xwOBA_against": "xwOBA Against",
     "HVS": "HVS (Hitting Value Score)",
-    "WAR": "bWAR", "fWAR": "fWAR", "dWAR": "dWAR",
+    "WAR": "bWAR", "dWAR": "dWAR",
 }
 
 
@@ -3758,20 +3839,20 @@ def mvp_race(season: int, league: str, db_mtime_val: float) -> pd.DataFrame:
 
 
 def pitcher_war(pit: pd.DataFrame) -> pd.Series:
-    """The pitcher WAR the awards races grade on: dWAR where we have it,
-    falling back per-row to fWAR then bWAR.
+    """The pitcher WAR the site grades on: dWAR where we have it, falling
+    back per-row to bWAR.
 
-    dWAR is the sharpest of the three at describing a pitcher's actual
-    quality (it out-predicted both in a next-season test), so it leads. But
-    it needs Statcast and is therefore NULL before ~2015, and a straight
-    swap would have silently zeroed out every pitcher in those seasons and
-    handed the award to whoever happened to have the best rate stats. The
-    fallback is per-ROW rather than per-season so a modern pitcher missing
-    a Statcast match doesn't drop out either."""
+    dWAR describes a pitcher's actual quality better than bWAR does (it
+    out-predicted it in a next-season test), so it leads. But it needs
+    Statcast and is therefore NULL before ~2015, and a straight swap would
+    have silently zeroed out every pitcher in those seasons and handed the
+    award to whoever happened to have the best rate stats. bWAR goes back
+    to 1901, so it covers exactly the gap dWAR can't. The fallback is
+    per-ROW rather than per-season so a modern pitcher missing a Statcast
+    match doesn't drop out either."""
     war = pd.to_numeric(pit.get("dWAR"), errors="coerce")
-    for backup in ("fWAR", "WAR"):
-        if backup in pit.columns:
-            war = war.fillna(pd.to_numeric(pit[backup], errors="coerce"))
+    if "WAR" in pit.columns:
+        war = war.fillna(pd.to_numeric(pit["WAR"], errors="coerce"))
     return war
 
 

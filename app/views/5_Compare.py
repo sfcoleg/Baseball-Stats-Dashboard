@@ -234,17 +234,17 @@ if batting_role_a is not None or batting_role_b is not None:
     with adv_tab:
         fields = [
             ("ISO", "ISO"), ("BABIP", "BABIP"), ("K%", "K_PCT"), ("BB%", "BB_PCT"),
-            ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("WAR", "WAR"), ("OPS+", "OPS_plus"), ("wRC+", "wRC_plus"),
+            ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("bWAR", "WAR"), ("OPS+", "OPS_plus"), ("wRC+", "wRC_plus"),
         ]
         table = build_compare_table(batting_role_a, batting_role_b, fields,
                                     round_map={"ISO": 3, "BABIP": 3, "K%": 1, "BB%": 1, "wOBA": 3,
-                                               "xwOBA": 3, "WAR": 1, "OPS+": 0, "wRC+": 0})
+                                               "xwOBA": 3, "bWAR": 1, "OPS+": 0, "wRC+": 0})
         wpa_a = _wpa_pair(id_a, True) if batting_role_a is not None else (None, None)
         wpa_b = _wpa_pair(id_b, True) if batting_role_b is not None else (None, None)
         table.loc["WPA"] = [wpa_a[0], wpa_b[0]]
         table.loc["WPA+"] = [wpa_a[1], wpa_b[1]]
         st.dataframe(style.style_comparison(table,
-                                            higher_better=["ISO", "BB%", "wOBA", "xwOBA", "WAR", "OPS+", "wRC+",
+                                            higher_better=["ISO", "BB%", "wOBA", "xwOBA", "bWAR", "OPS+", "wRC+",
                                                            "WPA", "WPA+"],
                                             lower_better=["K%"]),
                      use_container_width=True)
@@ -308,16 +308,16 @@ if pitching_role_a is not None or pitching_role_b is not None:
     with adv_tab:
         fields = [
             ("FIP", "FIP"), ("xERA", "xERA"), ("K/9", "K_9"), ("BB/9", "BB_9"), ("K/BB", "K_BB"),
-            ("WAR", "WAR"), ("ERA+", "ERA_plus"),
+            ("dWAR", "dWAR"), ("bWAR", "WAR"), ("ERA+", "ERA_plus"),
         ]
         table = build_compare_table(pitching_role_a, pitching_role_b, fields,
                                     round_map={"FIP": 2, "xERA": 2, "K/9": 2, "BB/9": 2, "K/BB": 2,
-                                               "WAR": 1, "ERA+": 0})
+                                               "dWAR": 1, "bWAR": 1, "ERA+": 0})
         wpa_a = _wpa_pair(id_a, False) if pitching_role_a is not None else (None, None)
         wpa_b = _wpa_pair(id_b, False) if pitching_role_b is not None else (None, None)
         table.loc["WPA"] = [wpa_a[0], wpa_b[0]]
         table.loc["WPA+"] = [wpa_a[1], wpa_b[1]]
-        st.dataframe(style.style_comparison(table, higher_better=["K/9", "K/BB", "WAR", "ERA+", "WPA", "WPA+"],
+        st.dataframe(style.style_comparison(table, higher_better=["K/9", "K/BB", "dWAR", "bWAR", "ERA+", "WPA", "WPA+"],
                                             lower_better=["FIP", "xERA", "BB/9"]),
                      use_container_width=True)
 

@@ -867,14 +867,19 @@ def team_schedule_table(sched: pd.DataFrame, team_color_fn) -> str:
             f"{vs_at} <span style='background-color:{opp_color}66;color:var(--dm-text);padding:2px 8px;"
             f"border-radius:6px;font-weight:700'>{row['opponent']}</span>"
         )
+        # These were dark-mode greens/reds hardcoded, which left the W at a
+        # 1.7 contrast ratio on light mode's near-white card — effectively
+        # invisible. Same literal-per-theme treatment the tables use.
+        win_color = "#4ADE80" if _session_theme() == "dark" else "#15803D"
+        loss_color = "#F87171" if _session_theme() == "dark" else "#B91C1C"
         if row["result"] == "W":
             score_cell = (
-                f"<span style='color:#4ADE80;font-weight:700'>W</span> "
+                f"<span style='color:{win_color};font-weight:700'>W</span> "
                 f"{row['runs_for']:.0f}-{row['runs_against']:.0f}"
             )
         elif row["result"] == "L":
             score_cell = (
-                f"<span style='color:#F87171;font-weight:700'>L</span> "
+                f"<span style='color:{loss_color};font-weight:700'>L</span> "
                 f"{row['runs_for']:.0f}-{row['runs_against']:.0f}"
             )
         else:
@@ -1048,6 +1053,15 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
     (e.g. "0.950 OPS") shown under the position label when present — used
     by composite (rookie/all-MLB/hot-month) teams to show why a player was
     picked. A position with no data just renders as a "TBD" placeholder card."""
+    # The cards sit over the field SVG, but the corner positions spill onto
+    # the plain card background — so these colours have to work on both. The
+    # position label was a fixed near-white (#D8DEE9), which measured 1.32
+    # against light mode's card: the CF/LF/SS labels were essentially gone.
+    # The shadow has to flip too, since a dark glow under dark text just
+    # muddies it.
+    _dm_dark = _session_theme() == "dark"
+    label_color = "#D8DEE9" if _dm_dark else "#475569"
+    text_glow = "0 1px 3px rgba(0,0,0,0.8)" if _dm_dark else "0 1px 3px rgba(255,255,255,0.9)"
     cards = []
     for key, label, x, y in _DIAMOND_POSITIONS:
         player = starters.get(key)
@@ -1068,7 +1082,7 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
                 f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
             )
         note_html = (
-            f"<div style='font-size:0.6rem;color:var(--dm-amber);text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{note}</div>"
+            f"<div style='font-size:0.6rem;color:var(--dm-amber);text-shadow:{text_glow}'>{note}</div>"
             if note else ""
         )
         cards.append(
@@ -1077,8 +1091,8 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             f"text-align:center;z-index:1;width:90px'>"
             f"{photo_html}"
             f"<div style='margin-top:4px;font-size:0.75rem;font-weight:700;color:var(--dm-text);"
-            f"text-shadow:0 1px 3px rgba(0,0,0,0.8);overflow-wrap:break-word'>{name}</div>"
-            f"<div style='font-size:0.65rem;color:#D8DEE9;text-shadow:0 1px 3px rgba(0,0,0,0.8)'>{label}</div>"
+            f"text-shadow:{text_glow};overflow-wrap:break-word'>{name}</div>"
+            f"<div style='font-size:0.65rem;color:{label_color};text-shadow:{text_glow}'>{label}</div>"
             f"{note_html}"
             f"</div>"
         )
