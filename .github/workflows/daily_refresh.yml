@@ -5,13 +5,31 @@ on:
     # 13:00 UTC = 6:00am Pacific Daylight Time (UTC-7, in effect roughly
     # Mar-Nov). During Pacific Standard Time (UTC-8, winter) this runs at
     # 5:00am instead — GitHub Actions' cron has no DST awareness, so a
-    # single UTC hour can't hit 6:00am Pacific year-round. Bump to "0 14"
-    # if you'd rather it be exact in winter and 7am in summer.
+    # single UTC hour can't hit 6:00am Pacific year-round.
+    #
+    # The later slots are RETRIES, not extra refreshes. GitHub runs
+    # scheduled jobs on a best-effort queue: in practice these start
+    # 30-55 minutes late, and they are sometimes dropped entirely with no
+    # run recorded and no notification (that is exactly what happened on
+    # 2026-08-27, leaving the whole site a day stale). One cron line means
+    # one silent miss costs a full day of freshness. Each run asks
+    # `refresh_data.py --check` whether today's refresh already landed and
+    # exits immediately if so, so on a normal day only the 13:00 slot does
+    # real work and the rest are a few seconds of no-op.
     - cron: "0 13 * * *"
+    - cron: "0 15 * * *"
+    - cron: "0 17 * * *"
+    - cron: "0 19 * * *"
   workflow_dispatch: {}  # lets you trigger a refresh manually from the Actions tab
 
 permissions:
   contents: write
+
+# Never let two refreshes write data/stats.db at once — a retry slot must
+# not race a still-running earlier slot.
+concurrency:
+  group: daily-refresh
+  cancel-in-progress: false
 
 jobs:
   refresh:
@@ -23,16 +41,29 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Has today's refresh already landed?
+        id: check
+        run: |
+          if python ingest/refresh_data.py --check; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Install dependencies
+        if: steps.check.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         run: pip install -r requirements.txt
 
       - name: Run ingest
+        if: steps.check.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         run: python ingest/refresh_data.py
 
       - name: Commit updated data
+        if: steps.check.outputs.needed == 'true' || github.event_name == 'workflow_dispatch'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/stats.db
           git diff --cached --quiet || git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
+          git pull --rebase origin main
           git push
