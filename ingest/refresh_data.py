@@ -377,8 +377,10 @@ WOBA_SCALE = 1.20  # matches add_batting_plus_stats' wRC+ scale
 
 
 def add_batting_dwar(batting, fielding=None, framing=None):
-    """dWAR for position players — the batting counterpart to the pitcher
-    version, and built on the same idea: grade EXPECTED performance rather
+    """dWAR for position players — a COMPLETE position-player WAR, not a
+    batting-only number: hitting, baserunning, fielding and a positional
+    adjustment, the same four components bWAR and fWAR use. Built on the
+    same idea as the pitcher version: grade EXPECTED performance rather
     than what happened to land safely.
 
         batting runs   (xwOBA - league xwOBA) / wOBA scale * PA
