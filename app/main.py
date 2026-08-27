@@ -230,12 +230,17 @@ st.markdown(
     # st.container() like any other, so the bordered-container bubble rule
     # above would otherwise wrap it in a full padded card — override that
     # back to a bare, compact box that just holds the input.
-    # Sport switch: banner row, immediately left of the 200px search box.
-    ".st-key-dm_sport{position:fixed;top:0.5rem;right:226px;z-index:999996;width:auto !important;"
+    # Sport switch: centred in the banner row, and vertically level with the
+    # search box. Both sit at top:0.5rem and share the same 1.9rem height, so
+    # "level" holds by construction rather than by eyeballing two paddings —
+    # the link is a flex box so its label centres inside that fixed height.
+    ".st-key-dm_sport{position:fixed;top:0.5rem;left:50%;transform:translateX(-50%);"
+    "  z-index:999996;width:auto !important;"
     "  background:transparent !important;padding:0 !important;border:none !important;"
     "  box-shadow:none !important;}"
     ".st-key-dm_sport [data-testid='stElementContainer']{width:auto !important;}"
-    ".st-key-dm_sport [data-testid='stPageLink'] a{padding:4px 11px;border-radius:8px;"
+    ".st-key-dm_sport [data-testid='stPageLink'] a{height:1.9rem;display:flex;"
+    "  align-items:center;padding:0 14px;border-radius:8px;"
     "  background:var(--dm-surface);border:1px solid var(--dm-line);}"
     ".st-key-dm_sport [data-testid='stPageLink'] p{font-family:'Archivo Narrow',sans-serif;"
     "  font-weight:700;font-size:0.86rem;letter-spacing:0.5px;margin:0;white-space:nowrap;"
