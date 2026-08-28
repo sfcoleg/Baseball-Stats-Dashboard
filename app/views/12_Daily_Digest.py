@@ -217,7 +217,14 @@ else:
 style.colored_header("Top Pitching Performances", "pitching")
 top_pitchers = db.top_n_recent_pitchers(recent_pitching, "day", 5)
 if top_pitchers.empty:
-    st.caption("No pitching data yet.")
+    # Distinguish "nothing to show" from "we are broken". Baseball-Reference
+    # publishes its daily batting page before its pitching one, so this
+    # section can legitimately be empty for a few hours while the batting
+    # section right above it is full.
+    st.caption(
+        "Baseball-Reference hasn't published this day's pitching lines yet — "
+        "they usually land a few hours after the batting ones."
+    )
 else:
     for _, row in top_pitchers.iterrows():
         with st.container(border=True):

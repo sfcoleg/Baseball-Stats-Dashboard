@@ -1140,6 +1140,43 @@ def fetch_recent_batting():
     return pd.concat(frames, ignore_index=True)
 
 
+def _store_recent(conn, table: str, fresh):
+    """Write a recent_* table without letting a partial fetch destroy it.
+
+    Each of these tables holds three windows — day, week and month — fetched
+    separately and concatenated, and any one of them can fail on its own.
+    On 2026-08-28 Baseball-Reference had not published the previous day's
+    PITCHING page (its batting page was up), so the day fetch raised and
+    only week+month were written. A plain "replace" then did real damage:
+    the day rows vanished, and because only the day window carries GSc, the
+    column disappeared from the table too — which broke the app's SELECT and
+    took week and month off the site along with it.
+
+    So periods are replaced individually. A window that fetched fine
+    overwrites its own rows; a window that failed keeps whatever it had,
+    stale but present, until it can be fetched again. Columns are unioned
+    for the same reason, so a narrower fetch cannot drop a column the
+    stored rows still need."""
+    if fresh is None or fresh.empty:
+        print(f"  {table}: nothing fetched, leaving stored rows alone")
+        return
+    try:
+        stored = pd.read_sql(f"SELECT * FROM {table}", conn)
+    except Exception:
+        stored = pd.DataFrame()
+
+    fetched_periods = set(fresh["period"].unique())
+    if not stored.empty and "period" in stored.columns:
+        kept = stored[~stored["period"].isin(fetched_periods)]
+        missing = sorted(set(stored["period"].unique()) - fetched_periods)
+        if missing:
+            print(f"  {table}: keeping stored {', '.join(missing)} rows (not fetched this run)")
+        combined = pd.concat([kept, fresh], ignore_index=True) if not kept.empty else fresh
+    else:
+        combined = fresh
+    combined.to_sql(table, conn, if_exists="replace", index=False)
+
+
 def fetch_recent_pitching():
     """Pitching stats over the last day/week/month, mirroring fetch_recent_batting.
     'day' includes Game Score (GSc), a well-known single-game dominance metric;
@@ -1157,8 +1194,18 @@ def fetch_recent_pitching():
         print(f"Fetching recent pitching stats ({period}: {start} to {end})...")
         try:
             df = pitching_stats_range(start.isoformat(), end.isoformat())
+        except IndexError:
+            # pybaseball raises IndexError, not an empty frame, when
+            # Baseball-Reference's page for the range has no rows at all.
+            # That is routine for the previous day: B-R publishes its daily
+            # batting page before its pitching one, so the day window can
+            # legitimately be empty for a few hours. Named explicitly so the
+            # log distinguishes "not published yet" from a real failure —
+            # _store_recent keeps the previously stored rows either way.
+            print(f"  no {period} pitching rows published yet — keeping stored rows")
+            continue
         except Exception as e:
-            print(f"  skipped ({e})")
+            print(f"  skipped ({type(e).__name__}: {e})")
             continue
         if df.empty:
             continue
@@ -1648,10 +1695,8 @@ def fetch_and_store():
             new_achievements = record_milestone_achievements(conn, career_totals)
         else:
             new_achievements = 0
-        if not recent_batting.empty:
-            recent_batting.to_sql("recent_batting", conn, if_exists="replace", index=False)
-        if not recent_pitching.empty:
-            recent_pitching.to_sql("recent_pitching", conn, if_exists="replace", index=False)
+        _store_recent(conn, "recent_batting", recent_batting)
+        _store_recent(conn, "recent_pitching", recent_pitching)
         # always replace, even if empty (e.g. an off day with zero games) — an
         # empty table is the correct signal for "nothing scheduled today"
         todays_games.to_sql("todays_games", conn, if_exists="replace", index=False)

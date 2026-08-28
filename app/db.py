@@ -163,6 +163,21 @@ def _select(cols: list[str]) -> str:
     return ", ".join(f'"{c}"' for c in cols)
 
 
+def _select_present(conn, table: str, cols: list[str]) -> str:
+    """Like _select, but keeps only the columns the table actually has.
+
+    Upstream tables are not a fixed shape. Baseball-Reference's single-day
+    pitching page carries GSc while its multi-day ranges do not, so a day
+    whose page has not published yet leaves the stored table one column
+    short. Naming that column in a SELECT makes the whole query fail, which
+    is how one missing day wiped the week and month slices off the site too.
+    Asking for what exists degrades instead: the missing stat is absent, the
+    rest still renders."""
+    have = {r[1] for r in conn.execute(f'PRAGMA table_info("{table}")')}
+    present = [c for c in cols if c in have]
+    return _select(present) if present else "*"
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
@@ -210,7 +225,8 @@ def load_recent_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
-                f"SELECT {_select(RECENT_BATTING_COLS)} FROM recent_batting WHERE season = ?",
+                f"SELECT {_select_present(conn, 'recent_batting', RECENT_BATTING_COLS)} "
+                "FROM recent_batting WHERE season = ?",
                 conn, params=(season,),
             )
         except pd.errors.DatabaseError:
@@ -223,7 +239,8 @@ def load_recent_pitching(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         try:
             df = pd.read_sql(
-                f"SELECT {_select(RECENT_PITCHING_COLS)} FROM recent_pitching WHERE season = ?",
+                f"SELECT {_select_present(conn, 'recent_pitching', RECENT_PITCHING_COLS)} "
+                "FROM recent_pitching WHERE season = ?",
                 conn, params=(season,),
             )
         except pd.errors.DatabaseError:
