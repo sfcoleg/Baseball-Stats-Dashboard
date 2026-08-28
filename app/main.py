@@ -146,6 +146,14 @@ st.markdown(
 # shadow is light-theme only — on a dark ground it just muddies the edge; a
 # hairline border stands in instead, since dark-mode card vs. page background
 # is too close in value on its own for a bubble edge to read clearly.
+# League marks for the sport switch. The switch always shows the sport you
+# would switch TO, so this is the OTHER league's logo, chosen further down
+# once active_sport is known.
+_NHL_MARK = ("https://assets.nhle.com/logos/nhl/svg/NHL_dark.svg" if _theme_type == "light"
+             else "https://assets.nhle.com/logos/nhl/svg/NHL_light.svg")
+_MLB_MARK = ("https://www.mlbstatic.com/team-logos/league-on-light/1.svg" if _theme_type == "light"
+             else "https://www.mlbstatic.com/team-logos/league-on-dark/1.svg")
+
 _CARD_SHADOW = (
     # Light mode: a faint grey hairline as well as the shadow. The cards are
     # near-white on a grey page, so the shadow alone left the edge to be
@@ -816,7 +824,25 @@ with _bar:
 _sport_box = st.container(key="dm_sport")
 with _sport_box:
     _other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
-    st.page_link(_other_home, label="\U0001F3D2 NHL" if active_sport == "mlb" else "\u26be MLB")
+    # Label is bare text; the league mark is painted by CSS below. st.page_link
+    # takes only a string label (or a single emoji as `icon`), so a real logo
+    # cannot be passed through it — but the routing has to stay an st.page_link
+    # or the click becomes a full page load and drops out of Streamlit's router.
+    st.page_link(_other_home, label="NHL" if active_sport == "mlb" else "MLB")
+    # The league's own mark instead of an emoji. This rule lives here rather
+    # than in the component CSS above because it depends on active_sport,
+    # which that block runs too early to know. Each league publishes a
+    # variant for light grounds and one for dark, so the choice follows the
+    # resolved theme — the wrong variant is near-invisible on the opposite
+    # background.
+    _sport_mark = _NHL_MARK if active_sport == "mlb" else _MLB_MARK
+    st.markdown(
+        "<style>.st-key-dm_sport [data-testid='stPageLink'] p::before{"
+        "content:'';display:inline-block;width:1.6rem;height:1.1rem;"
+        "margin-right:6px;vertical-align:-0.2rem;"
+        f"background:url('{_sport_mark}') center/contain no-repeat;{'}'}</style>",
+        unsafe_allow_html=True,
+    )
 
 # The bar can't host a widget, so search renders as its own container that CSS
 # lifts into the slot reserved at the bar's right edge.
