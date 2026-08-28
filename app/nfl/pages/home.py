@@ -9,6 +9,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nfl import db as fdb
+from nfl import style as fstyle
 from nfl import teams as fteams
 
 st.set_page_config(page_title="NFL | Diamond Metrics", layout="wide")
@@ -24,6 +25,18 @@ season = st.selectbox("Season", season_list, index=fdb.season_index(season_list,
                        format_func=fdb.season_label)
 games = fdb.load_games(season, mtime)
 standings = fdb.load_standings(season, mtime)
+
+# --- Last game --------------------------------------------------------------
+# Not scoped to the selected season: this answers "what was the last football
+# played", which through the offseason is last February's Super Bowl.
+_last = fdb.last_completed_game(mtime)
+if _last is not None:
+    style.colored_header("Last Game", "headliners")
+    st.markdown(fstyle.LAST_GAME_CSS, unsafe_allow_html=True)
+    st.markdown(
+        fstyle.last_game_card(_last, fdb.game_round_label(_last), fteams),
+        unsafe_allow_html=True,
+    )
 
 week = fdb.current_week(games)
 if week is not None:

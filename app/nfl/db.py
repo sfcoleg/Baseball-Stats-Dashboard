@@ -230,3 +230,49 @@ def qualified(players: pd.DataFrame, kind: str) -> pd.DataFrame:
     if column not in players.columns:
         return players
     return players[pd.to_numeric(players[column], errors="coerce").fillna(0) >= minimum]
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def last_completed_game(db_mtime_val: float) -> dict | None:
+    """The most recently finished game, across every season we hold.
+
+    Not scoped to the selected season on purpose: this answers "what was the
+    last football played", which during the long offseason is last
+    February's Super Bowl rather than anything in the season a picker
+    happens to be showing."""
+    df = _read(
+        "SELECT * FROM games WHERE home_score IS NOT NULL "
+        "ORDER BY gameday DESC, game_id DESC LIMIT 1"
+    )
+    return None if df.empty else df.iloc[0].to_dict()
+
+
+def super_bowl_numeral(season: int) -> str:
+    """Super Bowl number in Roman numerals for a season year.
+
+    The first Super Bowl followed the 1966 season, so the numeral is
+    season - 1965. Worth spelling out because the league brands them this
+    way and "Super Bowl 60" reads as a typo."""
+    number = int(season) - 1965
+    if number < 1:
+        return ""
+    numerals = ((1000, "M"), (900, "CM"), (500, "D"), (400, "CD"), (100, "C"),
+                (90, "XC"), (50, "L"), (40, "XL"), (10, "X"), (9, "IX"),
+                (5, "V"), (4, "IV"), (1, "I"))
+    out = ""
+    for value, letter in numerals:
+        while number >= value:
+            out += letter
+            number -= value
+    return out
+
+
+def game_round_label(game: dict) -> str:
+    """How to name the game: "Super Bowl LX", "Divisional", "Week 8"."""
+    kind = game.get("game_type") or "REG"
+    if kind == "SB":
+        numeral = super_bowl_numeral(game.get("season") or 0)
+        return f"Super Bowl {numeral}".strip()
+    if kind in GAME_TYPE_LABELS and kind != "REG":
+        return GAME_TYPE_LABELS[kind]
+    return f"Week {int(game['week'])}" if game.get("week") else "Regular season"
