@@ -124,7 +124,6 @@ daily_milestones = ndb.get_daily_milestones(yesterday.isoformat(), season, mtime
 
 if daily_milestones:
     style.colored_header("Milestones", "headliners")
-    st.caption(f"Notable achievements from {yesterday.strftime('%B %-d')}'s games.")
     # A fresh st.columns(4) per row of 4 (not one st.columns(4) reused via
     # i % 4) — columns() stacks column-major on mobile, so reusing one
     # would read item 0, 4, 8, 12, then 1, 5, 9... A new call per row means

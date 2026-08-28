@@ -224,7 +224,6 @@ as_of = db.data_as_of(mtime)
 day_label = f"Hot {db.daily_label(as_of)}"
 if milestones:
     style.colored_header("Milestones", "headliners")
-    st.caption(f"Notable achievements from {db.daily_games_phrase(as_of)}.")
     milestone_cols = st.columns(min(len(milestones), 3))
     for i, m in enumerate(milestones):
         with milestone_cols[i % 3]:

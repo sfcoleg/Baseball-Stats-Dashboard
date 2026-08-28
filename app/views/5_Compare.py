@@ -195,7 +195,6 @@ for batter_id, batter_name, pitcher_id, pitcher_name in h2h_pairs:
     h2h = db.load_head_to_head(batter_id, pitcher_id)
     if h2h.get("plateAppearances"):
         style.colored_header(f"Head to Head: {batter_name} vs. {pitcher_name}", "headliners")
-        st.caption("Career regular-season matchup, all seasons.")
         c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("PA", h2h.get("plateAppearances", 0))
         c2.metric("Line", f"{h2h.get('hits', 0)}-for-{h2h.get('atBats', 0)}")

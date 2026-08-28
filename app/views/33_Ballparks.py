@@ -131,7 +131,6 @@ else:
 # --- League-wide park factor table -------------------------------------------
 if not factors.empty:
     style.colored_header("All 30 Parks", "batting")
-    st.caption("Sorted by run factor — the launching pads at the top, the pitcher havens at the bottom.")
     table = factors.sort_values("run_factor", ascending=False)[
         ["park_abbr", "run_factor", "hr_factor", "games"]
     ].rename(columns={"park_abbr": "Tm", "run_factor": "Run Factor",

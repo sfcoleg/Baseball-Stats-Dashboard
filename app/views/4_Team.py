@@ -106,7 +106,6 @@ _ALL_STAR_COLORS = {"AL": "#C8102E", "NL": "#003DA5"}
 if choice in _ALL_STAR_SCOPES:
     league = _ALL_STAR_SCOPES[choice]
     style.colored_header(choice, "headliners")
-    st.caption(f"The {season} All-Star Game starting lineup and full roster.")
     roster = db.load_all_star_roster(season, league, mtime)
     if roster.empty:
         st.info("No All-Star roster data for this season.")
@@ -324,7 +323,6 @@ if season == current_season:
             starters["RP"] = {"name": top_rp["Name"], "mlbID": top_rp["mlbID"]}
     if starters:
         style.colored_header("Starting Lineup", "fielding")
-        st.caption("Current depth-chart starter at each position.")
         st.markdown(style.baseball_diamond(starters, color), unsafe_allow_html=True)
 
 # --- Team leaders -----------------------------------------------------------

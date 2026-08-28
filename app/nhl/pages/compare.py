@@ -175,7 +175,6 @@ if role_a == "Skater" and role_b == "Skater":
     labels = [label for _, label in shot_types]
     if all(c in skaters.columns for c in cols_a):
         style.colored_header("Shot-Type Duel", "chart")
-        st.caption("Goals by shot type this season.")
         fig = go.Figure()
         fig.add_trace(go.Bar(x=labels, y=[row_a[c] for c in cols_a], name=name_a, marker_color=color_a))
         fig.add_trace(go.Bar(x=labels, y=[row_b[c] for c in cols_a], name=name_b, marker_color=color_b))

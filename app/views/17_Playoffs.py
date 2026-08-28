@@ -91,7 +91,6 @@ def _render_bracket_features(standings, playoff_odds, mtime):
         st.divider()
 
     style.colored_header("Matchup Preview", "batting")
-    st.caption("Stat-driven strengths/weaknesses for any two playoff teams — offense, rotation, bullpen, and defense.")
     all_teams = sorted(picture["AL"]["team_abbr"].tolist() + picture["NL"]["team_abbr"].tolist()) \
         if "AL" in picture and "NL" in picture else []
     if len(all_teams) >= 2:
