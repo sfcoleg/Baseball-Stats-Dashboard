@@ -154,6 +154,10 @@ _NHL_MARK = ("https://assets.nhle.com/logos/nhl/svg/NHL_dark.svg" if _theme_type
 _MLB_MARK = ("https://www.mlbstatic.com/team-logos/league-on-light/1.svg" if _theme_type == "light"
              else "https://www.mlbstatic.com/team-logos/league-on-dark/1.svg")
 
+# nflverse hosts a single NFL shield rather than light/dark variants, so
+# unlike the other two this one mark serves both themes.
+_NFL_MARK = "https://raw.githubusercontent.com/nflverse/nflverse-pbp/master/NFL.png"
+
 _CARD_SHADOW = (
     # Light mode: a faint grey hairline as well as the shadow. The cards are
     # near-white on a grey page, so the shadow alone left the edge to be
@@ -298,7 +302,8 @@ st.markdown(
     # it looks right. Inner margins are zeroed so Streamlit's own spacing
     # can't reintroduce the offset.
     ".st-key-dm_sport{position:fixed;top:0.5rem;right:226px;height:1.9rem;"
-    "  display:flex;align-items:center;z-index:999996;width:auto !important;"
+    "  display:flex;flex-direction:row !important;align-items:center;gap:6px;"
+    "  z-index:999996;width:auto !important;"
     "  background:transparent !important;padding:0 !important;border:none !important;"
     "  box-shadow:none !important;}"
     ".st-key-dm_sport [data-testid='stElementContainer']{width:auto !important;"
@@ -741,10 +746,27 @@ NHL_PAGES = [
     st.Page("nhl/pages/glossary.py", title="NHL Glossary", url_path="nhl-glossary"),  # linked from the stat pages, not the nav
 ]
 
-# Every page from both sports is registered (so every URL resolves), but
-# only the active sport's links get rendered below.
-pg = st.navigation(PAGES + NHL_PAGES, position="hidden")
-active_sport = "nhl" if (pg.url_path or "").startswith("nhl") else "mlb"
+# NFL pages follow the same url_path convention as the NHL ones — the prefix
+# is what identifies the sport, so deep links land in the right section.
+NFL_PAGES = [
+    st.Page("nfl/pages/home.py", title="NFL Home", url_path="nfl"),
+    st.Page("nfl/pages/standings.py", title="NFL Standings", url_path="nfl-standings"),
+    st.Page("nfl/pages/schedule.py", title="NFL Schedule", url_path="nfl-schedule"),
+    st.Page("nfl/pages/team.py", title="NFL Team", url_path="nfl-team"),
+]
+
+# Every page from all three sports is registered (so every URL resolves), but
+# only the active sport's links get rendered below. Order matters here: "nfl"
+# and "nhl" are both three letters starting with "n", so the check has to be
+# on the exact prefix rather than anything looser.
+pg = st.navigation(PAGES + NHL_PAGES + NFL_PAGES, position="hidden")
+_url_path = pg.url_path or ""
+if _url_path == "nfl" or _url_path.startswith("nfl-"):
+    active_sport = "nfl"
+elif _url_path == "nhl" or _url_path.startswith("nhl-"):
+    active_sport = "nhl"
+else:
+    active_sport = "mlb"
 
 
 _MLB_NAV_HIDDEN = (
@@ -772,6 +794,8 @@ _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
 # keeps main.py in charge, and it marks the current page for free.
 if active_sport == "mlb":
     _nav_pages = [pg_ for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
+elif active_sport == "nfl":
+    _nav_pages = list(NFL_PAGES)
 else:
     _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 
@@ -809,7 +833,10 @@ with _bar:
                         if _sub_page is not None:
                             st.page_link(_sub_page, label=_sub)
             continue
-        st.page_link(pg_, label=pg_.title.replace("NHL ", ""))
+        # Titles are prefixed ("NHL Standings") so they stay unambiguous in
+        # the registry; the tab strip is already inside one sport, so it drops
+        # the prefix.
+        st.page_link(pg_, label=pg_.title.replace("NHL ", "").replace("NFL ", ""))
     # Settings rides at the right-hand end of the tab row. The sport switch
     # used to sit here too, but it belongs with the site-wide furniture
     # (brand, search) in the banner rather than in a strip of MLB pages —
@@ -823,26 +850,33 @@ with _bar:
 # load and drop out of Streamlit's router.
 _sport_box = st.container(key="dm_sport")
 with _sport_box:
-    _other_home = NHL_PAGES[0] if active_sport == "mlb" else PAGES[0]
-    # Label is bare text; the league mark is painted by CSS below. st.page_link
-    # takes only a string label (or a single emoji as `icon`), so a real logo
-    # cannot be passed through it — but the routing has to stay an st.page_link
-    # or the click becomes a full page load and drops out of Streamlit's router.
-    st.page_link(_other_home, label="NHL" if active_sport == "mlb" else "MLB")
-    # The league's own mark instead of an emoji. This rule lives here rather
-    # than in the component CSS above because it depends on active_sport,
-    # which that block runs too early to know. Each league publishes a
-    # variant for light grounds and one for dark, so the choice follows the
-    # resolved theme — the wrong variant is near-invisible on the opposite
-    # background.
-    _sport_mark = _NHL_MARK if active_sport == "mlb" else _MLB_MARK
-    st.markdown(
-        "<style>.st-key-dm_sport [data-testid='stPageLink'] p::before{"
-        "content:'';display:inline-block;width:1.6rem;height:1.1rem;"
-        "margin-right:6px;vertical-align:-0.2rem;"
-        f"background:url('{_sport_mark}') center/contain no-repeat;{'}'}</style>",
-        unsafe_allow_html=True,
+    # With three sports the switch shows the other TWO, so it stays one click
+    # to anywhere rather than cycling. Labels are bare text and the league
+    # mark is painted by CSS below: st.page_link takes only a string label
+    # (or a single emoji as `icon`), so a real logo cannot be passed through
+    # it — and the routing has to stay an st.page_link, since a plain anchor
+    # full-page loads and drops out of Streamlit's router.
+    _SPORTS = {
+        "mlb": (PAGES[0], "MLB", _MLB_MARK),
+        "nhl": (NHL_PAGES[0], "NHL", _NHL_MARK),
+        "nfl": (NFL_PAGES[0], "NFL", _NFL_MARK),
+    }
+    _others = [v for k, v in _SPORTS.items() if k != active_sport]
+    for _home, _label, _ in _others:
+        st.page_link(_home, label=_label)
+    # One rule per link, addressed by position. This lives here rather than in
+    # the component CSS block because it depends on active_sport, which that
+    # block runs too early to know. MLB and NHL publish a variant for light
+    # grounds and one for dark, chosen by the resolved theme — the wrong
+    # variant is nearly invisible on the opposite background.
+    _mark_rules = "".join(
+        f".st-key-dm_sport [data-testid='stElementContainer']:nth-of-type({i + 1}) "
+        "[data-testid='stPageLink'] p::before{content:'';display:inline-block;"
+        "width:1.6rem;height:1.1rem;margin-right:6px;vertical-align:-0.2rem;"
+        f"background:url('{_mark}') center/contain no-repeat;{'}'}"
+        for i, (_, _, _mark) in enumerate(_others)
     )
+    st.markdown(f"<style>{_mark_rules}</style>", unsafe_allow_html=True)
 
 # The bar can't host a widget, so search renders as its own container that CSS
 # lifts into the slot reserved at the bar's right edge.
@@ -850,12 +884,17 @@ _search_box = st.container(key="dm_search")
 sidebar.render_search(active_sport, target=_search_box, key_suffix="_top")
 
 # --- mobile: the sidebar exactly as it was before the top bar existed --------
-sidebar.render_sport_switcher(active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0]})
+sidebar.render_sport_switcher(
+    active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0], "nfl": NFL_PAGES[0]}
+)
 sidebar.render_search(active_sport)
 if active_sport == "mlb":
     for p_ in PAGES:
         if p_.title not in _MLB_NAV_HIDDEN:
             st.sidebar.page_link(p_, label=p_.title)
+elif active_sport == "nfl":
+    for p_ in NFL_PAGES:
+        st.sidebar.page_link(p_, label=p_.title.replace("NFL ", ""))
 else:
     for p_ in NHL_PAGES:
         if p_.title not in _NHL_NAV_HIDDEN:

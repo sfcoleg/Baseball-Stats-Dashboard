@@ -6,7 +6,7 @@ import db
 from nhl import db as ndb
 from nhl import teams as nteams
 
-SPORT_LABELS = {"mlb": "⚾ MLB", "nhl": "🏒 NHL"}
+SPORT_LABELS = {"mlb": "MLB", "nhl": "NHL", "nfl": "NFL"}
 _LABEL_TO_SPORT = {v: k for k, v in SPORT_LABELS.items()}
 
 
@@ -73,6 +73,11 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
     Defaults to the sidebar so any other caller is unaffected. `key_suffix`
     keeps the desktop and mobile copies from colliding on widget keys."""
     target = target if target is not None else st.sidebar
+    if active_sport == "nfl":
+        # No NFL player index yet (phase 1 is teams/schedule/standings), and
+        # falling through to the NHL box would silently offer hockey players
+        # on a football page.
+        return
     if active_sport != "mlb":
         _render_nhl_search(target, key_suffix)
         return
