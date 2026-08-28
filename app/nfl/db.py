@@ -141,3 +141,92 @@ def record_string(row) -> str:
     ties = int(row.get("ties") or 0)
     base = f"{int(row['wins'])}-{int(row['losses'])}"
     return f"{base}-{ties}" if ties else base
+
+
+# --- Players ----------------------------------------------------------------
+# Qualifying thresholds for leaderboards, per season. Without them a leader
+# board sorted by a RATE is just whoever attempted the fewest plays.
+MIN_ATTEMPTS = 100      # passing
+MIN_CARRIES = 50        # rushing
+MIN_TARGETS = 30        # receiving
+
+
+# Columns that must be numeric to render. SQLite has no fixed column types,
+# so anything written as text once stays text — and formatting a string as a
+# float raises. Coercing on read means a bad write degrades to blanks rather
+# than to a stack trace on the page.
+_NUMERIC_PLAYER_COLS = (
+    "passing_epa_per_att", "rushing_epa_per_carry", "receiving_epa_per_target",
+    "completion_pct", "yards_per_attempt", "yards_per_carry",
+    "yards_per_reception", "passing_cpoe", "target_share",
+)
+
+
+def _coerce_numeric(df: pd.DataFrame) -> pd.DataFrame:
+    for column in _NUMERIC_PLAYER_COLS:
+        if column in df.columns:
+            df[column] = pd.to_numeric(df[column], errors="coerce")
+    return df
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_player_seasons(season: int, db_mtime_val: float, season_type: str = "REG") -> pd.DataFrame:
+    """Season totals for every player in one season.
+
+    season_type is separate on purpose — a leaderboard means the regular
+    season, and folding playoff games in would flatter whoever went deepest."""
+    return _coerce_numeric(_read(
+        "SELECT * FROM player_season_stats WHERE season = ? AND season_type = ?",
+        (int(season), season_type),
+    ))
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_player_career(player_id: str, db_mtime_val: float) -> pd.DataFrame:
+    """Every season we hold for one player, newest first."""
+    return _coerce_numeric(_read(
+        "SELECT * FROM player_season_stats WHERE player_id = ? ORDER BY season DESC",
+        (str(player_id),),
+    ))
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_player_weeks(player_id: str, season: int, db_mtime_val: float) -> pd.DataFrame:
+    """One player's game log for a season — only the recent seasons kept by
+    the ingest have weekly rows (see WEEKLY_SEASONS there)."""
+    return _coerce_numeric(_read(
+        "SELECT * FROM player_week_stats WHERE player_id = ? AND season = ? ORDER BY week",
+        (str(player_id), int(season)),
+    ))
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def search_players(query: str, db_mtime_val: float) -> pd.DataFrame:
+    """Name search across every season, newest first.
+
+    Returns one row per player rather than one per season — the same player
+    appearing eleven times would push everyone else off a short results
+    list."""
+    if not query.strip():
+        return pd.DataFrame()
+    df = _read(
+        "SELECT player_id, player_display_name, position, team, MAX(season) AS season "
+        "FROM player_season_stats WHERE player_display_name LIKE ? COLLATE NOCASE "
+        "GROUP BY player_id ORDER BY season DESC, player_display_name",
+        (f"%{query.strip()}%",),
+    )
+    return df
+
+
+def qualified(players: pd.DataFrame, kind: str) -> pd.DataFrame:
+    """The pool for a rate leaderboard: enough volume to mean something."""
+    if players.empty:
+        return players
+    column, minimum = {
+        "passing": ("attempts", MIN_ATTEMPTS),
+        "rushing": ("carries", MIN_CARRIES),
+        "receiving": ("targets", MIN_TARGETS),
+    }[kind]
+    if column not in players.columns:
+        return players
+    return players[pd.to_numeric(players[column], errors="coerce").fillna(0) >= minimum]

@@ -98,6 +98,116 @@ def fetch_team_weeks(seasons: list[int]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+# The columns worth storing. load_player_stats returns 150; most are
+# fantasy-scoring variants and long-tail splits that no page here reads, and
+# a decade of weekly rows at full width would make the committed database
+# several times larger than the other two sports put together.
+PLAYER_COLS = [
+    "player_id", "player_display_name", "position", "position_group",
+    "headshot_url", "season", "week", "season_type", "team", "opponent_team",
+    "completions", "attempts", "passing_yards", "passing_tds",
+    "passing_interceptions", "sacks_suffered", "passing_epa", "passing_cpoe",
+    "passing_first_downs",
+    "carries", "rushing_yards", "rushing_tds", "rushing_fumbles_lost",
+    "rushing_epa", "rushing_first_downs",
+    "receptions", "targets", "receiving_yards", "receiving_tds",
+    "receiving_epa", "receiving_air_yards", "receiving_yards_after_catch",
+    "receiving_first_downs", "target_share",
+    "fantasy_points_ppr",
+]
+
+# Weekly rows are kept only for the newest few seasons. A game log is a
+# "what did he do lately" view, while leaderboards and career lines come off
+# the season aggregates below — so older weekly detail costs size without
+# serving a page.
+WEEKLY_SEASONS = 3
+
+# Everything that should be summed when weeks are rolled up into a season.
+# Rates (EPA per play, CPOE, target share) are deliberately absent: summing
+# them is meaningless, so they are re-derived or averaged instead.
+_SUM_COLS = [
+    "completions", "attempts", "passing_yards", "passing_tds",
+    "passing_interceptions", "sacks_suffered", "passing_epa", "passing_first_downs",
+    "carries", "rushing_yards", "rushing_tds", "rushing_fumbles_lost",
+    "rushing_epa", "rushing_first_downs",
+    "receptions", "targets", "receiving_yards", "receiving_tds",
+    "receiving_epa", "receiving_air_yards", "receiving_yards_after_catch",
+    "receiving_first_downs", "fantasy_points_ppr",
+]
+
+
+def fetch_player_weeks(seasons: list[int]) -> pd.DataFrame:
+    """Weekly per-player lines. Fetched season by season for the same reason
+    team stats are: the upcoming season's file does not exist yet."""
+    frames = []
+    for year in seasons:
+        try:
+            df = _frame(_nfl().load_player_stats(seasons=[year]))
+        except Exception as exc:
+            reason = "not published yet" if "404" in str(exc) else type(exc).__name__
+            print(f"  player stats {year}: skipped ({reason})")
+            continue
+        frames.append(df[[c for c in PLAYER_COLS if c in df.columns]].copy())
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
+def build_player_seasons(weeks: pd.DataFrame) -> pd.DataFrame:
+    """Season totals per player, per season type.
+
+    Regular season and playoffs stay separate rows rather than being merged:
+    a leaderboard means the regular season, and silently folding in playoff
+    games would flatter whoever went deepest."""
+    if weeks.empty:
+        return pd.DataFrame()
+    keys = ["player_id", "player_display_name", "position", "position_group",
+            "headshot_url", "season", "season_type"]
+    sums = {c: (c, "sum") for c in _SUM_COLS if c in weeks.columns}
+    agg = weeks.groupby(keys, as_index=False, dropna=False).agg(
+        games=("week", "nunique"),
+        # A player's team can change mid-season; the last one he appears for
+        # is the one a leaderboard should show him under.
+        team=("team", "last"),
+        **sums,
+    )
+    # Rates are re-derived from the totals rather than averaged across weeks,
+    # so a one-play game cannot weigh the same as a full one.
+    if {"passing_epa", "attempts"} <= set(agg.columns):
+        agg["passing_epa_per_att"] = agg["passing_epa"] / agg["attempts"].replace(0, pd.NA)
+    if {"rushing_epa", "carries"} <= set(agg.columns):
+        agg["rushing_epa_per_carry"] = agg["rushing_epa"] / agg["carries"].replace(0, pd.NA)
+    if {"receiving_epa", "targets"} <= set(agg.columns):
+        agg["receiving_epa_per_target"] = agg["receiving_epa"] / agg["targets"].replace(0, pd.NA)
+    if {"completions", "attempts"} <= set(agg.columns):
+        agg["completion_pct"] = 100 * agg["completions"] / agg["attempts"].replace(0, pd.NA)
+    if {"passing_yards", "attempts"} <= set(agg.columns):
+        agg["yards_per_attempt"] = agg["passing_yards"] / agg["attempts"].replace(0, pd.NA)
+    if {"rushing_yards", "carries"} <= set(agg.columns):
+        agg["yards_per_carry"] = agg["rushing_yards"] / agg["carries"].replace(0, pd.NA)
+    if {"receiving_yards", "receptions"} <= set(agg.columns):
+        agg["yards_per_reception"] = agg["receiving_yards"] / agg["receptions"].replace(0, pd.NA)
+    # CPOE is a rate already; weight it by attempts rather than by week.
+    if {"passing_cpoe", "attempts"} <= set(weeks.columns):
+        weighted = weeks.assign(_w=weeks["passing_cpoe"] * weeks["attempts"])
+        cpoe = weighted.groupby(keys, as_index=False, dropna=False).agg(
+            _num=("_w", "sum"), _den=("attempts", "sum")
+        )
+        cpoe["passing_cpoe"] = cpoe["_num"] / cpoe["_den"].replace(0, pd.NA)
+        agg = agg.merge(cpoe[keys + ["passing_cpoe"]], on=keys, how="left")
+    # Dividing by a pd.NA-masked denominator yields an OBJECT column, which
+    # SQLite then stores as TEXT — and a text column formatted as a float
+    # raises at render time. Coerce every derived rate back to a real float
+    # before it is written.
+    derived = [
+        "passing_epa_per_att", "rushing_epa_per_carry", "receiving_epa_per_target",
+        "completion_pct", "yards_per_attempt", "yards_per_carry",
+        "yards_per_reception", "passing_cpoe",
+    ]
+    for column in derived:
+        if column in agg.columns:
+            agg[column] = pd.to_numeric(agg[column], errors="coerce")
+    return agg
+
+
 def build_standings(games: pd.DataFrame, teams: pd.DataFrame, season: int) -> pd.DataFrame:
     """Win/loss/tie records for one season, derived from played games.
 
@@ -189,6 +299,17 @@ def fetch_and_store() -> None:
     team_weeks = fetch_team_weeks(seasons)
     print(f"  team-weeks: {len(team_weeks)}")
 
+    player_weeks = fetch_player_weeks(seasons)
+    print(f"  player-weeks: {len(player_weeks)}")
+    player_seasons = build_player_seasons(player_weeks)
+    print(f"  player-seasons: {len(player_seasons)}")
+    # Only the newest few seasons keep their weekly detail — see WEEKLY_SEASONS.
+    recent = seasons[-WEEKLY_SEASONS:]
+    player_weeks_recent = (
+        player_weeks[player_weeks["season"].isin(recent)] if not player_weeks.empty else player_weeks
+    )
+    print(f"  player-weeks kept ({recent[0]}-{recent[-1]}): {len(player_weeks_recent)}")
+
     standings = pd.concat(
         [s for s in (build_standings(games, teams, yr) for yr in seasons) if not s.empty],
         ignore_index=True,
@@ -199,6 +320,10 @@ def fetch_and_store() -> None:
         teams.to_sql("teams", conn, if_exists="replace", index=False)
         games.to_sql("games", conn, if_exists="replace", index=False)
         team_weeks.to_sql("team_week_stats", conn, if_exists="replace", index=False)
+        if not player_seasons.empty:
+            player_seasons.to_sql("player_season_stats", conn, if_exists="replace", index=False)
+        if not player_weeks_recent.empty:
+            player_weeks_recent.to_sql("player_week_stats", conn, if_exists="replace", index=False)
         if not standings.empty:
             standings.to_sql("standings", conn, if_exists="replace", index=False)
         record_refresh(conn)

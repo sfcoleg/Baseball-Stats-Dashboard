@@ -752,8 +752,15 @@ NFL_PAGES = [
     st.Page("nfl/pages/home.py", title="NFL Home", url_path="nfl"),
     st.Page("nfl/pages/standings.py", title="NFL Standings", url_path="nfl-standings"),
     st.Page("nfl/pages/schedule.py", title="NFL Schedule", url_path="nfl-schedule"),
+    st.Page("nfl/pages/players.py", title="NFL Players", url_path="nfl-players"),
     st.Page("nfl/pages/team.py", title="NFL Team", url_path="nfl-team"),
+    st.Page("nfl/pages/player.py", title="NFL Player", url_path="nfl-player"),  # search/deep-link only
 ]
+
+# Same convention as the other sports: the profile page is registered so its
+# URL resolves, but kept off the tab strip — it is reached by searching or by
+# clicking a name.
+_NFL_NAV_HIDDEN = {"NFL Player"}
 
 # Every page from all three sports is registered (so every URL resolves), but
 # only the active sport's links get rendered below. Order matters here: "nfl"
@@ -795,7 +802,7 @@ _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
 if active_sport == "mlb":
     _nav_pages = [pg_ for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
 elif active_sport == "nfl":
-    _nav_pages = list(NFL_PAGES)
+    _nav_pages = [pg_ for pg_ in NFL_PAGES if pg_.title not in _NFL_NAV_HIDDEN]
 else:
     _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 
@@ -894,7 +901,8 @@ if active_sport == "mlb":
             st.sidebar.page_link(p_, label=p_.title)
 elif active_sport == "nfl":
     for p_ in NFL_PAGES:
-        st.sidebar.page_link(p_, label=p_.title.replace("NFL ", ""))
+        if p_.title not in _NFL_NAV_HIDDEN:
+            st.sidebar.page_link(p_, label=p_.title.replace("NFL ", ""))
 else:
     for p_ in NHL_PAGES:
         if p_.title not in _NHL_NAV_HIDDEN:

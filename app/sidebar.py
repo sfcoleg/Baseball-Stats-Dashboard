@@ -74,9 +74,7 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
     keeps the desktop and mobile copies from colliding on widget keys."""
     target = target if target is not None else st.sidebar
     if active_sport == "nfl":
-        # No NFL player index yet (phase 1 is teams/schedule/standings), and
-        # falling through to the NHL box would silently offer hockey players
-        # on a football page.
+        _render_nfl_search(target, key_suffix)
         return
     if active_sport != "mlb":
         _render_nhl_search(target, key_suffix)
@@ -104,6 +102,32 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
             st.session_state["selected_name"] = row["Name"]
             st.session_state["selected_season"] = int(row["season"])
             st.switch_page("views/_Player.py")
+
+    if len(matches) > 8:
+        target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
+
+
+def _render_nfl_search(target=None, key_suffix: str = "") -> None:
+    target = target if target is not None else st.sidebar
+    query = target.text_input(
+        "Search players", key=f"sidebar_search_query_nfl{key_suffix}",
+        placeholder="e.g. Mahomes, Jefferson", label_visibility="collapsed",
+    )
+
+    from nfl import db as fdb
+    if not fdb.NFL_DB_PATH.exists() or not query.strip():
+        return
+
+    matches = fdb.search_players(query, fdb.nfl_db_mtime())
+    if matches.empty:
+        target.caption("No matches.")
+        return
+
+    for _, row in matches.head(8).iterrows():
+        label = f"{row['player_display_name']} ({row['team']}) — {row['position']}"
+        if target.button(label, key=f"sidebar_result_nfl{key_suffix}_{row['player_id']}", use_container_width=True):
+            st.session_state["nfl_selected_player"] = str(row["player_id"])
+            st.switch_page("nfl/pages/player.py")
 
     if len(matches) > 8:
         target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
