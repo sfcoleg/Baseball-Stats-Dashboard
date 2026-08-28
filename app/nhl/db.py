@@ -685,3 +685,132 @@ def skater_slot(season: int, db_mtime_val: float) -> pd.DataFrame:
            .reset_index())
     g["slot_above"] = g["slot_goals"] - g["slot_xg"]
     return g.rename(columns={"shooterId": "playerId"})[cols]
+
+# --- Awards races -----------------------------------------------------------
+# Composites, not predictions: each is a weighted blend of z-scores over the
+# qualifying pool, so a "score" only means "how far above this season's field",
+# never "who the voters will pick". Same shape as the MLB Awards Race page.
+HART_MIN_GP = 20
+VEZINA_MIN_GP = 20
+NORRIS_MIN_GP = 20
+CALDER_MIN_GP = 15
+
+
+def _nhl_zscore(series: pd.Series) -> pd.Series:
+    std = series.std()
+    if not std or pd.isna(std):
+        return pd.Series(0.0, index=series.index)
+    return (series - series.mean()) / std
+
+
+def _skater_pool(season: int, db_mtime_val: float, min_gp: int) -> pd.DataFrame:
+    skaters = load_skaters(season, db_mtime_val)
+    if skaters.empty:
+        return skaters
+    pool = skaters[skaters["gamesPlayed"] >= min_gp].copy()
+    if pool.empty:
+        return pool
+    for col in ("points", "pointsPer605v5", "xGF_pct_5v5", "ixG", "timeOnIcePerGame", "blockedShots"):
+        if col in pool.columns:
+            pool[col] = pd.to_numeric(pool[col], errors="coerce")
+    return pool
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def hart_race(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Hart Trophy composite — the league's most valuable skater.
+
+    Production leads, but raw points flatter whoever gets the most ice time
+    on the best power play, so rate scoring at 5v5 and on-ice expected-goals
+    share carry real weight: they separate a player driving results from one
+    riding a good line."""
+    pool = _skater_pool(season, db_mtime_val, HART_MIN_GP)
+    if pool.empty:
+        return pool
+    pool["Hart Score"] = (
+        0.45 * _nhl_zscore(pool["points"].fillna(0.0))
+        + 0.30 * _nhl_zscore(pool["pointsPer605v5"].fillna(pool["pointsPer605v5"].mean()))
+        + 0.25 * _nhl_zscore(pool["xGF_pct_5v5"].fillna(pool["xGF_pct_5v5"].mean()))
+    )
+    return pool.sort_values("Hart Score", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def norris_race(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Norris Trophy composite — the best all-round defenceman.
+
+    Defencemen are scored against other defencemen only, so the z-scores are
+    computed inside that pool rather than against forwards who out-point them
+    by definition. Ice time is a real signal here in a way it isn't for
+    forwards: coaches give their best defenceman the hardest minutes."""
+    pool = _skater_pool(season, db_mtime_val, NORRIS_MIN_GP)
+    if pool.empty:
+        return pool
+    dmen = pool[pool["positionCode"] == "D"].copy()
+    if dmen.empty:
+        return dmen
+    dmen["Norris Score"] = (
+        0.35 * _nhl_zscore(dmen["points"].fillna(0.0))
+        + 0.35 * _nhl_zscore(dmen["xGF_pct_5v5"].fillna(dmen["xGF_pct_5v5"].mean()))
+        + 0.20 * _nhl_zscore(dmen["timeOnIcePerGame"].fillna(dmen["timeOnIcePerGame"].mean()))
+        + 0.10 * _nhl_zscore(dmen["blockedShots"].fillna(0.0))
+    )
+    return dmen.sort_values("Norris Score", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def vezina_race(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Vezina Trophy composite — the best goaltender.
+
+    Led by goals saved above expected (xGA - goals actually allowed), which
+    prices the difficulty of the shots faced instead of treating every save
+    alike the way raw save percentage does. Workload matters too: 15 great
+    games shouldn't outrank a starter's season, so save rate is scaled by a
+    games-played reliability factor."""
+    goalies = load_goalies(season, db_mtime_val)
+    if goalies.empty:
+        return goalies
+    pool = goalies[goalies["gamesPlayed"] >= VEZINA_MIN_GP].copy()
+    if pool.empty:
+        return pool
+    for col in ("xGA", "goalsAgainst", "savePct", "qualityStartsPct", "gamesPlayed"):
+        pool[col] = pd.to_numeric(pool.get(col), errors="coerce")
+    pool["GSAx"] = pool["xGA"] - pool["goalsAgainst"]
+    reliability = pool["gamesPlayed"] / (pool["gamesPlayed"] + VEZINA_MIN_GP)
+    pool["Vezina Score"] = (
+        0.55 * _nhl_zscore(pool["GSAx"].fillna(0.0))
+        + 0.25 * _nhl_zscore(pool["savePct"].fillna(pool["savePct"].mean())) * reliability
+        + 0.20 * _nhl_zscore(pool["qualityStartsPct"].fillna(pool["qualityStartsPct"].mean())) * reliability
+    )
+    return pool.sort_values("Vezina Score", ascending=False).reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def calder_race(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Calder Trophy composite — the best rookie skater.
+
+    Rookie status is derived rather than given: a player counts as a rookie
+    in the first season they appear in the skater data at all. That makes the
+    EARLIEST season we hold unusable — everyone looks new in it — so it
+    returns empty there rather than crowning a field of false rookies.
+    Goalies are left out; a rookie goalie is rare enough that mixing the two
+    pools would mostly add noise."""
+    seasons = skater_seasons(db_mtime_val)
+    if not seasons or season <= min(seasons):
+        return pd.DataFrame()
+    pool = _skater_pool(season, db_mtime_val, CALDER_MIN_GP)
+    if pool.empty:
+        return pool
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        prior = pd.read_sql(
+            "SELECT DISTINCT playerId FROM skaters WHERE season < ?", conn, params=(int(season),)
+        )
+    rookies = pool[~pool["playerId"].isin(prior["playerId"])].copy()
+    if rookies.empty:
+        return rookies
+    rookies["Calder Score"] = (
+        0.50 * _nhl_zscore(rookies["points"].fillna(0.0))
+        + 0.30 * _nhl_zscore(rookies["pointsPer605v5"].fillna(rookies["pointsPer605v5"].mean()))
+        + 0.20 * _nhl_zscore(rookies["xGF_pct_5v5"].fillna(rookies["xGF_pct_5v5"].mean()))
+    )
+    return rookies.sort_values("Calder Score", ascending=False).reset_index(drop=True)
