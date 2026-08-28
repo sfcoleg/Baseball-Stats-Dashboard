@@ -1,4 +1,5 @@
 import sys
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pandas as pd
@@ -915,6 +916,75 @@ if batting is not None and is_batter_role:
             "where they put the bat on the ball. Blue = weak contact, red = hard contact."
         )
         st.plotly_chart(style.batter_zone_heatmap_chart(spray), use_container_width=True)
+
+# --- Home run reel ---------------------------------------------------------
+# Sits at the end of the batted-ball block (Quality of Contact -> Spray Chart
+# -> Hot/Cold Zone) so the clips land with the other contact material, before
+# the page turns to comparisons and awards. Deliberately OUTSIDE the
+# `not spray.empty` branch above: a hitter with no Statcast spray rows can
+# still have home runs worth watching.
+HR_REEL_COLUMNS = 3
+HR_REEL_COUNT = HR_REEL_COLUMNS * 3  # one 3x3 grid
+
+if batting is not None and is_batter_role:
+    home_runs = db.player_home_runs(mlbID, season, mtime)
+    if not home_runs.empty:
+        style.colored_header("Home Runs", "batting", color)
+        shown = home_runs.head(HR_REEL_COUNT)
+        total = len(home_runs)
+        st.caption(
+            f"{'All ' + str(total) if total <= HR_REEL_COUNT else f'{len(shown)} most recent of {total}'}"
+            " this season. Clips come from MLB and aren't available for every home run."
+        )
+
+        # Each clip is its own round trip to MLB's content feed, so they go
+        # out together rather than one after another — the same thread-pool
+        # treatment the Clubhouse Report gives its highlight lookups.
+        lookups = [
+            (int(r["game_pk"]), None if pd.isna(r["hr_number"]) else int(r["hr_number"]))
+            for _, r in shown.iterrows()
+        ]
+        with ThreadPoolExecutor(max_workers=HR_REEL_COUNT) as clip_pool:
+            clips = list(clip_pool.map(lambda a: db.find_home_run_clip(mlbID, a[0], a[1]), lookups))
+
+        rows = list(shown.iterrows())
+        for start in range(0, len(rows), HR_REEL_COLUMNS):
+            for col, (_, hr), clip in zip(
+                st.columns(HR_REEL_COLUMNS),
+                rows[start:start + HR_REEL_COLUMNS],
+                clips[start:start + HR_REEL_COLUMNS],
+            ):
+                with col:
+                    # inning_topbot says which half he batted in, and so which
+                    # side he was on: batting in the bottom half means he was
+                    # the home team and the opponent is the away side.
+                    at_home = str(hr["inning_topbot"]).lower().startswith("bot")
+                    opponent = hr["away_team"] if at_home else hr["home_team"]
+                    versus = f"{'vs' if at_home else '@'} {opponent}"
+                    when = "" if pd.isna(hr["game_date"]) else hr["game_date"].strftime("%b %-d")
+                    number = "" if pd.isna(hr["hr_number"]) else f"#{int(hr['hr_number'])} · "
+                    detail = " · ".join(
+                        part for part in (
+                            "" if pd.isna(hr["hit_distance_sc"]) else f"{int(hr['hit_distance_sc'])} ft",
+                            "" if pd.isna(hr["launch_speed"]) else f"{hr['launch_speed']:.1f} mph",
+                        ) if part
+                    )
+                    if clip:
+                        st.video(clip)
+                    else:
+                        st.markdown(
+                            "<div style='aspect-ratio:16/9;border-radius:8px;display:flex;"
+                            "align-items:center;justify-content:center;background:var(--dm-surface-mute);"
+                            "color:var(--dm-dim);font-size:0.8rem'>No clip available</div>",
+                            unsafe_allow_html=True,
+                        )
+                    st.markdown(
+                        f"<div style='margin-top:6px;font-weight:700;color:var(--dm-text)'>"
+                        f"{number}{when} {versus}</div>"
+                        f"<div style='color:var(--dm-dim);font-size:0.85rem'>{detail}</div>",
+                        unsafe_allow_html=True,
+                    )
+        st.divider()
 
 # Batting comps for a two-way player (both roles True) — matches the same
 # "batting is authoritative" convention used for the header team badge above.

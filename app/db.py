@@ -1130,8 +1130,8 @@ def player_home_runs(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
     try:
         with sqlite3.connect(DB_PATH) as conn:
             df = pd.read_sql(
-                "SELECT game_date, game_pk, home_team, away_team, launch_speed, "
-                "launch_angle, hit_distance_sc, des FROM hr_log "
+                "SELECT game_date, game_pk, home_team, away_team, inning_topbot, "
+                "launch_speed, launch_angle, hit_distance_sc, des FROM hr_log "
                 "WHERE batter = ? AND season = ? ORDER BY game_date DESC",
                 conn, params=(float(mlbID), int(season)),
             )
@@ -1139,7 +1139,14 @@ def player_home_runs(mlbID, season: int, db_mtime_val: float) -> pd.DataFrame:
         return pd.DataFrame()
     if df.empty:
         return df
-    df["game_date"] = pd.to_datetime(df["game_date"], errors="coerce")
+    # hr_log carries two date shapes — "2026-08-26" for most rows and
+    # "2026-08-26 00:00:00" for others. pd.to_datetime infers one format
+    # from the first value and coerces everything that doesn't match to
+    # NaT, which silently blanked 36 of Schwarber's 39 dates. Slicing to
+    # the date part first makes the parse deterministic either way.
+    df["game_date"] = pd.to_datetime(
+        df["game_date"].astype(str).str.slice(0, 10), errors="coerce"
+    )
     df["hr_number"] = (
         df["des"].str.extract(HR_NUMBER_RE, expand=False).astype("Int64")
     )
