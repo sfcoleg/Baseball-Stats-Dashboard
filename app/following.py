@@ -29,6 +29,12 @@ import streamlit.components.v1 as components
 
 STORAGE_KEY = "sabermetrics_following"
 
+# Both sports live under this ONE key, in one payload. That isn't tidiness —
+# a second storage key would need a second LOAD bridge, and the module
+# docstring above explains why two independent redirects on the same fresh
+# load race and silently drop one side's data. One key, one redirect, four
+# lists.
+
 
 def bootstrap() -> None:
     """Call once, early in main.py (before any page renders). Seeds
@@ -51,11 +57,15 @@ def bootstrap() -> None:
             data = {}
         st.session_state["followed_teams"] = data.get("teams", [])
         st.session_state["followed_players"] = data.get("players", [])
+        st.session_state["followed_nhl_teams"] = data.get("nhl_teams", [])
+        st.session_state["followed_nhl_players"] = data.get("nhl_players", [])
         st.session_state["_following_safe_to_save"] = True
         return
 
     st.session_state["followed_teams"] = []
     st.session_state["followed_players"] = []
+    st.session_state["followed_nhl_teams"] = []
+    st.session_state["followed_nhl_players"] = []
     # Not safe to save yet: this render's lists are just a placeholder in
     # case localStorage turns out to have real data and the shared redirect
     # (see localstorage_bridge.py, called once from main.py) fires. Saving
@@ -75,6 +85,8 @@ def save() -> None:
     payload = json.dumps({
         "teams": st.session_state.get("followed_teams", []),
         "players": st.session_state.get("followed_players", []),
+        "nhl_teams": st.session_state.get("followed_nhl_teams", []),
+        "nhl_players": st.session_state.get("followed_nhl_players", []),
     })
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
     components.html(f"<script>localStorage.setItem('{STORAGE_KEY}', {js_literal});</script>", height=0)
