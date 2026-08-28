@@ -2757,6 +2757,27 @@ def team_strength_profile(team_abbr: str, season: int, db_mtime_val: float) -> d
     def _pa_weighted(df, col):
         return (df[col] * df["PA"]).sum() / df["PA"].sum() if df["PA"].sum() > 0 else float("nan")
 
+    def _true_ip(ip):
+        """Baseball-Reference writes innings in OUTS notation: 223.2 is
+        223 and two-thirds, not 223.2. Weighting by the printed number
+        would quietly misweight every pitcher with a partial inning."""
+        whole = ip.astype(float).apply(lambda v: int(v))
+        return whole + (ip.astype(float) - whole) * 10 / 3
+
+    def _ip_weighted(df, col):
+        """A per-nine rate weighted by innings, which is what makes a team
+        FIP the staff's rate rather than the average of its pitchers'
+        rates — a mop-up arm's 40 innings should not count the same as an
+        ace's 200."""
+        if df.empty or col not in df.columns:
+            return float("nan")
+        rows = df.dropna(subset=[col, "IP"])
+        if rows.empty:
+            return float("nan")
+        ip = _true_ip(rows["IP"])
+        total = ip.sum()
+        return (rows[col] * ip).sum() / total if total > 0 else float("nan")
+
     def _ip_weighted_era(df):
         er = (df["ERA"] * df["IP"] / 9).sum()
         ip = df["IP"].sum()
@@ -2774,12 +2795,26 @@ def team_strength_profile(team_abbr: str, season: int, db_mtime_val: float) -> d
 
     return {
         "team_abbr": team_abbr,
+        # Rate stats stay PA/IP weighted; counting stats are summed.
         "ops": _pa_weighted(bat, "OPS"),
+        "wrc_plus": _pa_weighted(bat, "wRC_plus") if "wRC_plus" in bat.columns else float("nan"),
+        "xwoba": _pa_weighted(bat, "xwOBA") if "xwOBA" in bat.columns else float("nan"),
+        # Baserunning RUNS, not stolen bases. Steals count the successes and
+        # ignore the caught-stealings and the first-to-third advances that
+        # make up most of the real value; BsR prices all of it in runs.
+        "bsr": bat["baserunning_runs"].sum() if "baserunning_runs" in bat.columns else None,
         "hr": int(bat["HR"].sum()),
         "sb": int(bat["SB"].sum()) if "SB" in bat.columns else None,
         "team_era": _ip_weighted_era(pit) if not pit.empty else float("nan"),
         "starter_era": _ip_weighted_era(starters) if not starters.empty else float("nan"),
         "bullpen_era": _ip_weighted_era(bullpen) if not bullpen.empty else float("nan"),
+        # FIP rather than ERA for the staff splits: a rotation is being
+        # judged here, and ERA folds in the defence behind it — which the
+        # OAA row below already measures separately. Grading both on ERA
+        # would count the same defence twice.
+        "starter_fip": _ip_weighted(starters, "FIP"),
+        "bullpen_fip": _ip_weighted(bullpen, "FIP"),
+        "staff_xfip": _ip_weighted(pit, "xFIP"),
         "oaa": oaa_total,
     }
 

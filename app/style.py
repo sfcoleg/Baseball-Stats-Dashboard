@@ -1657,12 +1657,32 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
 # (label, profile key, higher_is_better, format string) — used by
 # matchup_preview_html to compare two teams stat-by-stat. Order matters:
 # it's also the display order.
+# Each row is chosen to measure something the others don't, and to measure it
+# the way this site grades players elsewhere:
+#
+#   wRC+ over OPS      — park- and league-adjusted, so a Coors offence and a
+#                        Petco offence are on the same scale.
+#   xwOBA              — contact quality, which says whether the bat is real
+#                        or the balls happened to land.
+#   SB                 — the sabermetric choice here would be baserunning
+#                        runs, and it was tried; Statcast only tracks enough
+#                        opportunity for about 39% of batters, so a team
+#                        total silently omitted a third of the roster.
+#                        Stolen bases cover everyone, and a complete crude
+#                        measure beats a partial refined one.
+#   FIP over ERA       — a rotation graded on runs allowed is partly graded
+#                        on the defence behind it, and the OAA row already
+#                        measures that defence. ERA here would count it twice.
+#   xFIP (staff)       — normalises home runs to a league fly-ball rate, so a
+#                        staff isn't judged on which fly balls carried.
+#   OAA                — the defence itself, once.
 _MATCHUP_METRICS = [
-    ("Offense (OPS)", "ops", True, "{:.3f}"),
-    ("Rotation (Starter ERA)", "starter_era", False, "{:.2f}"),
-    ("Bullpen (ERA)", "bullpen_era", False, "{:.2f}"),
-    ("Power (HR)", "hr", True, "{:,.0f}"),
-    ("Speed (SB)", "sb", True, "{:,.0f}"),
+    ("Offense (wRC+)", "wrc_plus", True, "{:.0f}"),
+    ("Contact Quality (xwOBA)", "xwoba", True, "{:.3f}"),
+    ("Baserunning (SB)", "sb", True, "{:,.0f}"),
+    ("Rotation (Starter FIP)", "starter_fip", False, "{:.2f}"),
+    ("Bullpen (FIP)", "bullpen_fip", False, "{:.2f}"),
+    ("Staff (xFIP)", "staff_xfip", False, "{:.2f}"),
     ("Defense (OAA)", "oaa", True, "{:+.0f}"),
 ]
 
