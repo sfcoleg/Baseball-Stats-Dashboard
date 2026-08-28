@@ -744,7 +744,7 @@ PLAYOFF_BRACKET_CSS = """
   font-weight:700; text-decoration:none !important; font-size:0.9rem;
 }
 .br-rec { color:var(--dm-dim); font-size:0.85rem; }
-.br-tag { color:#F5B942; font-size:0.75rem; font-weight:700; }
+.br-tag { color:var(--dm-amber); font-size:0.75rem; font-weight:700; }
 .br-ws-box {
   display:flex; flex-direction:column; align-items:center; gap:8px; background-color:var(--dm-surface-mute);
   border:1px solid var(--dm-line); border-radius:10px; padding:20px 28px; font-size:0.95rem; color:var(--dm-dim);
@@ -755,7 +755,7 @@ PLAYOFF_BRACKET_CSS = """
 }
 .br-ws-box::before { left:-28px; }
 .br-ws-box::after { right:-28px; }
-.br-ws-title { color:#F5B942; font-weight:700; letter-spacing:0.5px; font-size:1.05rem; }
+.br-ws-title { color:var(--dm-amber); font-weight:700; letter-spacing:0.5px; font-size:1.05rem; }
 </style>
 """
 
@@ -1650,11 +1650,15 @@ def matchup_preview_html(profile_a: dict, profile_b: dict, team_color_fn) -> str
         winner_color = color_a if a_wins else color_b
         rows.append(
             "<tr style='border-top:1px solid var(--dm-line)'>"
+            # var(--dm-text)/--dm-dim rather than the near-white and grey these
+            # used to hardcode: on light mode the winning stat was #FAFAFA on a
+            # #FBFCFE card, a 1.02 contrast ratio — the better number in every
+            # row was simply invisible.
             f"<td style='padding:6px 10px;text-align:right;font-weight:{700 if a_wins else 400};"
-            f"color:{'#FAFAFA' if a_wins else '#9AA3B5'}'>{fmt.format(va)}</td>"
+            f"color:{'var(--dm-text)' if a_wins else 'var(--dm-dim)'}'>{fmt.format(va)}</td>"
             f"<td style='padding:6px 14px;text-align:center;color:var(--dm-dim);white-space:nowrap'>{label}</td>"
             f"<td style='padding:6px 10px;text-align:left;font-weight:{700 if not a_wins else 400};"
-            f"color:{'#FAFAFA' if not a_wins else '#9AA3B5'}'>{fmt.format(vb)}</td>"
+            f"color:{'var(--dm-text)' if not a_wins else 'var(--dm-dim)'}'>{fmt.format(vb)}</td>"
             "</tr>"
         )
     table = (

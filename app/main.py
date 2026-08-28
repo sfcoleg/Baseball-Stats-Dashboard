@@ -184,8 +184,16 @@ st.markdown(
     "  font-size:1.35rem;color:var(--dm-dim);}"
     ".dm-game .dm-row.win .dm-score{color:var(--dm-blue);}"
     # --- metrics: the oversized-numeral treatment --------------------------
+    # The colour is not decoration here. Streamlit paints its OWN theme from
+    # the visitor's system scheme, while this app paints the theme chosen on
+    # Settings — so anyone running "Light" on a dark-mode device got a light
+    # page with Streamlit's dark-theme text colour (#EFF3F9) on it, i.e.
+    # white metric values on a white card. The label below already pinned
+    # var(--dm-dim), which is why labels stayed readable and only the big
+    # numbers vanished. Every native widget we render text into has to name
+    # an app colour rather than inherit Streamlit's.
     "[data-testid='stMetricValue']{font-family:'Archivo Narrow',sans-serif;"
-    "  font-weight:700;letter-spacing:-0.5px;}"
+    "  font-weight:700;letter-spacing:-0.5px;color:var(--dm-text);}"
     "[data-testid='stMetricLabel']{text-transform:uppercase;letter-spacing:0.9px;"
     "  font-size:0.7rem !important;color:var(--dm-dim);}"
     # --- two-row header: blue banner over the tab strip --------------------
