@@ -38,10 +38,14 @@ choice = st.selectbox("Team", labels, key=TEAM_CHOICE_KEY)
 abbr = choice.split(" — ")[0]
 color = nteams.color_for_abbr(abbr)
 
+# The nickname is drawn in the team's own colour, which works for most of
+# the league but not for the pale ones — Nashville gold on a light card
+# measures 1.69, and which teams fail flips with the theme.
+name_color = style.team_text_color(color)
 st.markdown(
     f"<div style='display:flex;align-items:center;gap:14px;margin-bottom:8px'>"
     f"<img src='{nteams.logo_url(abbr)}' style='width:64px;height:64px' />"
-    f"<div style='font-size:1.6rem;font-weight:800;color:{color}'>{nteams.nickname_for_abbr(abbr)}</div>"
+    f"<div style='font-size:1.6rem;font-weight:800;color:{name_color}'>{nteams.nickname_for_abbr(abbr)}</div>"
     "</div>", unsafe_allow_html=True,
 )
 

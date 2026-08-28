@@ -462,7 +462,45 @@ def game_state_html(status_line: str, bases: dict, outs, scale: float = 1.0) -> 
     )
 
 
-def _readable_text_color(bg_hex: str) -> str:
+def _relative_luminance(hex_color: str) -> float:
+    """WCAG relative luminance for a #rrggbb colour."""
+    h = (hex_color or "#666666").lstrip("#")
+    if len(h) != 6:
+        h = "666666"
+    r, g, b = int(h[0:2], 16), int(h[2:4], 16), int(h[4:6], 16)
+
+    def _linear(channel: int) -> float:
+        c = channel / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+
+    return 0.2126 * _linear(r) + 0.7152 * _linear(g) + 0.0722 * _linear(b)
+
+
+def contrast_ratio(fg_hex: str, bg_hex: str) -> float:
+    """WCAG contrast ratio between two colours, 1.0 (identical) to 21.0.
+
+    For deciding whether a team's own colour can carry itself as TEXT on a
+    given surface. Team colours span Nashville gold to Toronto navy, so
+    "draw it in the team colour" is only safe for some of them — below
+    about 3.0 the light ones disappear into a pale card."""
+    light, dark = sorted((_relative_luminance(fg_hex), _relative_luminance(bg_hex)), reverse=True)
+    return (light + 0.05) / (dark + 0.05)
+
+
+def team_text_color(team_hex: str, minimum: float = 3.0) -> str:
+    """The team's own colour when it can carry itself as text on the current
+    theme's card, else the page text colour.
+
+    Drawing a stat in the team's colour looks great for most of the league
+    and disappears for the rest — Nashville gold on a light card measures
+    1.69. Which teams fail flips with the theme (gold is fine on a dark
+    card, navy is not), so the card colour is resolved per theme rather
+    than assumed."""
+    card = "#1E2735" if _session_theme() == "dark" else "#FBFCFE"
+    return team_hex if contrast_ratio(team_hex, card) >= minimum else "var(--dm-text)"
+
+
+def readable_text_color(bg_hex: str) -> str:
     """Black or white, whichever has the higher WCAG contrast ratio against
     `bg_hex` — used instead of a hardcoded per-team lookup so it stays
     correct automatically (e.g. a team rebrand or color tweak in teams.py
@@ -491,10 +529,10 @@ def run_scored_badge_html(runs: int, team_color: str, fly_x: str) -> str:
     up (comparing against the previous poll's score in st.session_state),
     so it naturally appears once per run scored rather than needing to be
     explicitly dismissed. Text color is computed per-team (see
-    _readable_text_color) rather than a fixed dark color, since several
+    readable_text_color) rather than a fixed dark color, since several
     team colors (e.g. the Athletics' dark green) are too dark for black
     text to read against."""
-    text_color = _readable_text_color(team_color)
+    text_color = readable_text_color(team_color)
     return (
         f"<span class='run-scored-badge' style='background-color:{team_color};"
         f"color:{text_color};--fly-x:{fly_x}'>+{runs}</span>"
