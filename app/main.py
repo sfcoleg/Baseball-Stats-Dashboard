@@ -157,7 +157,25 @@ _CARD_SHADOW = (
 st.markdown(
     "<style>"
     # --- section headings: accent kicker + condensed uppercase title -------
-    ".dm-shead{display:flex;align-items:center;gap:12px;margin:2.1rem 0 1rem;}"
+    # Section rhythm. The 1rem BELOW the heading is what sets a heading
+    # against its own content and is deliberately left alone; the space
+    # above it, and the divider margins below, are what separate one
+    # section from the next. Those were carrying ~115px between the season
+    # picker and the first heading, which read as unrelated pages stacked
+    # rather than one page with parts.
+    # The negative top margin is deliberate, and it is what keeps this
+    # surgical. Streamlit puts a fixed 16px row-gap between EVERY element in
+    # the column, so the obvious way to tighten the page — shrinking that gap
+    # — pulls captions, cards and tables closer together too, not just the
+    # sections. Pulling the heading itself up by 14px eats the gap that sits
+    # in front of it and nothing else: the space between a heading and its
+    # own content stays exactly 16px, while section-to-section drops from
+    # 55px to 18px. The divider lines go with it — the headings already
+    # carry an accent kicker bar, so a rule above them was separating what
+    # was already separated, and on a long page that was most of the empty
+    # space.
+    ".dm-shead{display:flex;align-items:center;gap:12px;margin:-14px 0 1rem;}"
+    "[data-testid='stMainBlockContainer'] hr{display:none;}"
     ".dm-kick{width:26px;height:4px;border-radius:2px;flex:0 0 auto;}"
     ".dm-stitle{font-family:'Archivo Narrow',sans-serif;font-weight:700;"
     "  font-size:1.5rem;letter-spacing:0.6px;text-transform:uppercase;line-height:1.1;}"
