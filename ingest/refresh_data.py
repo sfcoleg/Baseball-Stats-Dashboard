@@ -1923,7 +1923,6 @@ def backfill_all_star(season):
 
 
 def _pacific_today() -> str:
-    from zoneinfo import ZoneInfo
     return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
 
 
@@ -1946,16 +1945,60 @@ def record_refresh() -> None:
         conn.commit()
 
 
-def refresh_done_today() -> bool:
-    """Whether a refresh has already completed today (Pacific)."""
+REFRESH_COOLDOWN_HOURS = 5
+
+
+def refreshed_within(hours: int) -> bool:
+    """Whether any refresh completed in the last `hours`, from refresh_log's
+    UTC timestamp. A backstop against re-fetching all day when the data
+    cannot advance — see the --check branch."""
     try:
         with sqlite3.connect(DB_PATH) as conn:
-            row = conn.execute(
-                "SELECT 1 FROM refresh_log WHERE date = ?", (_pacific_today(),)
-            ).fetchone()
+            raw = conn.execute("SELECT MAX(finished_at) FROM refresh_log").fetchone()[0]
     except sqlite3.Error:
         return False
-    return row is not None
+    if not raw:
+        return False
+    try:
+        last = datetime.fromisoformat(str(raw))
+    except ValueError:
+        return False
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - last) < timedelta(hours=hours)
+
+
+def data_is_current() -> bool:
+    """Whether the stored data already covers the last completed game day.
+
+    This asks about the DATA, not about the job. The first version of this
+    guard asked "has a refresh run today (Pacific)?", which broke on
+    2026-08-28: GitHub delayed two scheduled runs to 22:51 and 02:25 UTC,
+    both of which were still Pacific Aug 27 — a day that already had a
+    refresh logged — so both skipped, and Aug 28's data never landed at
+    all. A run-based guard makes a delayed run useless; an outcome-based
+    one makes it a retry. Any run, at any hour, now refreshes if the data
+    is behind and no-ops once it is current.
+
+    Baseball-Reference's "last 1 day" gives the previous day's games, so
+    current means recent_batting's daily slice is dated yesterday."""
+    yesterday = (
+        datetime.now(ZoneInfo("America/Los_Angeles")).date() - timedelta(days=1)
+    )
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            raw = conn.execute(
+                "SELECT MAX(Date) FROM recent_batting WHERE period = 'day'"
+            ).fetchone()[0]
+    except sqlite3.Error:
+        return False
+    if not raw:
+        return False
+    try:
+        stored = datetime.strptime(str(raw).strip(), "%b %d, %Y").date()
+    except ValueError:
+        return False
+    return stored >= yesterday
 
 
 if __name__ == "__main__":
@@ -1967,10 +2010,20 @@ if __name__ == "__main__":
     elif len(sys.argv) > 1 and sys.argv[1] == "--allstar":
         backfill_all_star(int(sys.argv[2]))
     elif len(sys.argv) > 1 and sys.argv[1] == "--check":
-        # Exit 0 = today's refresh still needs to run, 1 = already done.
-        done = refresh_done_today()
-        print("already refreshed today" if done else "refresh needed")
-        sys.exit(1 if done else 0)
+        # Exit 0 = the data is behind and a refresh should run, 1 = skip.
+        if data_is_current():
+            print("data is current")
+            sys.exit(1)
+        # Data being behind is not always fixable: an all-off-day, or the
+        # offseason, leaves nothing to fetch and the check would then say
+        # "behind" on every slot for the rest of time. The rate limit caps
+        # that at one attempt per REFRESH_COOLDOWN_HOURS while still letting
+        # a genuinely stale day be retried within the same day.
+        if refreshed_within(REFRESH_COOLDOWN_HOURS):
+            print(f"behind, but a refresh ran in the last {REFRESH_COOLDOWN_HOURS}h — skipping")
+            sys.exit(1)
+        print("refresh needed")
+        sys.exit(0)
     else:
         fetch_and_store()
         record_refresh()

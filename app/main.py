@@ -174,7 +174,7 @@ st.markdown(
     # carry an accent kicker bar, so a rule above them was separating what
     # was already separated, and on a long page that was most of the empty
     # space.
-    ".dm-shead{display:flex;align-items:center;gap:12px;margin:-20px 0 1rem;}"
+    ".dm-shead{display:flex;align-items:center;gap:12px;margin:-4px 0 1rem;}"
     "[data-testid='stMainBlockContainer'] hr{display:none;}"
     ".dm-kick{width:26px;height:4px;border-radius:2px;flex:0 0 auto;}"
     ".dm-stitle{font-family:'Archivo Narrow',sans-serif;font-weight:700;"

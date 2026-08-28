@@ -2,24 +2,21 @@ name: Daily data refresh
 
 on:
   schedule:
-    # 13:00 UTC = 6:00am Pacific Daylight Time (UTC-7, in effect roughly
-    # Mar-Nov). During Pacific Standard Time (UTC-8, winter) this runs at
-    # 5:00am instead — GitHub Actions' cron has no DST awareness, so a
-    # single UTC hour can't hit 6:00am Pacific year-round.
+    # Times are UTC; 13:00 UTC is 06:00 Pacific in summer, 05:00 in winter
+    # (GitHub cron has no DST awareness, so one UTC hour cannot be 6am
+    # Pacific year-round).
     #
-    # The later slots are RETRIES, not extra refreshes. GitHub runs
-    # scheduled jobs on a best-effort queue: in practice these start
-    # 30-55 minutes late, and they are sometimes dropped entirely with no
-    # run recorded and no notification (that is exactly what happened on
-    # 2026-08-27, leaving the whole site a day stale). One cron line means
-    # one silent miss costs a full day of freshness. Each run asks
-    # `refresh_data.py --check` whether today's refresh already landed and
-    # exits immediately if so, so on a normal day only the 13:00 slot does
-    # real work and the rest are a few seconds of no-op.
-    - cron: "0 13 * * *"
-    - cron: "0 15 * * *"
-    - cron: "0 17 * * *"
-    - cron: "0 19 * * *"
+    # These are RETRIES, not extra refreshes, and the spread is wide on
+    # purpose. GitHub runs scheduled jobs best-effort: observed delays on
+    # this repo range from 30 minutes to over seven hours, and on 2026-08-27
+    # the 13:00 slot was dropped with no run recorded at all. A cluster of
+    # slots inside one narrow window is therefore no protection — if that
+    # window is being deprioritised, every slot in it misses together.
+    #
+    # Each run asks `refresh_data.py --check`, which tests whether the DATA
+    # is behind rather than whether a job has run, so a slot that fires at
+    # any hour still does the right thing and the rest cost a few seconds.
+    - cron: "0 13,16,19,22 * * *"
   workflow_dispatch: {}  # lets you trigger a refresh manually from the Actions tab
 
 permissions:
@@ -41,7 +38,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Has today's refresh already landed?
+      - name: Is the stored data behind?
         id: check
         run: |
           if python ingest/refresh_data.py --check; then
