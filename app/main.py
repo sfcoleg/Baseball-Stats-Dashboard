@@ -705,6 +705,7 @@ NHL_PAGES = [
     st.Page("nhl/pages/today.py", title="NHL Today's Games", url_path="nhl-today"),
     st.Page("nhl/pages/schedule.py", title="NHL Schedule", url_path="nhl-schedule"),
     st.Page("nhl/pages/standings.py", title="NHL Standings", url_path="nhl-standings"),
+    st.Page("nhl/pages/playoffs.py", title="NHL Playoff Picture", url_path="nhl-playoffs"),
     st.Page("nhl/pages/awards.py", title="NHL Awards Race", url_path="nhl-awards"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
     st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
