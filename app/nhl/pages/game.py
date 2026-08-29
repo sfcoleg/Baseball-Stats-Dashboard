@@ -151,6 +151,12 @@ def _render():
     # --- Scoring summary ---------------------------------------------------------
     style.colored_header("Scoring", "batting")
     periods = summary.get("scoring") or []
+    # One swing per goal, chronological — an in-house Skellam win-prob model
+    # (see goal_win_swings), used both as a per-goal tag and to crown the
+    # goal that changed the game the most below.
+    _swings = ndb.goal_win_swings(periods)
+    _flat_goals = [g for per in periods for g in (per.get("goals") or [])]
+    _swing_by_id = {id(g): w for g, w in zip(_flat_goals, _swings)}
     any_goal = False
     for per in periods:
         goals = per.get("goals") or []
@@ -174,6 +180,13 @@ def _render():
             )
             clip = g.get("highlightClipSharingUrl")
             clip_html = f" <a href='{clip}' target='_blank' style='color:var(--dm-dim);font-size:0.8rem'>▶ clip</a>" if clip else ""
+            _w = _swing_by_id.get(id(g))
+            if _w is not None:
+                clip_html += (
+                    f" <span style='background-color:var(--dm-green-soft);color:var(--dm-green);"
+                    f"padding:1px 7px;border-radius:6px;font-size:0.72rem;font-weight:700' "
+                    f"title='Change in win probability for the scoring team'>+{_w * 100:.0f}% WP</span>"
+                )
             st.markdown(
                 f"<div style='display:flex;align-items:center;gap:10px;padding:4px 0;border-top:1px solid #2A3347'>"
                 f"<span style='color:var(--dm-dim);width:48px;flex-shrink:0'>{g.get('timeInPeriod', '')}</span>"
@@ -187,6 +200,40 @@ def _render():
             )
     if not any_goal:
         st.caption("No goals yet.")
+
+    # --- Goal highlights, in the page --------------------------------------------
+    # Every goal carries a Brightcove clip id; this plays the SPECIFIC goal
+    # rather than linking out to nhl.com. One embedded player with a picker
+    # keeps the page fast — seven autoloading iframes would not. Defaults to
+    # the goal that swung win probability the most: the goal of the game by
+    # the model above, not just the last one in.
+    _clipped = [(g, _swing_by_id.get(id(g))) for g in _flat_goals if g.get("highlightClip")]
+    if _clipped:
+        style.colored_header("Goal Highlights", "headliners")
+
+        def _goal_label(pair):
+            g, w = pair
+            nm = _name(g)
+            tm = (g.get("teamAbbrev") or {}).get("default", "")
+            score = f"{g.get('awayScore', '')}–{g.get('homeScore', '')}"
+            tag = f"  (+{w * 100:.0f}% WP)" if w is not None else ""
+            return f"{g.get('timeInPeriod', '')} · {tm} · {nm} ({score}){tag}"
+
+        _default = max(range(len(_clipped)),
+                       key=lambda i: _clipped[i][1] if _clipped[i][1] is not None else -1)
+        _pick = st.selectbox(
+            "Goal", _clipped, index=_default, format_func=_goal_label,
+            label_visibility="collapsed",
+        )
+        if _pick[1] is not None and _pick == _clipped[_default]:
+            st.caption(
+                f"Goal of the game: swung the scoring team's win probability by "
+                f"{_pick[1] * 100:.0f} points — our own score-and-clock model, "
+                f"which is why a late tying goal outranks an early opener."
+            )
+        import streamlit.components.v1 as _components
+        _components.iframe(nstyle.goal_clip_url(_pick[0]["highlightClip"]), height=430)
+        st.caption("Clips play in the NHL's own player.")
 
     # --- Shot map + shots by period -------------------------------------------------
     shots = ndb.load_game_shots(game_id)

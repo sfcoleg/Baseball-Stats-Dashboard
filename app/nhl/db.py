@@ -898,3 +898,83 @@ def skater_log_window() -> tuple[str, str] | None:
     except sqlite3.Error:
         return None
     return (row[0], row[1]) if row and row[0] else None
+
+
+# --- Goal win-probability swings --------------------------------------------
+# The NHL publishes no per-event win probability, so this is an in-house
+# model, stated plainly: team scoring is treated as Poisson at the league
+# rate, which makes the final goal DIFFERENCE a Skellam distribution — the
+# textbook first-order model for hockey win probability. Score effects,
+# strength states and team quality are deliberately out; the point is a
+# defensible ranking of which goal swung the game, not a betting line.
+LEAGUE_GOALS_PER_TEAM_PER_60 = 3.0
+
+
+def _poisson_pmf(mu: float, k: int) -> float:
+    import math
+    return math.exp(-mu) * mu ** k / math.factorial(k)
+
+
+def _p_leader_wins(lead: int, seconds_left: float) -> float:
+    """P(the team currently leading by `lead` wins), regulation time left.
+
+    Skellam tail: both teams add Poisson(mu) goals in the remaining time; a
+    tie at the horn is called half a win, which absorbs OT/shootout without
+    modelling them. lead=0 returns 0.5 by symmetry."""
+    if lead < 0:
+        return 1.0 - _p_leader_wins(-lead, seconds_left)
+    mu = LEAGUE_GOALS_PER_TEAM_PER_60 * max(seconds_left, 0.0) / 3600.0
+    win = tie = 0.0
+    for a in range(13):
+        pa = _poisson_pmf(mu, a)
+        for b in range(13):
+            diff = lead + a - b
+            p = pa * _poisson_pmf(mu, b)
+            if diff > 0:
+                win += p
+            elif diff == 0:
+                tie += p
+    return win + 0.5 * tie
+
+
+def goal_win_swings(periods: list) -> list[float | None]:
+    """One win-probability swing per goal in a landing payload's
+    summary.scoring, chronological, aligned with the goals as a caller
+    iterating periods-then-goals will meet them. Shootout periods yield
+    None per attempt — those aren't goals in game time.
+
+    The swing is from the SCORING team's perspective, so a late tying goal
+    and an overtime winner rank where a gut says they should. Overtime is
+    sudden death: the goal takes its team from p_before straight to 1."""
+    out = []
+    away = home = 0
+    try:
+        for per in periods:
+            pd_ = per.get("periodDescriptor") or {}
+            ptype = pd_.get("periodType")
+            pnum = int(pd_.get("number") or 0)
+            for g in per.get("goals") or []:
+                if ptype == "SO":
+                    out.append(None)
+                    continue
+                mm, ss = (g.get("timeInPeriod") or "0:00").split(":")
+                elapsed = (pnum - 1) * 1200 + int(mm) * 60 + int(ss)
+                seconds_left = max(3600 - elapsed, 0)
+                away_after = int(g.get("awayScore", 0))
+                home_after = int(g.get("homeScore", 0))
+                home_scored = home_after > home
+                lead_before = home - away
+                if ptype == "OT" or seconds_left <= 0:
+                    p_home_before = _p_leader_wins(lead_before, 0)
+                    p_before = p_home_before if home_scored else 1 - p_home_before
+                    swing = 1.0 - p_before
+                else:
+                    p_home_before = _p_leader_wins(lead_before, seconds_left)
+                    p_home_after = _p_leader_wins(home_after - away_after, seconds_left)
+                    delta = p_home_after - p_home_before
+                    swing = delta if home_scored else -delta
+                out.append(round(swing, 4))
+                away, home = away_after, home_after
+    except Exception:
+        return [None] * sum(len(per.get("goals") or []) for per in periods)
+    return out

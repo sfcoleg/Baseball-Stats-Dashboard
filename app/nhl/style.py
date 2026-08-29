@@ -258,3 +258,15 @@ def glossary_link():
         unsafe_allow_html=True,
     )
     st.page_link("nhl/pages/glossary.py", label="ℹ️ What do these stats mean?", use_container_width=False)
+
+
+# NHL video is Brightcove, not raw mp4s like MLB's clips — the API hands out
+# a numeric clip id per goal (verified present on every goal of a probed
+# game) and this is the league's public player for it. Embedding means the
+# clip plays here in the page, in NHL's own player; st.video can't take it.
+BRIGHTCOVE_ACCOUNT = "6415718365001"
+
+
+def goal_clip_url(clip_id) -> str:
+    return (f"https://players.brightcove.net/{BRIGHTCOVE_ACCOUNT}/"
+            f"default_default/index.html?videoId={int(clip_id)}")
