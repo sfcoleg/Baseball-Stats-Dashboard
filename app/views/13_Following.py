@@ -7,6 +7,7 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import following
+import following_page
 import localstorage_bridge
 import prefs
 import style
@@ -42,56 +43,85 @@ localstorage_bridge.register("following", following.STORAGE_KEY)
 followed_teams = st.session_state["followed_teams"]  # [{"abbr", "nickname"}, ...]
 followed_players = st.session_state["followed_players"]  # [{"mlbID", "name"}, ...]
 
-with st.expander("Manage who you follow", expanded=not (followed_teams or followed_players)):
-    col1, col2 = st.columns(2)
+# Cross-league manage panel: one place to follow teams and players in any of
+# the three sports. The six follow lists already share one localStorage
+# payload (see following.py), so the old split into three per-sport pages was
+# only ever a UI artifact — and a bad one, since following a hockey player
+# while browsing baseball meant navigating to another sport first.
+#
+# Each sport's context is built here rather than inside following_page, so
+# that module stays independent of all three data layers and a sport whose
+# database is missing simply doesn't get a tab.
+def _mlb_search(query):
+    matches = db.search_players(query, season, mtime)
+    return [
+        {"id": int(r["mlbID"]), "name": r["Name"],
+         "label": f"{r['Name']} ({r['Tm']}) — {r['roles']}"}
+        for _, r in matches.head(12).iterrows()
+    ]
 
-    with col1:
-        st.markdown("**Follow a team**")
-        team_options = teams.all_teams()
-        followed_abbrs = {t["abbr"] for t in followed_teams}
-        labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options if abbr not in followed_abbrs]
-        if labels:
-            choice = st.selectbox("Team", labels, label_visibility="collapsed")
-            if st.button("Follow team"):
-                abbr, nickname = choice.split(" — ")
-                followed_teams.append({"abbr": abbr, "nickname": nickname})
-        else:
-            st.caption("You're following every team.")
 
-        if followed_teams:
-            st.markdown("**Following**")
-            for t in list(followed_teams):
-                c1, c2 = st.columns([4, 1])
-                c1.markdown(
-                    f"<span style='background-color:{teams.color_for_abbr(t['abbr'])}66;color:var(--dm-text);"
-                    f"padding:3px 10px;border-radius:8px;font-weight:700'>{t['abbr']}</span> {t['nickname']}",
-                    unsafe_allow_html=True,
-                )
-                if c2.button("Unfollow", key=f"unfollow_team_{t['abbr']}"):
-                    followed_teams.remove(t)
+_contexts = {"mlb_ctx": {
+    "all_teams": teams.all_teams,
+    "color": teams.color_for_abbr,
+    "search": _mlb_search,
+    "placeholder": "e.g. Ohtani, Judge",
+    "id_cast": int,   # MLB has always stored this as an int
+}}
 
-    with col2:
-        st.markdown("**Follow a player**")
-        query = st.text_input("Search players", label_visibility="collapsed", placeholder="e.g. Ohtani, Judge")
-        followed_ids = {p["mlbID"] for p in followed_players}
-        if query.strip():
-            matches = db.search_players(query, season, mtime)
-            matches = matches[~matches["mlbID"].isin(followed_ids)]
-            for _, row in matches.head(8).iterrows():
-                c1, c2 = st.columns([4, 1])
-                c1.markdown(f"{row['Name']} ({row['Tm']}) — {row['roles']}")
-                if c2.button("Follow", key=f"follow_player_{row['mlbID']}"):
-                    followed_players.append({"mlbID": int(row["mlbID"]), "name": row["Name"]})
-            if matches.empty:
-                st.caption("No matches.")
+try:
+    from nhl import db as _ndb
+    from nhl import teams as _nteams
 
-        if followed_players:
-            st.markdown("**Following**")
-            for p in list(followed_players):
-                c1, c2 = st.columns([4, 1])
-                c1.markdown(p["name"])
-                if c2.button("Unfollow", key=f"unfollow_player_{p['mlbID']}"):
-                    followed_players.remove(p)
+    if _ndb.NHL_DB_PATH.exists():
+        def _nhl_search(query):
+            found = _ndb.search_players_all_seasons(query, _ndb.nhl_db_mtime())
+            if found.empty:
+                return []
+            return [
+                {"id": int(r["playerId"]), "name": r["Name"], "role": r.get("role"),
+                 "label": f"{r['Name']} ({_nteams._primary(r['Tm'])}) — {r.get('role', '')}"}
+                for _, r in found.head(12).iterrows()
+            ]
+
+        _contexts["nhl_ctx"] = {
+            "all_teams": _nteams.all_teams, "color": _nteams.color_for_abbr,
+            "search": _nhl_search, "placeholder": "e.g. McDavid, Hellebuyck",
+            "id_cast": int,
+        }
+except Exception:
+    pass
+
+try:
+    from nfl import db as _fdb
+    from nfl import teams as _fteams
+
+    if _fdb.NFL_DB_PATH.exists():
+        def _nfl_search(query):
+            found = _fdb.search_players(query, _fdb.nfl_db_mtime())
+            if found.empty:
+                return []
+            return [
+                {"id": str(r["player_id"]), "name": r["player_display_name"],
+                 "role": r.get("position"),
+                 "label": f"{r['player_display_name']} ({r['team']}) — {r['position']}"}
+                for _, r in found.head(12).iterrows()
+            ]
+
+        _contexts["nfl_ctx"] = {
+            "all_teams": _fteams.all_teams, "color": _fteams.color_for_abbr,
+            "search": _nfl_search, "placeholder": "e.g. Mahomes, Jefferson",
+            "id_cast": str,   # NFL ids are strings like "00-0033873"
+        }
+except Exception:
+    pass
+
+following_page.render_manage(**_contexts)
+
+_all_lists = following_page._lists()
+_summary = following_page.summary_line(_all_lists)
+if _summary:
+    st.caption(_summary)
 
 # Persists whatever's currently in session_state to this browser's localStorage
 # — cheap and safe to call unconditionally on every render (see following.py).
