@@ -385,7 +385,7 @@ if batting is not None and is_batter_role:
         _stat_table(batting, [
             ("ISO", "ISO"), ("BABIP", "BABIP"), ("K_PCT", "K%"), ("BB_PCT", "BB%"),
             ("wOBA", "wOBA"), ("xwOBA", "xwOBA"), ("xOBP", "xOBP"), ("xISO", "xISO"),
-            ("OPS_plus", "OPS+"), ("wRC_plus", "wRC+"), ("WAR", "bWAR"),
+            ("OPS_plus", "OPS+"), ("wRC_plus", "wRC+"), ("wRAA", "wRAA"), ("WAR", "bWAR"),
         ])
     with sc_tab:
         _stat_table(batting, [

@@ -147,18 +147,19 @@ with advanced_tab:
         adv_rows = adv_rows.assign(**{"WPA+": float("nan")})
     display = teams.add_team_abbr(adv_rows)[
         ["Name", "Age", "Tm", "PA", "ISO", "BABIP", "K_PCT", "BB_PCT", "contact_pct", "wOBA", "xwOBA",
-         "WAR", "OPS_plus", "wRC_plus", "HVS", "WPA", "WPA+"]
+         "WAR", "OPS_plus", "wRC_plus", "wRAA", "HVS", "WPA", "WPA+"]
     ].rename(columns={"K_PCT": "K%", "BB_PCT": "BB%", "contact_pct": "Contact%", "OPS_plus": "OPS+", "wRC_plus": "wRC+", "WAR": "bWAR"})
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "bWAR", "OPS+", "wRC+", "HVS", "WPA", "WPA+"],
+            higher_better=["ISO", "wOBA", "xwOBA", "BB%", "Contact%", "bWAR", "OPS+", "wRC+", "wRAA", "HVS", "WPA", "WPA+"],
             lower_better=["K%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
                 "ISO": "{:.3f}", "BABIP": "{:.3f}", "K%": "{:.1f}", "BB%": "{:.1f}", "Contact%": "{:.1f}",
-                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "bWAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}", "HVS": "{:.0f}",
+                "wOBA": "{:.3f}", "xwOBA": "{:.3f}", "bWAR": "{:.1f}", "OPS+": "{:.0f}", "wRC+": "{:.0f}",
+                "wRAA": "{:+.1f}", "HVS": "{:.0f}",
                 "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),

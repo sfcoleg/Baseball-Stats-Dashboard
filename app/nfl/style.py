@@ -9,6 +9,10 @@ import pandas as pd
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import style
 
+# Verified to resolve; nflverse serves this from its own repo, the same place
+# the team logos come from.
+LEAGUE_MARK = "https://raw.githubusercontent.com/nflverse/nflverse-pbp/master/NFL.png"
+
 LAST_GAME_CSS = """
 <style>
 .nlg-card{border-radius:20px;overflow:hidden;border:1px solid var(--dm-line);
@@ -18,6 +22,7 @@ LAST_GAME_CSS = """
   font-family:'Archivo Narrow',sans-serif;font-weight:700;letter-spacing:0.8px;
   text-transform:uppercase;font-size:0.78rem;color:var(--dm-dim);}
 .nlg-title{color:var(--dm-text);font-size:0.95rem;letter-spacing:1px;}
+.nlg-mark{height:22px;width:auto;object-fit:contain;vertical-align:middle;}
 .nlg-body{display:grid;grid-template-columns:1fr auto 1fr;align-items:stretch;}
 .nlg-side{padding:26px 14px 30px;text-align:center;display:flex;
   flex-direction:column;align-items:center;gap:7px;min-width:0;}
@@ -155,7 +160,14 @@ def last_game_card(game: dict, round_label: str, teams) -> str:
 
     overtime = bool(game.get("overtime"))
     venue = str(game.get("stadium") or "")
-    head_bits = [f"<span class='nlg-title'>{round_label}</span>"]
+    head_bits = []
+    # The league shield on postseason games. nflverse publishes NFL, AFC and
+    # NFC marks but no Super Bowl logo, and the card is not going to point at
+    # an unverified host that can disappear — so the shield stands in, which
+    # is at least the league's own mark for the game rather than a guess.
+    if (game.get("game_type") or "REG") != "REG":
+        head_bits.append(f"<img class='nlg-mark' src='{LEAGUE_MARK}' alt='NFL' />")
+    head_bits.append(f"<span class='nlg-title'>{round_label}</span>")
     head_bits.append(f"<span>{_pretty_date(game.get('gameday'))}</span>")
     if venue:
         head_bits.append(f"<span>{venue}</span>")

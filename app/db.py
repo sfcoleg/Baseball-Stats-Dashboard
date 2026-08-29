@@ -178,13 +178,53 @@ def _select_present(conn, table: str, cols: list[str]) -> str:
     return _select(present) if present else "*"
 
 
+# wOBA points -> runs. FanGraphs publishes an exact value per season
+# (recently ~1.20-1.25); the ingest already approximates it at 1.20 for
+# wRC+, and wRAA uses the same one so the two stats agree about who was
+# above average and by how much.
+WOBA_SCALE = 1.20
+
+
+def add_wraa(df: pd.DataFrame) -> pd.DataFrame:
+    """Weighted Runs Above Average: how many runs a batter produced beyond
+    what a league-average hitter would have in the same number of plate
+    appearances.
+
+        wRAA = (wOBA - league wOBA) / wOBA scale * PA
+
+    It is the counting counterpart to wRC+. wRC+ says how good the rate was
+    with 100 as average; wRAA says how much that rate was worth given how
+    often he actually batted — so a great hitter in 200 PA and a good one in
+    650 can be compared on total contribution rather than on rate alone.
+
+    Derived on read rather than stored: the league baseline is a property of
+    the season's whole field, so it can be recomputed exactly here, and
+    adding a column to the stored table would change its column set — which
+    makes _store_season_table drop and rebuild it, a trade this does not need
+    to make. Zero for a league-average bat, positive above it."""
+    if df.empty or "wOBA" not in df.columns or "PA" not in df.columns:
+        return df
+    woba = pd.to_numeric(df["wOBA"], errors="coerce")
+    pa = pd.to_numeric(df["PA"], errors="coerce")
+    usable = woba.notna() & pa.notna() & (pa > 0)
+    total_pa = pa[usable].sum()
+    if not total_pa:
+        return df
+    # PA-weighted, matching how the ingest derives its own league wOBA for
+    # wRC+ — a straight mean would let a September call-up's 3 plate
+    # appearances count as much as a full season.
+    league_woba = (woba[usable] * pa[usable]).sum() / total_pa
+    df["wRAA"] = ((woba - league_woba) / WOBA_SCALE * pa).round(1)
+    return df
+
+
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_batting(season: int, db_mtime_val: float) -> pd.DataFrame:
     with sqlite3.connect(DB_PATH) as conn:
         df = pd.read_sql(
             f"SELECT {_select(BATTING_COLS)} FROM batting WHERE season = ?", conn, params=(season,)
         )
-    return _downcast(df)
+    return add_wraa(_downcast(df))
 
 
 @st.cache_data(show_spinner=False, max_entries=4)
