@@ -1698,6 +1698,92 @@ def _store_season_table(conn, table_name, df, season):
     ordered.to_sql(table_name, conn, if_exists="append", index=False)
 
 
+# MLB's gameType codes for the postseason, in the order rounds are played.
+# Ordering them here rather than sorting alphabetically is what lets the
+# archive read Wild Card -> Division -> Championship -> World Series.
+POSTSEASON_ROUNDS = [
+    ("F", "Wild Card"),
+    ("D", "Division Series"),
+    ("L", "Championship Series"),
+    ("W", "World Series"),
+]
+POSTSEASON_FIRST_SEASON = 2008  # matches how far back the rest of the DB goes
+
+
+def fetch_postseason(season: int) -> pd.DataFrame:
+    """Every postseason game for one season, from the MLB Stats API.
+
+    One request per season covering all four rounds. Unlike the regular
+    schedule this is small — a postseason is roughly 30-45 games — so
+    fetching every season we hold is cheap and the whole archive can be
+    rebuilt from scratch quickly."""
+    codes = ",".join(code for code, _ in POSTSEASON_ROUNDS)
+    try:
+        resp = requests.get(
+            "https://statsapi.mlb.com/api/v1/schedule",
+            params={"sportId": 1, "season": int(season), "gameType": codes},
+            timeout=20,
+        )
+        resp.raise_for_status()
+        payload = resp.json()
+    except Exception as exc:
+        print(f"  postseason {season}: skipped ({type(exc).__name__})")
+        return pd.DataFrame()
+
+    round_names = dict(POSTSEASON_ROUNDS)
+    rows = []
+    for block in payload.get("dates", []):
+        for game in block.get("games", []):
+            status = (game.get("status") or {}).get("detailedState", "")
+            # Only completed games. A postponed or scheduled game has no
+            # score, and storing it would put blanks in the archive.
+            if status != "Final":
+                continue
+            away = game["teams"]["away"]
+            home = game["teams"]["home"]
+            if "score" not in away or "score" not in home:
+                continue
+            rows.append({
+                "season": int(season),
+                "game_pk": game.get("gamePk"),
+                "date": game.get("officialDate"),
+                "game_type": game.get("gameType"),
+                "round": round_names.get(game.get("gameType"), game.get("gameType")),
+                "series_game": game.get("seriesGameNumber"),
+                "description": game.get("description") or "",
+                "away_team": away["team"]["name"],
+                "away_score": away.get("score"),
+                "home_team": home["team"]["name"],
+                "home_score": home.get("score"),
+            })
+    return pd.DataFrame(rows)
+
+
+def backfill_postseason(first: int = POSTSEASON_FIRST_SEASON, last: int | None = None) -> None:
+    """Build the whole postseason archive in one pass.
+
+    Separate from the daily refresh on purpose: postseason results are
+    immutable once played, so re-fetching two decades of them every night
+    would be pure waste. The daily run only tops up the current season (see
+    fetch_and_store)."""
+    last = last or CURRENT_SEASON
+    frames = []
+    for year in range(first, last + 1):
+        frame = fetch_postseason(year)
+        if not frame.empty:
+            frames.append(frame)
+            print(f"  postseason {year}: {len(frame)} games")
+    if not frames:
+        print("No postseason data fetched.")
+        return
+    combined = pd.concat(frames, ignore_index=True)
+    DB_PATH.parent.mkdir(exist_ok=True)
+    with sqlite3.connect(DB_PATH) as conn:
+        combined.to_sql("postseason_games", conn, if_exists="replace", index=False)
+        conn.commit()
+    print(f"Wrote {len(combined)} postseason games ({first}-{last}) to {DB_PATH}")
+
+
 def fetch_and_store():
     """Daily refresh: current season's batting/pitching/fielding/recent-performance
     data, plus today's player_history row. Does NOT touch other seasons already
@@ -2119,6 +2205,10 @@ if __name__ == "__main__":
         backfill_season(int(sys.argv[2]))
     elif len(sys.argv) > 1 and sys.argv[1] == "--allstar":
         backfill_all_star(int(sys.argv[2]))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--postseason":
+        # Immutable once played, so this is a one-off backfill rather than
+        # part of the nightly run.
+        backfill_postseason()
     elif len(sys.argv) > 1 and sys.argv[1] == "--check":
         # Exit 0 = the data is behind and a refresh should run, 1 = skip.
         if data_is_current():

@@ -709,6 +709,7 @@ PAGES = [
     # resolve), just excluded from the main nav loop below.
     st.Page("views/30_League_Trends.py", title="League Trends"),
     st.Page("views/31_Streaks.py", title="Streaks"),
+    st.Page("views/32_Postseason.py", title="Postseason"),
     st.Page("views/33_Ballparks.py", title="Ballparks"),
     st.Page("views/23_Umpires.py", title="Umpires"),
     st.Page("views/27_Injury_Report.py", title="Injury Report"),
@@ -787,8 +788,8 @@ else:
 
 _MLB_NAV_HIDDEN = (
     "Player", "Game Center", "Glossary", "Settings",
-    "League Trends", "Streaks", "Ballparks", "Umpires", "Injury Report",
-    "Transactions", "Awards Race", "Minor Leagues",
+    "League Trends", "Streaks", "Postseason", "Ballparks", "Umpires",
+    "Injury Report", "Transactions", "Awards Race", "Minor Leagues",
     "Box Score Search", "Free Agency",
 )
 # Daily Digest stays registered (so /nhl-digest resolves for previews) but off
@@ -827,8 +828,9 @@ st.markdown(
 # The pages the Other hub collects. Kept in one place so the hover menu in
 # the tab bar and the hub page itself can never drift apart.
 OTHER_SUBPAGE_TITLES = [
-    "League Trends", "Streaks", "Ballparks", "Umpires", "Injury Report",
-    "Transactions", "Awards Race", "Minor Leagues", "Box Score Search",
+    "League Trends", "Streaks", "Postseason", "Ballparks", "Umpires",
+    "Injury Report", "Transactions", "Awards Race", "Minor Leagues",
+    "Box Score Search",
 ] + (["Free Agency"] if SHOW_FREE_AGENCY else [])
 
 _bar = st.container(key="dm_nav")

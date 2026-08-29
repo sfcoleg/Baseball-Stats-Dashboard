@@ -4518,3 +4518,80 @@ def team_streaks(season: int, db_mtime_val: float) -> pd.DataFrame:
     df["kind"] = parsed[0]
     df["length"] = pd.to_numeric(parsed[1], errors="coerce")
     return df.dropna(subset=["length"])
+
+
+# --- Postseason archive -----------------------------------------------------
+# Rounds in the order they are played, so the archive reads chronologically
+# rather than alphabetically.
+POSTSEASON_ROUND_ORDER = ["Wild Card", "Division Series", "Championship Series", "World Series"]
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def postseason_seasons(db_mtime_val: float) -> list[int]:
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            rows = conn.execute(
+                "SELECT DISTINCT season FROM postseason_games ORDER BY season DESC"
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+    return [int(r[0]) for r in rows]
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def postseason_games(season: int, db_mtime_val: float) -> pd.DataFrame:
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT * FROM postseason_games WHERE season = ? ORDER BY date, game_pk",
+                conn, params=(int(season),),
+            )
+        except (sqlite3.Error, pd.errors.DatabaseError):
+            return pd.DataFrame()
+    return df
+
+
+def postseason_series(games: pd.DataFrame) -> pd.DataFrame:
+    """Collapse a season's games into one row per SERIES, with the matchup,
+    the result and who won.
+
+    A series is identified by its two teams within a round rather than by any
+    id the API provides, because the API's series identifiers aren't stable
+    across seasons. Sorting the two names makes the pairing order-independent,
+    so home/away swapping between games doesn't split one series into two."""
+    if games.empty:
+        return pd.DataFrame()
+    frame = games.copy()
+    frame["pair"] = frame.apply(
+        lambda r: " vs ".join(sorted([str(r["away_team"]), str(r["home_team"])])), axis=1
+    )
+    rows = []
+    for (round_name, pair), group in frame.groupby(["round", "pair"], dropna=False):
+        teams_in = sorted({*group["away_team"], *group["home_team"]})
+        if len(teams_in) != 2:
+            continue
+        first, second = teams_in
+        wins = {first: 0, second: 0}
+        for _, g in group.iterrows():
+            if pd.isna(g["home_score"]) or pd.isna(g["away_score"]):
+                continue
+            winner = g["home_team"] if g["home_score"] > g["away_score"] else g["away_team"]
+            if winner in wins:
+                wins[winner] += 1
+        champion = first if wins[first] > wins[second] else second
+        runner_up = second if champion == first else first
+        rows.append({
+            "Round": round_name,
+            "Winner": champion,
+            "Loser": runner_up,
+            "Result": f"{wins[champion]}-{wins[runner_up]}",
+            "Games": len(group),
+            "Started": group["date"].min(),
+        })
+    if not rows:
+        return pd.DataFrame()
+    out = pd.DataFrame(rows)
+    out["_order"] = out["Round"].map(
+        {name: i for i, name in enumerate(POSTSEASON_ROUND_ORDER)}
+    ).fillna(99)
+    return out.sort_values(["_order", "Started"]).drop(columns=["_order"]).reset_index(drop=True)
