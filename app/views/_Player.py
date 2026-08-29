@@ -216,14 +216,27 @@ with header_col:
         "border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:700;margin-left:6px'>HOF</span>"
         if mlbID in db.HALL_OF_FAME_MLBIDS else ""
     )
+    # Current IL status, if any. Looked up rather than derived from the stats
+    # on this page: a player can be hurt and still lead his team in home runs,
+    # so nothing in his line reveals it.
+    _injury = db.injured_lookup().get(int(mlbID))
+    il_badge = style.injury_badge(_injury)
     st.markdown(
         f"# {selected_name} "
         f"<span style='background-color:{color}66;color:var(--dm-text);padding:4px 12px;"
         f"border-radius:10px;font-size:0.5em;vertical-align:middle;font-weight:600'>{abbr}</span>"
-        f"{retired_badge}{hof_badge}",
+        f"{retired_badge}{hof_badge}{il_badge}",
         unsafe_allow_html=True,
     )
-    st.caption(f"{nickname} · Age {age} · {selected_roles}")
+    _caption = f"{nickname} · Age {age} · {selected_roles}"
+    if _injury:
+        # The badge gives the tier at a glance; the caption carries the actual
+        # injury when the transactions feed had it, since "IL-60" alone
+        # doesn't say whether it's an elbow or a hamstring.
+        _detail = _injury.get("detail")
+        _has_detail = _detail and str(_detail).lower() != "nan"
+        _caption += f" · {_injury['status']}" + (f" ({_detail})" if _has_detail else "")
+    st.caption(_caption)
 
     # Follow/unfollow, mirroring the Following page's own list (same
     # session_state keys, same localStorage payload) so the two stay in

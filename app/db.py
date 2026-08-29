@@ -2341,6 +2341,46 @@ def load_injury_report() -> pd.DataFrame:
     return df
 
 
+# Short forms for the IL badge. The report itself says "10-Day IL", which
+# reads fine in a table cell but is too long to sit beside a player's name,
+# so the badge uses the shorthand the sport actually uses in conversation.
+_IL_BADGE_LABELS = {
+    "7-Day IL": "IL-7",
+    "10-Day IL": "IL-10",
+    "15-Day IL": "IL-15",
+    "60-Day IL": "IL-60",
+}
+
+
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=2)
+def injured_lookup() -> dict:
+    """mlbID -> {"badge": "IL-60", "status": "60-Day IL", "detail": ...}.
+
+    A dict rather than a DataFrame because callers want a per-player answer
+    while rendering a name, and a dict lookup keeps that O(1) inside a loop
+    over a leaderboard. Rides the same hourly cache as load_injury_report,
+    so surfacing badges in several places costs one fetch, not one per page.
+
+    Returns {} on any failure — a missing badge is a far better outcome than
+    a page that won't render, since this is decoration on top of stats that
+    stand on their own."""
+    try:
+        report = load_injury_report()
+    except Exception:
+        return {}
+    if report.empty:
+        return {}
+    out = {}
+    for _, row in report.iterrows():
+        status = row.get("Status")
+        out[int(row["mlbID"])] = {
+            "badge": _IL_BADGE_LABELS.get(status, "IL"),
+            "status": status,
+            "detail": row.get("Detail"),
+        }
+    return out
+
+
 @st.cache_data(show_spinner=False, ttl=1800, max_entries=5)
 def load_transactions(days: int) -> pd.DataFrame:
     """Recent MLB transactions (trades, signings, DFAs, injured-list moves,

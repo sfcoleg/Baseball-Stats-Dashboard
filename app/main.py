@@ -213,6 +213,16 @@ st.markdown(
     ".dm-game .dm-score{font-family:'Archivo Narrow',sans-serif;font-weight:700;"
     "  font-size:1.35rem;color:var(--dm-dim);}"
     ".dm-game .dm-row.win .dm-score{color:var(--dm-blue);}"
+    # --- injured-list badge ------------------------------------------------
+    # Uses the red token pair rather than a hardcoded colour so it stays
+    # legible in both themes — --dm-red-soft is a tinted background in light
+    # mode and a dark wash in dark mode, with --dm-red readable on either.
+    # Sized down and set in the condensed face so it sits beside a name
+    # without competing with it: this is a status marker, not a headline.
+    ".dm-il{display:inline-block;font-family:'Archivo Narrow',sans-serif;"
+    "  font-weight:700;font-size:0.62rem;letter-spacing:0.6px;padding:1px 6px;"
+    "  border-radius:5px;background:var(--dm-red-soft);color:var(--dm-red);"
+    "  vertical-align:middle;margin-left:6px;white-space:nowrap;}"
     # --- metrics: the oversized-numeral treatment --------------------------
     # The colour is not decoration here. Streamlit paints its OWN theme from
     # the visitor's system scheme, while this app paints the theme chosen on

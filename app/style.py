@@ -257,6 +257,29 @@ def player_link(mlbID, season=None) -> str:
     return url
 
 
+def injury_badge(info) -> str:
+    """The IL badge as inline HTML, or "" when the player isn't hurt.
+
+    Takes the dict from db.injured_lookup() (or None). Returns an empty
+    string rather than a placeholder so callers can concatenate it
+    unconditionally — a healthy player's name renders with nothing appended
+    and no stray whitespace.
+
+    The tier is the point: "IL-10" and "IL-60" mean very different things
+    (a short absence versus effectively a season-ending one), so the badge
+    carries the number rather than a generic "INJ"."""
+    if not info:
+        return ""
+    badge = info.get("badge") or "IL"
+    detail = info.get("detail")
+    # The full status and the injury text go in the tooltip, so the badge
+    # itself can stay short without losing the specifics.
+    tooltip = info.get("status") or badge
+    if detail and str(detail).lower() != "nan":
+        tooltip = f"{tooltip} — {detail}"
+    return f"<span class='dm-il' title='{tooltip}'>{badge}</span>"
+
+
 def milestone_card(mlbID, name, team_abbr, team_color, text, season=None):
     """Photo on the left, name/badge + the achievement stacked to its
     right, for the Home page's Milestones section (and leader cards
