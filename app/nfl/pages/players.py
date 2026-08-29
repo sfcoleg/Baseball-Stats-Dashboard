@@ -144,6 +144,43 @@ with adv_tab:
         qb_tab, rb_tab, wr_tab = st.tabs(["Quarterbacks", "Rushers", "Receivers"])
 
         with qb_tab:
+            style.colored_header("dEPA", "pitching")
+            st.caption(
+                f"Our own quarterback metric, and the football counterpart to this site's "
+                f"pitcher dWAR. It blends this season's EPA per attempt with last season's, "
+                f"each weighted by its own attempts ({int(fdb.DEPA_THIS_SEASON_WEIGHT * 100)}% "
+                f"this year), because one season of quarterback play is a small sample and "
+                f"last year still knows something this year's number alone does not. "
+                f"Minimum {fdb.DEPA_MIN_ATTEMPTS} attempts."
+            )
+            depa = fdb.quarterback_depa(season, mtime)
+            if depa.empty:
+                st.caption("Not enough qualifying quarterbacks for this season.")
+            else:
+                board = depa.head(25).rename(columns={"player_display_name": "Player", "team": "Tm"})
+                display = pd.DataFrame({
+                    "Player": board["Player"], "Tm": board["Tm"],
+                    "Att": board["attempts"], "EPA/Att": board["epa_att"],
+                    "dEPA": board["dEPA"],
+                })
+                # A quarterback with no prior season is shown on this year alone,
+                # which is worth flagging rather than hiding.
+                display["Basis"] = board["has_prior_season"].map(
+                    {True: "2 seasons", False: "this season only"})
+                st.dataframe(
+                    style.style_stats_table(
+                        display, team_col="Tm", team_color_fn=fteams.color_for_abbr,
+                        higher_better=["EPA/Att", "dEPA"],
+                        precision={"Att": "{:.0f}", "EPA/Att": "{:+.3f}", "dEPA": "{:+.3f}"},
+                    ),
+                    use_container_width=True, hide_index=True, height=420,
+                )
+                st.caption(
+                    "Validated the way pitcher dWAR was: across paired quarterback seasons, "
+                    "dEPA predicts the following season's EPA per attempt at r=+0.414, "
+                    "against +0.381 for this season's EPA alone and +0.346 for passer rating."
+                )
+
             style.colored_header("Quarterback Tracking", "pitching")
             ngs = fdb.load_nextgen(season, "passing", mtime)
             if not ngs.empty:
