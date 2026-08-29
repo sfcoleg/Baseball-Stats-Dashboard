@@ -699,8 +699,14 @@ components.html(
 SHOW_FREE_AGENCY = False
 st.session_state["_show_free_agency"] = SHOW_FREE_AGENCY  # read by pages/34_Other.py
 
+# Landing.py is the site's front door and owns "/" (default=True). MLB Home
+# moves to /mlb — it used to be the default, which quietly made "/" mean
+# baseball on a three-sport site. Anyone who bookmarked "/" now lands on the
+# cross-sport page, with MLB one click away.
+LANDING_PAGE = st.Page("Landing.py", title="Diamond Metrics", url_path="home", default=True)
+
 PAGES = [
-    st.Page("Home.py", title="Home", default=True),
+    st.Page("Home.py", title="Home", url_path="mlb"),
     st.Page("views/12_Daily_Digest.py", title="Clubhouse Report"),
     st.Page("views/13_Following.py", title="Following"),
     st.Page("views/1_Batting.py", title="Batting"),
@@ -786,9 +792,13 @@ _NFL_NAV_HIDDEN = {"NFL Player"}
 # only the active sport's links get rendered below. Order matters here: "nfl"
 # and "nhl" are both three letters starting with "n", so the check has to be
 # on the exact prefix rather than anything looser.
-pg = st.navigation(PAGES + NHL_PAGES + NFL_PAGES, position="hidden")
+pg = st.navigation([LANDING_PAGE] + PAGES + NHL_PAGES + NFL_PAGES, position="hidden")
 _url_path = pg.url_path or ""
-if _url_path == "nfl" or _url_path.startswith("nfl-"):
+if _url_path in ("", "home"):
+    # The landing page belongs to no league — the tab strip gives way to the
+    # three sport entries instead.
+    active_sport = "home"
+elif _url_path == "nfl" or _url_path.startswith("nfl-"):
     active_sport = "nfl"
 elif _url_path == "nhl" or _url_path.startswith("nhl-"):
     active_sport = "nhl"
@@ -819,7 +829,11 @@ _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
 # renders that file on its own, without main.py, losing the bar and the theme
 # entirely. page_link navigates through Streamlit's own router instead, which
 # keeps main.py in charge, and it marks the current page for free.
-if active_sport == "mlb":
+if active_sport == "home":
+    # No league is active on the landing page, so there is no tab strip to
+    # show — the sport row below is the whole navigation there.
+    _nav_pages = []
+elif active_sport == "mlb":
     _nav_pages = [pg_ for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
 elif active_sport == "nfl":
     _nav_pages = [pg_ for pg_ in NFL_PAGES if pg_.title not in _NFL_NAV_HIDDEN]
@@ -889,8 +903,12 @@ with _sport_box:
         "nhl": (NHL_PAGES[0], "NHL", _NHL_MARK),
         "nfl": (NFL_PAGES[0], "NFL", _NFL_MARK),
     }
-    _others = [v for k, v in _SPORTS.items() if k != active_sport]
-    for _home, _label, _ in _others:
+    # All three are always shown now, rather than "the other two". With a
+    # landing page that belongs to no league, "the others" was undefined
+    # there — and a selector that shows every option makes the current one
+    # legible as a choice rather than an absence.
+    _others = [(k, v) for k, v in _SPORTS.items()]
+    for _key, (_home, _label, _) in _others:
         st.page_link(_home, label=_label)
     # One rule per link, addressed by position. This lives here rather than in
     # the component CSS block because it depends on active_sport, which that
@@ -902,7 +920,11 @@ with _sport_box:
         "[data-testid='stPageLink'] p::before{content:'';display:inline-block;"
         "width:1.6rem;height:1.1rem;margin-right:6px;vertical-align:-0.2rem;"
         f"background:url('{_mark}') center/contain no-repeat;{'}'}"
-        for i, (_, _, _mark) in enumerate(_others)
+        # The sport you're already in is dimmed rather than hidden, so the
+        # row's shape never changes as you move between leagues.
+        + (f".st-key-dm_sport [data-testid='stElementContainer']:nth-of-type({i + 1}) "
+           "[data-testid='stPageLink'] a{opacity:0.55;}" if _key == active_sport else "")
+        for i, (_key, (_, _, _mark)) in enumerate(_others)
     )
     st.markdown(f"<style>{_mark_rules}</style>", unsafe_allow_html=True)
 
@@ -916,7 +938,12 @@ sidebar.render_sport_switcher(
     active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0], "nfl": NFL_PAGES[0]}
 )
 sidebar.render_search(active_sport)
-if active_sport == "mlb":
+if active_sport == "home":
+    # On the landing page the sidebar offers the three leagues rather than
+    # one league's pages — otherwise it would silently show NHL's.
+    for _p, _label in ((PAGES[0], "MLB"), (NHL_PAGES[0], "NHL"), (NFL_PAGES[0], "NFL")):
+        st.sidebar.page_link(_p, label=_label)
+elif active_sport == "mlb":
     for p_ in PAGES:
         if p_.title not in _MLB_NAV_HIDDEN:
             st.sidebar.page_link(p_, label=p_.title)

@@ -27,8 +27,11 @@ def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
             st.switch_page(home_pages[target])
 
     # Sync to the URL-derived sport before rendering (allowed: we set the
-    # key before the widget is created this run).
-    st.session_state["sport_switch"] = SPORT_LABELS[active_sport]
+    # key before the widget is created this run). The landing page belongs to
+    # no league, so there is nothing to sync to — leaving the widget
+    # unselected is correct there, and indexing SPORT_LABELS would raise.
+    if active_sport in SPORT_LABELS:
+        st.session_state["sport_switch"] = SPORT_LABELS[active_sport]
     st.sidebar.markdown(
         "<style>"
         "[data-testid='stSidebar'] [data-testid='stSegmentedControl'] button {"
@@ -62,7 +65,7 @@ def render_sport_switcher(active_sport: str, home_pages: dict) -> None:
         "Sport", list(SPORT_LABELS.values()), key="sport_switch",
         label_visibility="collapsed",
     )
-    st.session_state["_sport_switch_rendered"] = SPORT_LABELS[active_sport]
+    st.session_state["_sport_switch_rendered"] = SPORT_LABELS.get(active_sport)
 
 
 def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") -> None:
