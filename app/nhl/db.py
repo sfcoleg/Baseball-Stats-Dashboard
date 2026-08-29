@@ -814,3 +814,87 @@ def calder_race(season: int, db_mtime_val: float) -> pd.DataFrame:
         + 0.20 * _nhl_zscore(rookies["xGF_pct_5v5"].fillna(rookies["xGF_pct_5v5"].mean()))
     )
     return rookies.sort_values("Calder Score", ascending=False).reset_index(drop=True)
+
+
+# --- Streaks ----------------------------------------------------------------
+# How stale a skater's last game can be before his streak stops counting as
+# live. Three days covers a normal gap between games without keeping an
+# injured player's frozen streak on the board.
+NHL_STREAK_STALE_DAYS = 3
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def active_point_streaks(db_mtime_val: float, minimum: int = 3) -> pd.DataFrame:
+    """Current point streaks (consecutive games with at least one point).
+
+    Built from daily_skater_log, which only holds rows for games a player
+    actually appeared in — so unlike a box-score scan there is no need to
+    distinguish "played and got nothing" from "didn't play". Every row IS an
+    appearance, and a zero-point row genuinely breaks the streak.
+
+    Bounded by how much daily history the ingest has collected; the page
+    states that window rather than implying these are full-season figures."""
+    if not NHL_DB_PATH.exists():
+        return pd.DataFrame()
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            log = pd.read_sql(
+                "SELECT date, playerId, Tm, goals, assists, points FROM daily_skater_log "
+                "ORDER BY playerId, date", conn,
+            )
+    except (sqlite3.Error, pd.errors.DatabaseError):
+        return pd.DataFrame()
+    if log.empty:
+        return pd.DataFrame()
+
+    log["points"] = pd.to_numeric(log["points"], errors="coerce").fillna(0)
+    rows = []
+    for player_id, group in log.groupby("playerId"):
+        games = group.sort_values("date")
+        streak = points = 0
+        for _, game in reversed(list(games.iterrows())):
+            if game["points"] > 0:
+                streak += 1
+                points += game["points"]
+            else:
+                break
+        if streak >= minimum:
+            latest = games.iloc[-1]
+            rows.append({
+                "playerId": player_id, "Tm": latest["Tm"], "Games": streak,
+                "Points": int(points), "Last Game": latest["date"],
+            })
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    newest = log["date"].max()
+    cutoff = (pd.to_datetime(newest) - pd.Timedelta(days=NHL_STREAK_STALE_DAYS)).date().isoformat()
+    frame = frame[frame["Last Game"] >= cutoff]
+    if frame.empty:
+        return pd.DataFrame()
+
+    # daily_skater_log stores only ids; names live in the season table.
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            names = pd.read_sql(
+                "SELECT playerId, skaterFullName AS Name, positionCode AS Pos, "
+                "MAX(season) AS season FROM skaters GROUP BY playerId", conn,
+            )
+        frame = frame.merge(names[["playerId", "Name", "Pos"]], on="playerId", how="left")
+    except (sqlite3.Error, pd.errors.DatabaseError):
+        frame["Name"] = frame["playerId"].astype(str)
+        frame["Pos"] = ""
+    frame["Name"] = frame["Name"].fillna(frame["playerId"].astype(str))
+    return frame.sort_values(["Games", "Points"], ascending=False).reset_index(drop=True)
+
+
+def skater_log_window() -> tuple[str, str] | None:
+    """First and last date of daily skater history held."""
+    if not NHL_DB_PATH.exists():
+        return None
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            row = conn.execute("SELECT MIN(date), MAX(date) FROM daily_skater_log").fetchone()
+    except sqlite3.Error:
+        return None
+    return (row[0], row[1]) if row and row[0] else None
