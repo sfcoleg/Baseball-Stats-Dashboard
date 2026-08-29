@@ -59,7 +59,42 @@ def _leaderboard(kind: str, sort_col: str, columns: list[tuple[str, str]], preci
     )
 
 
-pass_tab, rush_tab, rec_tab = st.tabs(["Passing", "Rushing", "Receiving"])
+def _advanced(frame, sort_col, columns, precision, note, ascending=False, minimum=None):
+    """Leaderboard over a Next Gen Stats or PFR frame.
+
+    These arrive already aggregated to the season by their own source, so
+    unlike the boards above there is nothing to sum — the work is picking the
+    columns worth showing and giving the sort a sensible qualifying floor."""
+    if frame is None or frame.empty or sort_col not in frame.columns:
+        st.caption("No data for this season.")
+        return
+    pool = frame
+    if minimum:
+        col, floor = minimum
+        if col in pool.columns:
+            pool = pool[pd.to_numeric(pool[col], errors="coerce").fillna(0) >= floor]
+    if pool.empty:
+        st.caption("No qualifying players for this season.")
+        return
+    top = pool.sort_values(sort_col, ascending=ascending).head(25)
+    display = pd.DataFrame()
+    for src, label in columns:
+        if src in top.columns:
+            display[label] = top[src]
+    st.caption(note)
+    st.dataframe(
+        style.style_stats_table(
+            display, team_col="Tm" if "Tm" in display.columns else None,
+            team_color_fn=fteams.color_for_abbr,
+            precision=precision,
+        ),
+        use_container_width=True, hide_index=True, height=520,
+    )
+
+
+pass_tab, rush_tab, rec_tab, adv_tab = st.tabs(
+    ["Passing", "Rushing", "Receiving", "Advanced"]
+)
 
 with pass_tab:
     style.colored_header("Passing", "pitching")
@@ -96,3 +131,74 @@ with rec_tab:
         {"Y/R": "{:.1f}", "EPA": "{:.1f}", "EPA/Tgt": "{:.2f}"},
         f"Ranked by receiving yards. Minimum {fdb.MIN_TARGETS} targets.",
     )
+
+
+with adv_tab:
+    # Next Gen Stats is player tracking — where the ball and the players
+    # actually were — so it answers questions the box score cannot: how long
+    # a quarterback held it, how open a receiver got, how much a back gained
+    # beyond what the blocking gave him.
+    if not fdb.advanced_available(season, "ngs"):
+        st.caption(f"Next Gen Stats begin in {fdb.NGS_FIRST_SEASON}.")
+    else:
+        qb_tab, rb_tab, wr_tab = st.tabs(["Quarterbacks", "Rushers", "Receivers"])
+
+        with qb_tab:
+            style.colored_header("Quarterback Tracking", "pitching")
+            ngs = fdb.load_nextgen(season, "passing", mtime)
+            if not ngs.empty:
+                ngs = ngs.rename(columns={"player_display_name": "Player", "team_abbr": "Tm"})
+            _advanced(
+                ngs, "avg_air_yards_to_sticks",
+                [("Player", "Player"), ("Tm", "Tm"), ("attempts", "Att"),
+                 ("avg_time_to_throw", "Time to Throw"),
+                 ("avg_intended_air_yards", "Intended Air Yds"),
+                 ("avg_air_yards_to_sticks", "Air Yds to Sticks"),
+                 ("aggressiveness", "Aggressiveness%"),
+                 ("completion_percentage_above_expectation", "CPOE"),
+                 ("avg_completed_air_yards", "Completed Air Yds")],
+                {"Att": "{:.0f}", "Time to Throw": "{:.2f}", "Intended Air Yds": "{:.1f}",
+                 "Air Yds to Sticks": "{:+.1f}", "Aggressiveness%": "{:.1f}",
+                 "CPOE": "{:+.1f}", "Completed Air Yds": "{:.1f}"},
+                "Air yards to sticks is how far past the first-down marker he throws on "
+                "average — negative means he is throwing short of the line to gain.",
+            )
+
+        with rb_tab:
+            style.colored_header("Rushing Over Expected", "batting")
+            ngs = fdb.load_nextgen(season, "rushing", mtime)
+            if not ngs.empty:
+                ngs = ngs.rename(columns={"player_display_name": "Player", "team_abbr": "Tm"})
+            _advanced(
+                ngs, "rush_yards_over_expected",
+                [("Player", "Player"), ("Tm", "Tm"), ("rush_attempts", "Att"),
+                 ("rush_yards", "Yds"), ("expected_rush_yards", "Expected"),
+                 ("rush_yards_over_expected", "RYOE"),
+                 ("rush_yards_over_expected_per_att", "RYOE/Att"),
+                 ("percent_attempts_gte_eight_defenders", "8+ Box%"),
+                 ("avg_time_to_los", "Time to LOS")],
+                {"Att": "{:.0f}", "Yds": "{:.0f}", "Expected": "{:.0f}",
+                 "RYOE": "{:+.0f}", "RYOE/Att": "{:+.2f}",
+                 "8+ Box%": "{:.1f}", "Time to LOS": "{:.2f}"},
+                "Rush yards over expected: what he gained against what a league-average "
+                "back would have, given the blocking and the defenders in the box.",
+            )
+
+        with wr_tab:
+            style.colored_header("Separation & YAC", "headliners")
+            ngs = fdb.load_nextgen(season, "receiving", mtime)
+            if not ngs.empty:
+                ngs = ngs.rename(columns={"player_display_name": "Player", "team_abbr": "Tm"})
+            _advanced(
+                ngs, "avg_yac_above_expectation",
+                [("Player", "Player"), ("Tm", "Tm"), ("targets", "Tgt"),
+                 ("receptions", "Rec"), ("avg_separation", "Separation"),
+                 ("avg_cushion", "Cushion"), ("avg_intended_air_yards", "aDOT"),
+                 ("avg_yac", "YAC"), ("avg_expected_yac", "Expected YAC"),
+                 ("avg_yac_above_expectation", "YAC +/-")],
+                {"Tgt": "{:.0f}", "Rec": "{:.0f}", "Separation": "{:.2f}",
+                 "Cushion": "{:.2f}", "aDOT": "{:.1f}",
+                 "YAC": "{:.1f}", "Expected YAC": "{:.1f}", "YAC +/-": "{:+.2f}"},
+                "Separation is yards from the nearest defender at the catch; YAC +/- is "
+                "yards after catch against what the situation was worth.",
+            )

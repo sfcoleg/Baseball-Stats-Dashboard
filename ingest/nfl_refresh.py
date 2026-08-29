@@ -151,6 +151,82 @@ def fetch_player_weeks(seasons: list[int]) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+def fetch_id_crosswalk() -> pd.DataFrame:
+    """gsis_id <-> pfr_id, so Pro-Football-Reference's advanced stats can be
+    joined to everything else.
+
+    PFR keys on its own player id and carries no gsis_id, while every other
+    table here keys on gsis. nflverse's players table holds both for 22.5k of
+    25k players, which is the only reason these two worlds can be joined at
+    all — without it the defensive stats would be stranded."""
+    players = _frame(_nfl().load_players())
+    keep = [c for c in ("gsis_id", "pfr_id", "display_name", "position") if c in players.columns]
+    out = players[keep].dropna(subset=["gsis_id", "pfr_id"])
+    return out.rename(columns={"gsis_id": "player_id"})
+
+
+def fetch_nextgen(seasons: list[int]) -> pd.DataFrame:
+    """Next Gen Stats season totals for all three offensive stat types.
+
+    NGS ships weekly rows plus a week=0 row that IS the season total, so the
+    filter below is what makes these leaderboard-ready rather than a pile of
+    weeks to re-aggregate — and re-aggregating would be wrong anyway, since
+    averages like separation and time to throw are not summable."""
+    frames = []
+    for kind in ("passing", "rushing", "receiving"):
+        for year in seasons:
+            try:
+                df = _frame(_nfl().load_nextgen_stats(seasons=[year], stat_type=kind))
+            except Exception as exc:
+                reason = "not published yet" if "404" in str(exc) else type(exc).__name__
+                print(f"  nextgen {kind} {year}: skipped ({reason})")
+                continue
+            if df.empty or "week" not in df.columns:
+                continue
+            season_rows = df[df["week"] == 0].copy()
+            season_rows["ngs_type"] = kind
+            frames.append(season_rows)
+    if not frames:
+        return pd.DataFrame()
+    combined = pd.concat(frames, ignore_index=True)
+    if "player_gsis_id" in combined.columns:
+        combined = combined.rename(columns={"player_gsis_id": "player_id"})
+    return combined
+
+
+def fetch_pfr_advanced(seasons: list[int], crosswalk: pd.DataFrame) -> pd.DataFrame:
+    """Pro-Football-Reference's advanced season stats, keyed back to gsis.
+
+    "def" is the valuable one: it is the only per-player defensive data here,
+    covering coverage (targets, completions and passer rating allowed) and
+    pass rush (hurries, knockdowns, sacks) for roughly a thousand players a
+    season. Without it the site has no defensive stats at all."""
+    frames = []
+    for kind in ("pass", "rush", "rec", "def"):
+        for year in seasons:
+            try:
+                df = _frame(_nfl().load_pfr_advstats(
+                    seasons=[year], stat_type=kind, summary_level="season"))
+            except Exception as exc:
+                reason = "not published yet" if "404" in str(exc) else type(exc).__name__
+                print(f"  pfr {kind} {year}: skipped ({reason})")
+                continue
+            if df.empty:
+                continue
+            df = df.copy()
+            df["pfr_type"] = kind
+            frames.append(df)
+    if not frames:
+        return pd.DataFrame()
+    combined = pd.concat(frames, ignore_index=True)
+    if not crosswalk.empty and "pfr_id" in combined.columns:
+        combined = combined.merge(
+            crosswalk[["player_id", "pfr_id"]].drop_duplicates("pfr_id"),
+            on="pfr_id", how="left",
+        )
+    return combined
+
+
 def build_player_seasons(weeks: pd.DataFrame) -> pd.DataFrame:
     """Season totals per player, per season type.
 
@@ -310,6 +386,14 @@ def fetch_and_store() -> None:
     )
     print(f"  player-weeks kept ({recent[0]}-{recent[-1]}): {len(player_weeks_recent)}")
 
+    crosswalk = fetch_id_crosswalk()
+    print(f"  id crosswalk: {len(crosswalk)}")
+    nextgen = fetch_nextgen(seasons)
+    print(f"  next gen stats: {len(nextgen)}")
+    pfr_adv = fetch_pfr_advanced(seasons, crosswalk)
+    print(f"  pfr advanced: {len(pfr_adv)}"
+          + (f" ({int(pfr_adv['player_id'].notna().sum())} matched to gsis)" if not pfr_adv.empty else ""))
+
     standings = pd.concat(
         [s for s in (build_standings(games, teams, yr) for yr in seasons) if not s.empty],
         ignore_index=True,
@@ -324,6 +408,10 @@ def fetch_and_store() -> None:
             player_seasons.to_sql("player_season_stats", conn, if_exists="replace", index=False)
         if not player_weeks_recent.empty:
             player_weeks_recent.to_sql("player_week_stats", conn, if_exists="replace", index=False)
+        if not nextgen.empty:
+            nextgen.to_sql("nextgen_stats", conn, if_exists="replace", index=False)
+        if not pfr_adv.empty:
+            pfr_adv.to_sql("pfr_advanced", conn, if_exists="replace", index=False)
         if not standings.empty:
             standings.to_sql("standings", conn, if_exists="replace", index=False)
         record_refresh(conn)

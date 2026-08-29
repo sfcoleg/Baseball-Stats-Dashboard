@@ -276,3 +276,47 @@ def game_round_label(game: dict) -> str:
     if kind in GAME_TYPE_LABELS and kind != "REG":
         return GAME_TYPE_LABELS[kind]
     return f"Week {int(game['week'])}" if game.get("week") else "Regular season"
+
+
+# --- Advanced stats ---------------------------------------------------------
+# Next Gen Stats begins in 2016; Pro-Football-Reference's advanced tables begin
+# in 2018. Pages state the earlier limit rather than showing an empty board for
+# a season the data simply doesn't cover.
+NGS_FIRST_SEASON = 2016
+PFR_FIRST_SEASON = 2018
+
+MIN_DEF_TARGETS = 40    # coverage boards
+MIN_PASS_RUSH_SNAPS = 8  # measured in pressures, not snaps — see defense page
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_nextgen(season: int, kind: str, db_mtime_val: float) -> pd.DataFrame:
+    """Next Gen Stats season totals for one season and stat type.
+
+    Only week=0 rows were stored, which ARE the season totals — NGS averages
+    like separation and time to throw cannot be re-derived by summing weeks,
+    so taking the league's own season figure is both correct and simpler."""
+    return _read(
+        "SELECT * FROM nextgen_stats WHERE season = ? AND ngs_type = ?",
+        (int(season), kind),
+    )
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def load_pfr_advanced(season: int, kind: str, db_mtime_val: float) -> pd.DataFrame:
+    """Pro-Football-Reference advanced season stats for one stat type.
+
+    kind="def" is the only per-player defensive data on the site: coverage
+    (targets, completions and passer rating allowed) and pass rush (hurries,
+    knockdowns, sacks)."""
+    return _read(
+        "SELECT * FROM pfr_advanced WHERE season = ? AND pfr_type = ?",
+        (int(season), kind),
+    )
+
+
+def advanced_available(season: int, source: str) -> bool:
+    """Whether a season predates the source, so a page can say so instead of
+    rendering an empty table."""
+    first = NGS_FIRST_SEASON if source == "ngs" else PFR_FIRST_SEASON
+    return int(season) >= first
