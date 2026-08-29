@@ -756,6 +756,7 @@ NFL_PAGES = [
     st.Page("nfl/pages/receiving.py", title="NFL Receiving", url_path="nfl-receiving"),
     st.Page("nfl/pages/defense.py", title="NFL Defense", url_path="nfl-defense"),
     st.Page("nfl/pages/line.py", title="NFL O-Line", url_path="nfl-line"),
+    st.Page("nfl/pages/compare.py", title="NFL Compare", url_path="nfl-compare"),
     st.Page("nfl/pages/following.py", title="NFL Following", url_path="nfl-following"),
     st.Page("nfl/pages/team.py", title="NFL Team", url_path="nfl-team"),
     st.Page("nfl/pages/schedule.py", title="NFL Schedule", url_path="nfl-schedule"),
