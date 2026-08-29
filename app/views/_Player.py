@@ -351,6 +351,14 @@ if batting is not None and is_batter_role:
             delta_text, delta_color = (f"{pct}th pctile" if pct is not None else None), "off"
         col.metric(label, value, delta_text, delta_color=delta_color)
 
+    # Season pace, kept deliberately quiet — a caption under the batting line
+    # rather than its own header or metric cards. It is an extrapolation, not
+    # a projection with a model behind it, so it should read as a footnote to
+    # the real numbers above rather than compete with them.
+    _pace = db.pace_summary(batting, batting.get("G"))
+    if _pace:
+        st.caption(f"{_pace} over a full 162-game season at this rate.")
+
     style.colored_header("Baserunning", "batting", color)
     sb, cs = batting.get("SB"), batting.get("CS")
     attempts = (sb or 0) + (cs or 0)

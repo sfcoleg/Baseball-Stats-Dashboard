@@ -28,7 +28,24 @@ def today_pacific() -> date:
     plain date.today() rolls over to the next day while it's still evening
     in Pacific time, showing "tomorrow's" content hours too early. The
     daily ingest cron also runs at a fixed Pacific-morning UTC time, so
-    Pacific is this app's natural notion of a baseball day anyway."""
+    Pacific is this app's natural notion of a baseball day anyway.
+
+    Honors a ?debug_date=YYYY-MM-DD query param, for previewing what the
+    site looks like on a day it isn't yet — e.g. proving the rollover logic
+    actually shifts "yesterday" forward correctly, without waiting for real
+    midnight or faking the system clock. Deliberately query-param-gated
+    rather than a toggle anywhere: st.query_params is per-VISITOR (it lives
+    in that browser's URL), so one person testing a future date can never
+    shift what any other visitor sees, and there is no server-wide switch
+    to accidentally leave on. Silently falls back to the real date on any
+    bad/missing value, so a malformed or absent param is indistinguishable
+    from not testing at all."""
+    raw = st.query_params.get("debug_date")
+    if raw:
+        try:
+            return date.fromisoformat(raw)
+        except ValueError:
+            pass
     return datetime.now(ZoneInfo("America/Los_Angeles")).date()
 
 
@@ -4350,3 +4367,154 @@ def load_pitch_prop(season: int, db_mtime_val: float) -> pd.DataFrame:
             return pd.read_sql("SELECT * FROM pitch_prop WHERE season = ?", conn, params=(season,))
         except (pd.errors.DatabaseError, sqlite3.OperationalError):
             return pd.DataFrame()
+
+
+# --- Season pace ------------------------------------------------------------
+MLB_SEASON_GAMES = 162
+
+
+def season_pace(row, games_played, counting_cols=("HR", "RBI", "H", "SB")) -> dict:
+    """Full-season projections from a partial season, by simple extrapolation.
+
+    Deliberately linear — rate * remaining games — rather than anything
+    cleverer. A projection that regressed to the mean, or weighted recent
+    form, would be a genuinely different claim ("what we think he'll do")
+    and would need validating like dWAR was. This one only answers the
+    arithmetic question "if he keeps this exact rate, where does he end up",
+    which is what a pace number conventionally means and is honest without
+    a model behind it.
+
+    Returns {} once the season is effectively over, since a "pace" for a
+    finished season is just the total restated."""
+    if not games_played or games_played <= 0:
+        return {}
+    remaining = MLB_SEASON_GAMES - games_played
+    if remaining <= 5:
+        return {}
+    out = {}
+    for col in counting_cols:
+        value = row.get(col)
+        if value is None or pd.isna(value):
+            continue
+        out[col] = round(float(value) * MLB_SEASON_GAMES / games_played)
+    return out
+
+
+def pace_summary(row, games_played) -> str:
+    """One-line prose pace, e.g. "On pace for 51 HR, 118 RBI" — empty string
+    when there is nothing meaningful to project."""
+    paced = season_pace(row, games_played)
+    if not paced:
+        return ""
+    parts = [f"{v} {k}" for k, v in paced.items() if v]
+    return "On pace for " + ", ".join(parts[:3]) if parts else ""
+
+
+# --- Active streaks ---------------------------------------------------------
+# How stale a player's last appearance can be before his streak stops
+# counting as "active". Three days covers a normal rest day or an off-day in
+# the schedule without keeping a hurt player's frozen streak on the board.
+STREAK_STALE_DAYS = 3
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def active_hitting_streaks(season: int, db_mtime_val: float, minimum: int = 5) -> pd.DataFrame:
+    """Current hitting streaks, built from player_history's daily rows.
+
+    A hitting streak counts consecutive games WITH AT LEAST ONE HIT, and
+    critically it is only broken by a game the player actually appeared in —
+    a rest day or an injury absence pauses a streak in real baseball rather
+    than ending it. So rows with no plate appearances are skipped entirely
+    rather than treated as an 0-fer, which is why this filters on day_PA
+    before looking at day_H.
+
+    Bounded by how much daily history exists: player_history starts when the
+    ingest began collecting it, so a streak cannot be reported as longer than
+    that window even if it truly is. The caller states that limit."""
+    history = _read_history(season)
+    if history.empty:
+        return pd.DataFrame()
+
+    played = history[pd.to_numeric(history["day_PA"], errors="coerce").fillna(0) > 0].copy()
+    if played.empty:
+        return pd.DataFrame()
+    played["day_H"] = pd.to_numeric(played["day_H"], errors="coerce").fillna(0)
+    played = played.sort_values(["mlbID", "date"])
+
+    rows = []
+    for mlb_id, group in played.groupby("mlbID"):
+        games = group.sort_values("date")
+        streak = 0
+        # Walk backwards from the most recent appearance: the streak is only
+        # "active" if it runs unbroken to the present.
+        for hits in reversed(games["day_H"].tolist()):
+            if hits > 0:
+                streak += 1
+            else:
+                break
+        if streak >= minimum:
+            latest = games.iloc[-1]
+            rows.append({
+                "mlbID": mlb_id, "Name": latest["Name"], "Tm": latest["Tm"],
+                "Games": streak, "Last Game": latest["date"],
+            })
+    # An "active" streak has to still be running. Walking back from a
+    # player's own last appearance is not enough on its own: someone who got
+    # hurt or sent down mid-streak keeps a perfect unbroken tail forever, and
+    # showed up here as an 11-game streak whose last game was two weeks ago.
+    # Require the streak to reach roughly the present before calling it live.
+    if not rows:
+        return pd.DataFrame()
+    frame = pd.DataFrame(rows)
+    newest = played["date"].max()
+    cutoff = (pd.to_datetime(newest) - pd.Timedelta(days=STREAK_STALE_DAYS)).date().isoformat()
+    frame = frame[frame["Last Game"] >= cutoff]
+    if frame.empty:
+        return pd.DataFrame()
+    return frame.sort_values("Games", ascending=False).reset_index(drop=True)
+
+
+def _read_history(season: int) -> pd.DataFrame:
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            return pd.read_sql(
+                "SELECT date, mlbID, Name, Tm, day_PA, day_H FROM player_history "
+                "WHERE season = ? ORDER BY mlbID, date",
+                conn, params=(int(season),),
+            )
+        except (sqlite3.Error, pd.errors.DatabaseError):
+            return pd.DataFrame()
+
+
+def history_window(season: int) -> tuple[str, str] | None:
+    """First and last date of daily history we hold, so a streaks page can
+    state honestly how far back it can see."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            row = conn.execute(
+                "SELECT MIN(date), MAX(date) FROM player_history WHERE season = ?",
+                (int(season),),
+            ).fetchone()
+        except sqlite3.Error:
+            return None
+    return (row[0], row[1]) if row and row[0] else None
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def team_streaks(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Team win/loss streaks, straight from the standings table's own streak
+    column (e.g. "W2", "L3") rather than recomputed from game logs."""
+    with sqlite3.connect(DB_PATH) as conn:
+        try:
+            df = pd.read_sql(
+                "SELECT team_abbr, team_name, league, division, wins, losses, streak "
+                "FROM standings WHERE season = ?", conn, params=(int(season),),
+            )
+        except (sqlite3.Error, pd.errors.DatabaseError):
+            return pd.DataFrame()
+    if df.empty:
+        return df
+    parsed = df["streak"].astype(str).str.extract(r"^([WL])(\d+)$")
+    df["kind"] = parsed[0]
+    df["length"] = pd.to_numeric(parsed[1], errors="coerce")
+    return df.dropna(subset=["length"])
