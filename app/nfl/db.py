@@ -149,6 +149,7 @@ def record_string(row) -> str:
 MIN_ATTEMPTS = 100      # passing
 MIN_CARRIES = 50        # rushing
 MIN_TARGETS = 30        # receiving
+MIN_FG_ATTEMPTS = 15    # kicking
 
 
 # Columns that must be numeric to render. SQLite has no fixed column types,

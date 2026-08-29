@@ -129,6 +129,13 @@ PLAYER_COLS = [
     "receiving_epa", "receiving_air_yards", "receiving_yards_after_catch",
     "receiving_first_downs", "target_share",
     "fantasy_points_ppr",
+    # Kicking. Distance buckets matter more than a raw make percentage here:
+    # a kicker who only attempts chip shots and a kicker asked for 50-yarders
+    # can post the same fg_pct while being very different kickers.
+    "fg_att", "fg_made", "fg_missed", "fg_blocked", "fg_long",
+    "fg_made_40_49", "fg_made_50_59", "fg_made_60_",
+    "fg_missed_40_49", "fg_missed_50_59", "fg_missed_60_",
+    "pat_att", "pat_made", "gwfg_att", "gwfg_made",
 ]
 
 # Weekly rows are kept only for the newest few seasons. A game log is a
@@ -141,6 +148,10 @@ WEEKLY_SEASONS = 3
 # Rates (EPA per play, CPOE, target share) are deliberately absent: summing
 # them is meaningless, so they are re-derived or averaged instead.
 _SUM_COLS = [
+    "fg_att", "fg_made", "fg_missed", "fg_blocked",
+    "fg_made_40_49", "fg_made_50_59", "fg_made_60_",
+    "fg_missed_40_49", "fg_missed_50_59", "fg_missed_60_",
+    "pat_att", "pat_made", "gwfg_att", "gwfg_made",
     "completions", "attempts", "passing_yards", "passing_tds",
     "passing_interceptions", "sacks_suffered", "passing_epa", "passing_first_downs",
     "carries", "rushing_yards", "rushing_tds", "rushing_fumbles_lost",
@@ -253,8 +264,12 @@ def build_player_seasons(weeks: pd.DataFrame) -> pd.DataFrame:
     keys = ["player_id", "player_display_name", "position", "position_group",
             "headshot_url", "season", "season_type"]
     sums = {c: (c, "sum") for c in _SUM_COLS if c in weeks.columns}
+    # fg_long is the longest kick of the season, so it maxes rather than sums —
+    # summing it would produce a meaningless four-digit "distance".
+    extra = {"fg_long": ("fg_long", "max")} if "fg_long" in weeks.columns else {}
     agg = weeks.groupby(keys, as_index=False, dropna=False).agg(
         games=("week", "nunique"),
+        **extra,
         # A player's team can change mid-season; the last one he appears for
         # is the one a leaderboard should show him under.
         team=("team", "last"),
@@ -277,6 +292,20 @@ def build_player_seasons(weeks: pd.DataFrame) -> pd.DataFrame:
     if {"receiving_yards", "receptions"} <= set(agg.columns):
         agg["yards_per_reception"] = agg["receiving_yards"] / agg["receptions"].replace(0, pd.NA)
     # CPOE is a rate already; weight it by attempts rather than by week.
+    # Field-goal percentage from the season totals, not averaged across weeks.
+    if {"fg_made", "fg_att"} <= set(agg.columns):
+        agg["fg_pct"] = 100 * agg["fg_made"] / agg["fg_att"].replace(0, pd.NA)
+    # Kicks from 40+ are where kickers actually separate, so this is surfaced
+    # as its own rate rather than left buried in the buckets.
+    long_made = [c for c in ("fg_made_40_49", "fg_made_50_59", "fg_made_60_") if c in agg.columns]
+    long_missed = [c for c in ("fg_missed_40_49", "fg_missed_50_59", "fg_missed_60_") if c in agg.columns]
+    if long_made and long_missed:
+        made = agg[long_made].fillna(0).sum(axis=1)
+        attempted = made + agg[long_missed].fillna(0).sum(axis=1)
+        agg["fg_long_made"] = made
+        agg["fg_long_att"] = attempted
+        agg["fg_long_pct"] = 100 * made / attempted.replace(0, pd.NA)
+
     if {"passing_cpoe", "attempts"} <= set(weeks.columns):
         weighted = weeks.assign(_w=weeks["passing_cpoe"] * weeks["attempts"])
         cpoe = weighted.groupby(keys, as_index=False, dropna=False).agg(
@@ -292,6 +321,7 @@ def build_player_seasons(weeks: pd.DataFrame) -> pd.DataFrame:
         "passing_epa_per_att", "rushing_epa_per_carry", "receiving_epa_per_target",
         "completion_pct", "yards_per_attempt", "yards_per_carry",
         "yards_per_reception", "passing_cpoe",
+        "fg_pct", "fg_long_pct", "fg_long_made", "fg_long_att",
     ]
     for column in derived:
         if column in agg.columns:
