@@ -87,6 +87,69 @@ def data_as_of(db_mtime_val: float) -> date | None:
         return None
 
 
+def _refresh_log_latest(db_path) -> dict | None:
+    """The most recent refresh_log row for one sport's database.
+
+    Every ingest stamps this table on a SUCCESSFUL run, which makes it the
+    honest answer to "when did this data last actually update" — distinct
+    from the file's mtime, which changes even on a run that fetched nothing,
+    and distinct from what the data COVERS, which lags a day behind the run
+    that fetched it."""
+    try:
+        with sqlite3.connect(db_path) as conn:
+            row = conn.execute(
+                "SELECT date, finished_at FROM refresh_log ORDER BY date DESC LIMIT 1"
+            ).fetchone()
+    except sqlite3.Error:
+        return None
+    if not row:
+        return None
+    return {"date": row[0], "finished_at": row[1]}
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=2)
+def data_freshness() -> list[dict]:
+    """Per-sport freshness, for the diagnostic panel on Settings.
+
+    Exists because this project has twice gone days without updating while
+    every scheduled job reported success — once because a guard crashed and
+    the crash was read as "nothing to do". A number on a page turns that from
+    something you notice by feel into something you can check in a second.
+
+    `stale` is judged against each sport's own cadence rather than a single
+    rule: MLB plays daily so anything past yesterday is late, while NHL and
+    NFL sit idle for months between seasons and a months-old refresh there
+    is normal, not broken."""
+    from pathlib import Path as _Path
+
+    root = _Path(__file__).resolve().parent.parent / "data"
+    today = today_pacific()
+    out = []
+    for label, filename, daily in (
+        ("MLB", "stats.db", True),
+        ("NHL", "nhl.db", False),
+        ("NFL", "nfl.db", False),
+    ):
+        path = root / filename
+        if not path.exists():
+            out.append({"sport": label, "present": False})
+            continue
+        latest = _refresh_log_latest(path)
+        entry = {"sport": label, "present": True, "refreshed": None,
+                 "days_ago": None, "stale": False}
+        if latest and latest.get("date"):
+            try:
+                refreshed = date.fromisoformat(latest["date"])
+                entry["refreshed"] = refreshed
+                entry["days_ago"] = (today - refreshed).days
+                # Only the in-season daily sport is judged late; see docstring.
+                entry["stale"] = daily and entry["days_ago"] > 1
+            except ValueError:
+                pass
+        out.append(entry)
+    return out
+
+
 def daily_label(as_of: date | None, today: date | None = None) -> str:
     """How to name the day `as_of` refers to, in card titles and captions.
 

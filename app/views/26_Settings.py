@@ -105,6 +105,47 @@ else:
     st.caption("Not following any teams or players yet.")
 st.page_link("views/13_Following.py", label="Manage who you follow →")
 
+# --- Data freshness ---------------------------------------------------------
+# Tucked away on Settings rather than shown in the banner: this is a
+# diagnostic you go and look at when something feels wrong, not a number
+# every visitor needs on every page. It exists because the site has twice
+# gone days without updating while every scheduled job still reported
+# success — once because a guard crashed and the crash was misread as
+# "nothing to do". This turns that from something noticed by feel into
+# something checkable in a second.
+style.colored_header("Data", "chart")
+_freshness = db.data_freshness()
+_stale = [f for f in _freshness if f.get("stale")]
+_cols = st.columns(len(_freshness))
+for _col, _entry in zip(_cols, _freshness):
+    with _col:
+        if not _entry["present"]:
+            st.metric(_entry["sport"], "—")
+            st.caption("No database file.")
+            continue
+        if _entry["refreshed"] is None:
+            st.metric(_entry["sport"], "—")
+            st.caption("No refresh recorded yet.")
+            continue
+        _days = _entry["days_ago"]
+        _when = "Today" if _days == 0 else ("Yesterday" if _days == 1 else f"{_days} days ago")
+        st.metric(_entry["sport"], _when)
+        st.caption(_entry["refreshed"].strftime("%b %-d, %Y"))
+
+if _stale:
+    # Only ever fires for a sport judged against a daily cadence — an
+    # offseason NHL or NFL database being months old is normal, not broken.
+    _names = ", ".join(f["sport"] for f in _stale)
+    st.warning(
+        f"{_names} data hasn't refreshed in more than a day. The nightly job may have "
+        f"failed — check the Actions tab on GitHub."
+    )
+else:
+    st.caption(
+        "Each sport refreshes on its own nightly schedule. NHL and NFL sit idle "
+        "between seasons, so an older date there is expected rather than a problem."
+    )
+
 style.colored_header("Reset", "chart")
 st.caption(
     "Clears everything saved in this browser for Diamond Metrics — followed teams/players, prediction "

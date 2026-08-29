@@ -281,6 +281,31 @@ def store_season(df: pd.DataFrame, start_year: int) -> None:
         conn.commit()
 
 
+def record_refresh() -> None:
+    """Stamp the Pacific date of a completed refresh, matching what the MLB
+    and NFL ingests do.
+
+    This is what the Settings freshness panel reads. Without it NHL showed a
+    permanent blank there — indistinguishable from "never ran" — which is
+    exactly the kind of silent gap that let the site sit stale for days
+    before anyone noticed."""
+    from datetime import datetime, timezone
+    from zoneinfo import ZoneInfo
+
+    NHL_DB_PATH.parent.mkdir(exist_ok=True)
+    with sqlite3.connect(NHL_DB_PATH) as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS refresh_log "
+            "(date TEXT PRIMARY KEY, finished_at TEXT)"
+        )
+        conn.execute(
+            "INSERT OR REPLACE INTO refresh_log VALUES (?, ?)",
+            (datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
+             datetime.now(timezone.utc).isoformat(timespec="seconds")),
+        )
+        conn.commit()
+
+
 def latest_season_start_year() -> int:
     """NHL seasons start in October; before October the latest complete
     season is the one that started last year."""
@@ -311,4 +336,5 @@ if __name__ == "__main__":
             print(f"  stored {len(gdf)} goalies")
     else:
         update_latest()
+    record_refresh()
     print("done")
