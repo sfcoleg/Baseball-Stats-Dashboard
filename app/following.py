@@ -59,6 +59,8 @@ def bootstrap() -> None:
         st.session_state["followed_players"] = data.get("players", [])
         st.session_state["followed_nhl_teams"] = data.get("nhl_teams", [])
         st.session_state["followed_nhl_players"] = data.get("nhl_players", [])
+        st.session_state["followed_nfl_teams"] = data.get("nfl_teams", [])
+        st.session_state["followed_nfl_players"] = data.get("nfl_players", [])
         st.session_state["_following_safe_to_save"] = True
         return
 
@@ -66,6 +68,8 @@ def bootstrap() -> None:
     st.session_state["followed_players"] = []
     st.session_state["followed_nhl_teams"] = []
     st.session_state["followed_nhl_players"] = []
+    st.session_state["followed_nfl_teams"] = []
+    st.session_state["followed_nfl_players"] = []
     # Not safe to save yet: this render's lists are just a placeholder in
     # case localStorage turns out to have real data and the shared redirect
     # (see localstorage_bridge.py, called once from main.py) fires. Saving
@@ -87,6 +91,8 @@ def save() -> None:
         "players": st.session_state.get("followed_players", []),
         "nhl_teams": st.session_state.get("followed_nhl_teams", []),
         "nhl_players": st.session_state.get("followed_nhl_players", []),
+        "nfl_teams": st.session_state.get("followed_nfl_teams", []),
+        "nfl_players": st.session_state.get("followed_nfl_players", []),
     })
     js_literal = json.dumps(payload)  # double-encode: safe JS string literal regardless of quotes/unicode inside
     components.html(f"<script>localStorage.setItem('{STORAGE_KEY}', {js_literal});</script>", height=0)
