@@ -224,10 +224,22 @@ def headliner_card(label, name, team_abbr, team_color, stat_line, mlbID=None):
     hardcoded Home page overrides (see HOT_YESTERDAY_OVERRIDES) have no
     real player behind them — falls back to a photo-less layout then."""
     st.caption(label)
+    # A headliner can be on the IL — these cards cover the last day, week or
+    # month, so a player can put up the best line of the week on Monday and
+    # be hurt by Friday. Looked up here rather than passed in, so every
+    # caller gets it without threading an extra argument through.
+    il_html = ""
+    if mlbID is not None:
+        try:
+            import db as _db
+            il_html = injury_badge(_db.injured_lookup().get(int(mlbID)))
+        except Exception:
+            il_html = ""
     name_html = (
         f"<div style='font-size:1.4rem;font-weight:700;line-height:1.3;overflow-wrap:break-word'>{name} "
         f"<span style='background-color:{team_color}66;color:var(--dm-text);padding:2px 9px;"
-        f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span></div>"
+        f"border-radius:8px;font-size:0.65em;vertical-align:middle;font-weight:600'>{team_abbr}</span>"
+        f"{il_html}</div>"
     )
     stat_html = (
         f"<div style='margin-top:6px;margin-bottom:12px'><span style='background-color:var(--dm-green-soft);"
