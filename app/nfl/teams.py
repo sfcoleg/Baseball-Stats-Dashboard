@@ -42,10 +42,10 @@ def color_for_abbr(abbr: str) -> str:
     return _table().get(abbr, {}).get("color") or "#666666"
 
 
-def secondary_for_abbr(abbr: str) -> str:
-    """The club's second colour — used when its primary would collide with
-    the other team's in a two-sided graphic."""
-    return _table().get(abbr, {}).get("color2") or ""
+def conference_for_abbr(abbr: str) -> str:
+    """"AFC" or "NFC" — used to badge the two participants in a Super Bowl,
+    which is the one game where the conferences are the point."""
+    return _table().get(abbr, {}).get("conf") or ""
 
 
 def nickname_for_abbr(abbr: str) -> str:

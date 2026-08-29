@@ -750,10 +750,10 @@ NHL_PAGES = [
 # is what identifies the sport, so deep links land in the right section.
 NFL_PAGES = [
     st.Page("nfl/pages/home.py", title="NFL Home", url_path="nfl"),
-    st.Page("nfl/pages/standings.py", title="NFL Standings", url_path="nfl-standings"),
-    st.Page("nfl/pages/schedule.py", title="NFL Schedule", url_path="nfl-schedule"),
     st.Page("nfl/pages/players.py", title="NFL Players", url_path="nfl-players"),
     st.Page("nfl/pages/team.py", title="NFL Team", url_path="nfl-team"),
+    st.Page("nfl/pages/schedule.py", title="NFL Schedule", url_path="nfl-schedule"),
+    st.Page("nfl/pages/standings.py", title="NFL Standings", url_path="nfl-standings"),
     st.Page("nfl/pages/player.py", title="NFL Player", url_path="nfl-player"),  # search/deep-link only
 ]
 
