@@ -857,6 +857,16 @@ OTHER_SUBPAGE_TITLES = [
     "Box Score Search",
 ] + (["Free Agency"] if SHOW_FREE_AGENCY else [])
 
+# The landing page has no league, so it gets no tab row at all — rendering
+# an empty strip left a stray "SETTINGS"-only second row floating under the
+# banner. The main block's top margin normally clears BOTH fixed rows
+# (6.4rem); with the tab row gone, the page reclaims that band.
+if active_sport == "home":
+    st.markdown(
+        "<style>[data-testid='stMainBlockContainer']{margin-top:3.4rem !important;}"
+        ".st-key-dm_nav{display:none !important;}</style>",
+        unsafe_allow_html=True,
+    )
 _bar = st.container(key="dm_nav")
 with _bar:
     for pg_ in _nav_pages:
@@ -879,11 +889,16 @@ with _bar:
         # the registry; the tab strip is already inside one sport, so it drops
         # the prefix.
         st.page_link(pg_, label=pg_.title.replace("NHL ", "").replace("NFL ", ""))
+    if active_sport == "home":
+        # No tabs and no Settings link on the landing page — the container
+        # stays registered (CSS keys on it) but renders nothing.
+        pass
     # Settings rides at the right-hand end of the tab row. The sport switch
     # used to sit here too, but it belongs with the site-wide furniture
     # (brand, search) in the banner rather than in a strip of MLB pages —
     # it isn't a page, it's a mode. Rendered below, positioned by CSS.
-    st.page_link(next(p_ for p_ in PAGES if p_.title == "Settings"), label="Settings")
+    if active_sport != "home":
+        st.page_link(next(p_ for p_ in PAGES if p_.title == "Settings"), label="Settings")
 
 # The sport switch lives in the BANNER (top row), left of the search box.
 # Same trick as the search: the banner is static HTML and can't host a
