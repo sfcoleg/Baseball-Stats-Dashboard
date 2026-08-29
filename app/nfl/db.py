@@ -376,3 +376,78 @@ def player_position(player_id: str, db_mtime_val: float) -> str:
         (str(player_id),),
     )
     return str(seasons_df.iloc[0]["position"]) if not seasons_df.empty else ""
+
+
+# --- Offensive line (unit level only) ---------------------------------------
+# There is no per-lineman performance data here, and there is no honest way to
+# invent one: individual blocking grades are PFF's product and are not public.
+# What IS measurable is the unit's output — how often the quarterback was
+# pressured behind it, and how far backs ran before anyone touched them. Both
+# are attributed to the line as a group, which is what they actually are.
+def _pfr_team_column(df: pd.DataFrame) -> str | None:
+    """PFR's passing tables name the team column `team`; its rushing,
+    receiving and defensive tables name it `tm`. The ingest concatenates all
+    four, so both spellings exist and only one is populated per row type."""
+    for candidate in ("team", "tm"):
+        if candidate in df.columns and df[candidate].notna().any():
+            return candidate
+    return None
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def team_pass_protection(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Pressure allowed per team, from the quarterback rows.
+
+    Pressure rate rather than sacks allowed: a sack is the rare end of a
+    broken protection, while pressures happen several times a game and
+    describe the same thing with far less noise."""
+    passing = load_pfr_advanced(season, "pass", db_mtime_val)
+    if passing.empty:
+        return pd.DataFrame()
+    team_col = _pfr_team_column(passing)
+    if team_col is None:
+        return pd.DataFrame()
+    numeric = ["pass_attempts", "times_pressured", "times_hit", "times_hurried",
+               "times_blitzed", "pocket_time"]
+    for col in numeric:
+        if col in passing.columns:
+            passing[col] = pd.to_numeric(passing[col], errors="coerce")
+    grouped = passing.groupby(team_col, as_index=False).agg(
+        attempts=("pass_attempts", "sum"),
+        pressured=("times_pressured", "sum"),
+        hits=("times_hit", "sum"),
+        hurries=("times_hurried", "sum"),
+        blitzed=("times_blitzed", "sum"),
+    ).rename(columns={team_col: "team"})
+    grouped = grouped[grouped["attempts"] > 0]
+    grouped["pressure_rate"] = 100 * grouped["pressured"] / grouped["attempts"]
+    grouped["blitz_rate"] = 100 * grouped["blitzed"] / grouped["attempts"]
+    return grouped.sort_values("pressure_rate").reset_index(drop=True)
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def team_run_blocking(season: int, db_mtime_val: float) -> pd.DataFrame:
+    """Yards before contact per carry, per team.
+
+    The cleanest public proxy for run blocking there is: yards gained before
+    any defender touched the back are the ones the line gave him, and yards
+    after contact are the ones he took himself."""
+    rushing = load_pfr_advanced(season, "rush", db_mtime_val)
+    if rushing.empty:
+        return pd.DataFrame()
+    team_col = _pfr_team_column(rushing)
+    if team_col is None:
+        return pd.DataFrame()
+    for col in ("att", "yds", "ybc", "yac", "brk_tkl"):
+        if col in rushing.columns:
+            rushing[col] = pd.to_numeric(rushing[col], errors="coerce")
+    grouped = rushing.groupby(team_col, as_index=False).agg(
+        carries=("att", "sum"), yards=("yds", "sum"),
+        before_contact=("ybc", "sum"), after_contact=("yac", "sum"),
+        broken_tackles=("brk_tkl", "sum"),
+    ).rename(columns={team_col: "team"})
+    grouped = grouped[grouped["carries"] > 0]
+    grouped["ybc_per_carry"] = grouped["before_contact"] / grouped["carries"]
+    grouped["yac_per_carry"] = grouped["after_contact"] / grouped["carries"]
+    grouped["yards_per_carry"] = grouped["yards"] / grouped["carries"]
+    return grouped.sort_values("ybc_per_carry", ascending=False).reset_index(drop=True)
