@@ -22,6 +22,18 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics", layout="wide")
 
+# main.py auto-bubbles any markdown containing a div[style] — right for the
+# Daily Digest's hand-written cards, wrong for blocks here that draw their
+# OWN card chrome (leader cards, team chips): they'd render as a card inside
+# a second card. Anything wrapped in .ld-flat opts out and stands on the
+# grey ground by itself.
+st.markdown(
+    "<style>[data-testid='stElementContainer']:has(.ld-flat){"
+    "background:transparent !important;box-shadow:none !important;"
+    "border:none !important;padding:0 !important;}</style>",
+    unsafe_allow_html=True,
+)
+
 TODAY = db.today_pacific()
 MTIME = db.db_mtime()
 LOGO_SEASON = TODAY.year
@@ -222,10 +234,12 @@ def _nfl_games():
     return rows, None
 
 
-def _render_games(rows):
+def _games_html(rows):
     """One card per game in the Today's-Games idiom: a rail in the home
     team's colour, logos, the winner promoted, a LIVE chip while play is
-    on. Everything var(--dm-*) so both themes hold."""
+    on. Returns HTML rather than rendering, so the caller can put the
+    column label and the games in ONE markdown call — one bubble around
+    the whole column, instead of a stray one-word bubble above it."""
     html = []
     for r in rows:
         a_s = "" if r["away_score"] is None else int(r["away_score"])
@@ -259,7 +273,7 @@ def _render_games(rows):
             f"{side(r['home'], r['home_logo'], h_s, h_win)}"
             "</div></div>"
         )
-    st.markdown("".join(html), unsafe_allow_html=True)
+    return "".join(html)
 
 
 style.colored_header("Today", "headliners")
@@ -269,28 +283,31 @@ _sections = [("MLB", _mlb_games(), "Home.py"),
 _cols = st.columns(3)
 for _col, (_label, (_rows, _note), _target) in zip(_cols, _sections):
     with _col:
-        st.markdown(
+        _label_html = (
             f"<div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:700;"
-            f"letter-spacing:1px;color:var(--dm-text);margin-bottom:6px'>{_label}</div>",
-            unsafe_allow_html=True,
+            f"letter-spacing:1px;color:var(--dm-text);margin-bottom:8px'>{_label}</div>"
         )
         if _rows:
-            _render_games(_rows[:7])
-            if len(_rows) > 7:
-                st.caption(f"+{len(_rows) - 7} more")
+            _more = (f"<div style='color:var(--dm-dim);font-size:0.78rem;margin-top:2px'>"
+                     f"+{len(_rows) - 7} more</div>" if len(_rows) > 7 else "")
+            st.markdown(_label_html + _games_html(_rows[:7]) + _more, unsafe_allow_html=True)
+        elif isinstance(_note, tuple):
+            st.markdown(
+                _label_html
+                + f"<div style='background:var(--dm-card);border-left:4px solid var(--dm-line);"
+                f"border-radius:0 9px 9px 0;padding:10px 12px'>"
+                f"<div style='font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;"
+                f"color:var(--dm-dim)'>{_note[0]}</div>"
+                f"<div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:700;"
+                f"color:var(--dm-text);margin-top:2px'>{_note[1]}</div></div>",
+                unsafe_allow_html=True,
+            )
         else:
-            if isinstance(_note, tuple):
-                st.markdown(
-                    f"<div style='background:var(--dm-card);border-left:4px solid var(--dm-line);"
-                    f"border-radius:0 9px 9px 0;padding:10px 12px'>"
-                    f"<div style='font-size:0.62rem;letter-spacing:1px;text-transform:uppercase;"
-                    f"color:var(--dm-dim)'>{_note[0]}</div>"
-                    f"<div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:700;"
-                    f"color:var(--dm-text);margin-top:2px'>{_note[1]}</div></div>",
-                    unsafe_allow_html=True,
-                )
-            else:
-                st.caption(_note or "Nothing scheduled.")
+            st.markdown(
+                _label_html
+                + f"<div style='color:var(--dm-dim);font-size:0.86rem'>{_note or 'Nothing scheduled.'}</div>",
+                unsafe_allow_html=True,
+            )
         st.page_link(_target, label=f"Go to {_label} →")
 
 st.caption("MLB and NHL scores update live. NFL results appear after games finish.")
@@ -359,7 +376,9 @@ if _cards:
             st.markdown(
                 # The colour is a soft radial of the club's own shade behind
                 # the face — the NFL last-game treatment, at card scale.
-                f"<div style='background:radial-gradient(ellipse 90% 130% at 18% 30%,{c['color']}2E 0%,"
+                # .ld-flat: this div IS the card; without it the auto-bubble
+                # wrapped it in a second one.
+                f"<div class='ld-flat' style='background:radial-gradient(ellipse 90% 130% at 18% 30%,{c['color']}2E 0%,"
                 f"transparent 70%),var(--dm-card);border:1px solid var(--dm-line);border-radius:12px;"
                 f"padding:16px;display:flex;gap:14px;align-items:center'>"
                 f"{photo}"
@@ -404,7 +423,7 @@ if _followed:
                 f"<span style='font-size:0.6rem;letter-spacing:0.8px;color:var(--dm-dim)'>{_label}</span></span>"
             )
     st.markdown(
-        "<div style='display:flex;flex-wrap:wrap;gap:10px'>" + "".join(_chips) + "</div>",
+        "<div class='ld-flat' style='display:flex;flex-wrap:wrap;gap:10px'>" + "".join(_chips) + "</div>",
         unsafe_allow_html=True,
     )
     st.page_link("views/13_Following.py", label="Manage who you follow →")
