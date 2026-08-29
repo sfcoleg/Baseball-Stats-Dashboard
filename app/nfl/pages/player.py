@@ -27,15 +27,29 @@ if not player_id:
     st.stop()
 
 career = fdb.load_player_career(player_id, mtime)
-if career.empty:
+position = fdb.player_position(player_id, mtime)
+defensive = fdb.is_defensive(position)
+
+# A defender has no rows in the offensive stats feed at all, so the old
+# "no career rows means no player" check would have turned every corner and
+# linebacker into a warning page.
+if career.empty and not defensive:
     st.title("Player")
     st.warning("No data on file for that player.")
     st.stop()
 
-reg = career[career["season_type"] == "REG"]
-latest = (reg if not reg.empty else career).iloc[0]
-name = latest["player_display_name"]
-team = latest.get("team") or ""
+reg = career[career["season_type"] == "REG"] if not career.empty else career
+_def_rows = fdb.player_pfr(player_id, "def", mtime)
+if not career.empty:
+    latest = (reg if not reg.empty else career).iloc[0]
+    name = latest["player_display_name"]
+    team = latest.get("team") or ""
+else:
+    # Identity comes from the defensive feed for players the offensive one
+    # never sees.
+    latest = _def_rows.iloc[0] if not _def_rows.empty else {}
+    name = latest.get("player") or "Player"
+    team = latest.get("tm") or ""
 color = fteams.color_for_abbr(team)
 st.query_params["player"] = str(player_id)
 
@@ -68,13 +82,13 @@ _MIN_CAREER_VOLUME = 20
 
 
 def _has(col: str) -> bool:
-    if col not in reg.columns:
+    if reg.empty or col not in reg.columns:
         return False
     return pd.to_numeric(reg[col], errors="coerce").fillna(0).sum() >= _MIN_CAREER_VOLUME
 
 sections = [k for k, col in (("Passing", "attempts"), ("Rushing", "carries"), ("Receiving", "targets")) if _has(col)]
-if not sections:
-    sections = ["Passing"] if latest.get("position") == "QB" else ["Receiving"]
+if not sections and not defensive:
+    sections = ["Passing"] if position == "QB" else ["Receiving"]
 
 SECTION_COLUMNS = {
     "Passing": ([("season", "Season"), ("team", "Tm"), ("games", "G"), ("attempts", "Att"),
@@ -111,7 +125,10 @@ for section in sections:
     )
 
 # --- Game log ---------------------------------------------------------------
-weekly_seasons = sorted(reg["season"].astype(int).unique(), reverse=True)
+weekly_seasons = (
+    sorted(reg["season"].astype(int).unique(), reverse=True)
+    if not reg.empty and not defensive else []
+)
 if weekly_seasons:
     style.colored_header("Game Log", "headliners", color)
     picked = st.selectbox("Season", weekly_seasons, format_func=fdb.season_label, key="nfl_gamelog_season")
@@ -142,4 +159,114 @@ if weekly_seasons:
                 precision={"Pass EPA": "{:.1f}"},
             ),
             use_container_width=True, hide_index=True, height=460,
+        )
+
+
+# --- Advanced, chosen by position ------------------------------------------
+def _season_table(frame, columns, precision, header, note):
+    """Render one advanced season-by-season block, or nothing at all.
+
+    Silently skipping an empty frame is deliberate: a receiver has no
+    passing-pressure rows and a quarterback has no coverage rows, and a
+    profile full of "no data" panels is worse than a shorter one."""
+    if frame is None or frame.empty:
+        return
+    display = pd.DataFrame()
+    for src, label in columns:
+        if src in frame.columns:
+            display[label] = frame[src]
+    if display.empty or len(display.columns) <= 1:
+        return
+    style.colored_header(header, "chart", color)
+    if note:
+        st.caption(note)
+    st.dataframe(
+        style.style_stats_table(display, precision={**precision, "Season": "{:.0f}"}),
+        use_container_width=True, hide_index=True,
+    )
+
+
+if defensive:
+    # Coverage first: for most defenders it is the larger part of the job,
+    # and for corners and safeties it is nearly all of it.
+    _season_table(
+        _def_rows,
+        [("season", "Season"), ("tm", "Tm"), ("pos", "Pos"), ("g", "G"),
+         ("tgt", "Tgt"), ("cmp", "Cmp"), ("cmp_percent", "Cmp%"),
+         ("yds", "Yds"), ("yds_tgt", "Y/Tgt"), ("td", "TD"), ("int", "INT"),
+         ("dadot", "aDOT"), ("rat", "Rating")],
+        {"G": "{:.0f}", "Tgt": "{:.0f}", "Cmp": "{:.0f}", "Yds": "{:.0f}",
+         "TD": "{:.0f}", "INT": "{:.0f}", "Cmp%": "{:.1%}", "Y/Tgt": "{:.1f}",
+         "aDOT": "{:.1f}", "Rating": "{:.1f}"},
+        "Coverage",
+        "Passer rating allowed on throws into his coverage — lower is better.",
+    )
+    rush_rows = _def_rows.copy()
+    if not rush_rows.empty and {"hrry", "qbkd", "sk"} <= set(rush_rows.columns):
+        for col in ("hrry", "qbkd", "sk"):
+            rush_rows[col] = pd.to_numeric(rush_rows[col], errors="coerce")
+        rush_rows["pressures"] = rush_rows[["hrry", "qbkd", "sk"]].fillna(0).sum(axis=1)
+    _season_table(
+        rush_rows,
+        [("season", "Season"), ("tm", "Tm"), ("g", "G"), ("pressures", "Pressures"),
+         ("hrry", "Hurries"), ("qbkd", "Knockdowns"), ("sk", "Sacks"), ("bltz", "Blitzes")],
+        {"G": "{:.0f}", "Pressures": "{:.0f}", "Hurries": "{:.0f}",
+         "Knockdowns": "{:.0f}", "Sacks": "{:.1f}", "Blitzes": "{:.0f}"},
+        "Pass Rush",
+        "Pressures combine hurries, knockdowns and sacks.",
+    )
+else:
+    if "Passing" in sections:
+        _season_table(
+            fdb.player_nextgen(player_id, "passing", mtime),
+            [("season", "Season"), ("attempts", "Att"),
+             ("avg_time_to_throw", "Time to Throw"),
+             ("avg_intended_air_yards", "Intended Air Yds"),
+             ("avg_air_yards_to_sticks", "Air Yds to Sticks"),
+             ("aggressiveness", "Aggressiveness%"),
+             ("completion_percentage_above_expectation", "CPOE")],
+            {"Att": "{:.0f}", "Time to Throw": "{:.2f}", "Intended Air Yds": "{:.1f}",
+             "Air Yds to Sticks": "{:+.1f}", "Aggressiveness%": "{:.1f}", "CPOE": "{:+.1f}"},
+            "Passing — Tracking",
+            "How long he holds it, how far downfield he throws, and how often into coverage.",
+        )
+        _season_table(
+            fdb.player_pfr(player_id, "pass", mtime),
+            [("season", "Season"), ("pocket_time", "Pocket Time"),
+             ("times_pressured", "Pressured"), ("pressure_pct", "Pressure%"),
+             ("times_blitzed", "Blitzed"), ("bad_throws", "Bad Throws"),
+             ("bad_throw_pct", "Bad Throw%"), ("on_tgt_pct", "On Target%"),
+             ("drops", "Drops")],
+            {"Pocket Time": "{:.1f}", "Pressured": "{:.0f}", "Pressure%": "{:.1f}",
+             "Blitzed": "{:.0f}", "Bad Throws": "{:.0f}", "Bad Throw%": "{:.1f}",
+             "On Target%": "{:.1f}", "Drops": "{:.0f}"},
+            "Passing — Pocket & Accuracy",
+            "Bad-throw and on-target rates separate his accuracy from his receivers' hands.",
+        )
+    if "Rushing" in sections:
+        _season_table(
+            fdb.player_nextgen(player_id, "rushing", mtime),
+            [("season", "Season"), ("rush_attempts", "Att"),
+             ("expected_rush_yards", "Expected"),
+             ("rush_yards_over_expected", "RYOE"),
+             ("rush_yards_over_expected_per_att", "RYOE/Att"),
+             ("percent_attempts_gte_eight_defenders", "8+ Box%"),
+             ("avg_time_to_los", "Time to LOS")],
+            {"Att": "{:.0f}", "Expected": "{:.0f}", "RYOE": "{:+.0f}",
+             "RYOE/Att": "{:+.2f}", "8+ Box%": "{:.1f}", "Time to LOS": "{:.2f}"},
+            "Rushing — Over Expected",
+            "What he gained against what the blocking and the box were worth.",
+        )
+    if "Receiving" in sections:
+        _season_table(
+            fdb.player_nextgen(player_id, "receiving", mtime),
+            [("season", "Season"), ("targets", "Tgt"), ("avg_separation", "Separation"),
+             ("avg_cushion", "Cushion"), ("avg_intended_air_yards", "aDOT"),
+             ("avg_yac", "YAC"), ("avg_expected_yac", "Expected YAC"),
+             ("avg_yac_above_expectation", "YAC +/-")],
+            {"Tgt": "{:.0f}", "Separation": "{:.2f}", "Cushion": "{:.2f}",
+             "aDOT": "{:.1f}", "YAC": "{:.1f}", "Expected YAC": "{:.1f}",
+             "YAC +/-": "{:+.2f}"},
+            "Receiving — Separation & YAC",
+            "Separation is yards from the nearest defender at the catch.",
         )

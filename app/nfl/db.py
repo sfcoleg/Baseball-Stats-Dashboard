@@ -320,3 +320,59 @@ def advanced_available(season: int, source: str) -> bool:
     rendering an empty table."""
     first = NGS_FIRST_SEASON if source == "ngs" else PFR_FIRST_SEASON
     return int(season) >= first
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def player_nextgen(player_id: str, kind: str, db_mtime_val: float) -> pd.DataFrame:
+    """One player's Next Gen Stats season lines, newest first."""
+    return _read(
+        "SELECT * FROM nextgen_stats WHERE player_id = ? AND ngs_type = ? "
+        "ORDER BY season DESC",
+        (str(player_id), kind),
+    )
+
+
+@st.cache_data(show_spinner=False, max_entries=16)
+def player_pfr(player_id: str, kind: str, db_mtime_val: float) -> pd.DataFrame:
+    """One player's PFR advanced season lines, newest first."""
+    return _read(
+        "SELECT * FROM pfr_advanced WHERE player_id = ? AND pfr_type = ? "
+        "ORDER BY season DESC",
+        (str(player_id), kind),
+    )
+
+
+# Which advanced sections belong on a profile, by the position PFR records.
+# A cornerback's page should open on who threw at him, not on an empty
+# passing table — so the position drives the sections rather than the other
+# way round.
+DEFENSIVE_POSITIONS = {
+    "CB", "S", "FS", "SS", "DB", "LB", "OLB", "ILB", "MLB",
+    "DE", "DT", "DL", "NT", "EDGE",
+}
+
+
+def is_defensive(position: str | None) -> bool:
+    return str(position or "").upper() in DEFENSIVE_POSITIONS
+
+
+@st.cache_data(show_spinner=False, max_entries=8)
+def player_position(player_id: str, db_mtime_val: float) -> str:
+    """The player's position, preferring what PFR recorded most recently.
+
+    player_season_stats carries a position too, but it comes from the
+    offensive stats feed and is blank or wrong for defenders — the very
+    players whose sections depend on getting this right."""
+    pfr = _read(
+        "SELECT pos FROM pfr_advanced WHERE player_id = ? AND pos IS NOT NULL "
+        "ORDER BY season DESC LIMIT 1",
+        (str(player_id),),
+    )
+    if not pfr.empty:
+        return str(pfr.iloc[0]["pos"])
+    seasons_df = _read(
+        "SELECT position FROM player_season_stats WHERE player_id = ? "
+        "AND position IS NOT NULL ORDER BY season DESC LIMIT 1",
+        (str(player_id),),
+    )
+    return str(seasons_df.iloc[0]["position"]) if not seasons_df.empty else ""
