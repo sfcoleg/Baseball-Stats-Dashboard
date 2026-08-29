@@ -10,13 +10,28 @@ FanGraphs route was refused. `python ingest/nfl_refresh.py` rebuilds; add
 --check to ask whether a refresh is needed (see refresh_data.py, which uses
 the same outcome-based guard).
 """
+from __future__ import annotations  # see the try/except below for why
+
 import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-import pandas as pd
+# Same fix, same reason, as refresh_data.py: --check is invoked by the
+# workflow BEFORE "Install dependencies" runs, on purpose, so a day that
+# needs nothing skips the expensive install. A plain top-level
+# `import pandas` crashed that invocation on the bare runner every time —
+# confirmed by running this exact command through an interpreter with no
+# packages installed, which dies here at exit code 1 — and the workflow's
+# `if python ...; then` read that crash as "nothing to do". This is the
+# MLB half of the same bug; nflreadpy itself was already made lazy (see
+# _nfl() below), but this top-level pandas import was still eager and
+# still crashed --check on its own.
+try:
+    import pandas as pd
+except ImportError:
+    pd = None
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "nfl.db"
 

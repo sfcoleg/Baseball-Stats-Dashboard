@@ -11,6 +11,8 @@ Baseball Savant (Statcast) both work reliably.
 Run this once a day to keep the dashboard up to date:
     ./venv/bin/python ingest/refresh_data.py
 """
+from __future__ import annotations  # see the try/except below for why
+
 import codecs
 import io
 import re
@@ -20,31 +22,63 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
-import numpy as np
-import pandas as pd
-import requests
-from pybaseball import (
-    batting_stats_bref,
-    pitching_stats_bref,
-    batting_stats_range,
-    pitching_stats_range,
-    bwar_bat,
-    bwar_pitch,
-    statcast_batter_exitvelo_barrels,
-    statcast_batter_expected_stats,
-    statcast_batter_percentile_ranks,
-    statcast_pitcher_exitvelo_barrels,
-    statcast_pitcher_expected_stats,
-    statcast_pitcher_percentile_ranks,
-    statcast_outs_above_average,
-    statcast_sprint_speed,
-)
+# THIS IS LOAD-BEARING, NOT A NICETY. `--check` (data_is_current /
+# refreshed_within) is invoked by the workflow BEFORE "Install dependencies"
+# runs, deliberately — the whole point is to skip the expensive install on a
+# day nothing needs fetching. Before this fix, a plain top-level
+# `import pandas` (etc.) meant that EVERY --check invocation crashed with
+# ModuleNotFoundError on the bare runner, `python ingest/refresh_data.py
+# --check` exited non-zero, and the workflow's `if python ...; then` read
+# that crash as "false" — indistinguishable from a legitimate "nothing to
+# do". Confirmed by running this exact command through a venv with no
+# packages installed: it dies on `import numpy` at exit code 1. That silently
+# no-opped the real ingest on every single scheduled run once --check was
+# added, which is the actual reason the site sat stale for days — not a
+# scheduling problem, a crash disguised as a decision.
+#
+# `from __future__ import annotations` above is what makes this safe: it
+# defers evaluation of every `-> pd.DataFrame` type hint in this file to a
+# string, so a function definition referencing pd/np doesn't itself require
+# them to be imported. Only actually CALLING a function that uses them does
+# — and --check never does. The real "Run ingest" step is a fresh process
+# that starts after "Install dependencies" has installed these for real, so
+# nothing about a normal run changes.
+try:
+    import numpy as np
+    import pandas as pd
+    import requests
+    from pybaseball import (
+        batting_stats_bref,
+        pitching_stats_bref,
+        batting_stats_range,
+        pitching_stats_range,
+        bwar_bat,
+        bwar_pitch,
+        statcast_batter_exitvelo_barrels,
+        statcast_batter_expected_stats,
+        statcast_batter_percentile_ranks,
+        statcast_pitcher_exitvelo_barrels,
+        statcast_pitcher_expected_stats,
+        statcast_pitcher_percentile_ranks,
+        statcast_outs_above_average,
+        statcast_sprint_speed,
+    )
+except ImportError:
+    np = pd = requests = None
+    (batting_stats_bref, pitching_stats_bref, batting_stats_range,
+     pitching_stats_range, bwar_bat, bwar_pitch,
+     statcast_batter_exitvelo_barrels, statcast_batter_expected_stats,
+     statcast_batter_percentile_ranks, statcast_pitcher_exitvelo_barrels,
+     statcast_pitcher_expected_stats, statcast_pitcher_percentile_ranks,
+     statcast_outs_above_average, statcast_sprint_speed) = (None,) * 14
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
 CURRENT_SEASON = date.today().year
 
 # app/teams.py's nickname->abbreviation lookup, reused here so standings
-# rows get a team_abbr without duplicating the mapping.
+# rows get a team_abbr without duplicating the mapping. Zero third-party
+# dependencies of its own, so this import is safe even without the try/except
+# above having succeeded.
 sys.path.append(str(Path(__file__).resolve().parent.parent / "app"))
 import teams as app_teams  # noqa: E402
 
@@ -1615,22 +1649,53 @@ def _store_season_table(conn, table_name, df, season):
     table on every run, so only the current season could ever be cached.
 
     Schema migration: `to_sql(if_exists="append")` requires the dataframe's
-    columns to exactly match the existing table's, so adding/renaming/
-    removing a column in a fetch_*() function breaks every other season's
-    already-stored rows. Drop and let to_sql recreate the table if the
-    incoming columns don't match — this loses other seasons' rows for that
-    table, so after a schema change, re-run --backfill for every season
-    you care about (batting/pitching/fielding are cheap, network-bound
-    re-fetches, not expensive local computation)."""
+    columns to exactly match the existing table's, so a change in any
+    fetch_*() function has to be reconciled here.
+
+    ADDING a column is handled by ALTER TABLE, which keeps every stored
+    season and leaves the new column NULL for rows that predate it. This
+    used to drop the table instead, and that cost real data: adding batter
+    dWAR silently armed a table-drop that fired on the next full refresh
+    and took 18 seasons of batting with it, while pitching — whose columns
+    happened not to change — kept all 19. A column appearing is the normal
+    way this project evolves and must not be destructive.
+
+    Dropping is still the fallback for a column being REMOVED or RENAMED,
+    where old rows genuinely cannot be reconciled. That path prints a loud
+    warning, because it means re-running --backfill for every season you
+    care about."""
     try:
-        existing_cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table_name})")}
-        if existing_cols and existing_cols != set(df.columns):
-            conn.execute(f"DROP TABLE {table_name}")
-        else:
-            conn.execute(f"DELETE FROM {table_name} WHERE season = ?", (season,))
+        existing_cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table_name})")]
     except sqlite3.OperationalError:
-        pass  # table doesn't exist yet on first run
-    df.to_sql(table_name, conn, if_exists="append", index=False)
+        existing_cols = []
+
+    if not existing_cols:
+        df.to_sql(table_name, conn, if_exists="append", index=False)
+        return
+
+    existing, incoming = set(existing_cols), set(df.columns)
+    if incoming - existing and not existing - incoming:
+        # Pure addition: widen the table and keep every season.
+        for column in df.columns:
+            if column not in existing:
+                conn.execute(f'ALTER TABLE {table_name} ADD COLUMN "{column}"')
+                print(f"  {table_name}: added column {column} (existing rows keep NULL)")
+    elif existing != incoming:
+        removed = ", ".join(sorted(existing - incoming)) or "none"
+        print(
+            f"  WARNING {table_name}: stored columns no longer match "
+            f"(removed/renamed: {removed}). Rebuilding the table — every other "
+            f"season's rows are lost and need --backfill."
+        )
+        conn.execute(f"DROP TABLE {table_name}")
+        df.to_sql(table_name, conn, if_exists="append", index=False)
+        return
+
+    conn.execute(f"DELETE FROM {table_name} WHERE season = ?", (season,))
+    # Re-read after a possible ALTER so column order matches the table.
+    table_cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table_name})")]
+    ordered = df[[c for c in table_cols if c in df.columns]]
+    ordered.to_sql(table_name, conn, if_exists="append", index=False)
 
 
 def fetch_and_store():

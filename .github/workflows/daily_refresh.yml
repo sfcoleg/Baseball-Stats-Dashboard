@@ -38,13 +38,27 @@ jobs:
         with:
           python-version: "3.13"
 
+      # This step's own exit code is NOT trusted on its own. On 2026-08-29
+      # we found that a crash here (a missing dependency — this step runs
+      # BEFORE "Install dependencies", on purpose, so a day needing nothing
+      # can skip the expensive install) exits non-zero exactly like a clean
+      # "nothing to do" answer, and `if cmd; then ... else ...` cannot tell
+      # the two apart. That silently no-opped every scheduled run for days
+      # with the job still showing green. So: only trust an explicit "data
+      # is current" (or the cooldown message) in the script's own stdout.
+      # Anything else — including a traceback — falls through to running
+      # the real ingest, which is always safe and idempotent.
       - name: Is the stored data behind?
         id: check
         run: |
-          if python ingest/refresh_data.py --check; then
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          else
+          set +e
+          output=$(python ingest/refresh_data.py --check 2>&1)
+          code=$?
+          echo "$output"
+          if [ $code -eq 1 ] && { echo "$output" | grep -qE "^(data is current|behind, but a refresh ran)"; }; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install dependencies
@@ -62,13 +76,19 @@ jobs:
       # requirements.txt because the Streamlit app never imports it (it only
       # reads nfl.db), and putting it there would make every app deploy pull
       # polars for nothing.
+      # Same reasoning as the MLB check above — only an explicit "data is
+      # current" skips; a crash runs the ingest instead of hiding as a no-op.
       - name: Is the NFL data behind?
         id: nfl_check
         run: |
-          if python ingest/nfl_refresh.py --check; then
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-          else
+          set +e
+          output=$(python ingest/nfl_refresh.py --check 2>&1)
+          code=$?
+          echo "$output"
+          if [ $code -eq 1 ] && { echo "$output" | grep -q "^data is current"; }; then
             echo "needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
           fi
         continue-on-error: true
 
