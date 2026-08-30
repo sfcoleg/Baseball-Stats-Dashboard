@@ -77,6 +77,7 @@ st.dataframe(
         team_color_fn=teams.color_for_abbr,
         precision={"BsR": "{:+.2f}", "SB%": "{:.1f}", "Sprint Speed": "{:.1f}", "Home-to-1st": "{:.2f}"},
     ),
+    column_config=style.pin_first_column(display),
     use_container_width=True,
     height=600,
 )

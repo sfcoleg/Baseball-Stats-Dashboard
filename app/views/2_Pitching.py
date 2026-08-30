@@ -122,6 +122,7 @@ with standard_tab:
             team_color_fn=teams.color_for_abbr,
             precision={"ERA": "{:.2f}", "WHIP": "{:.3f}"},
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -168,6 +169,7 @@ with advanced1_tab:
                 "ERA+": "{:.0f}", "PROP+": "{:.0f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -190,6 +192,7 @@ with advanced2_tab:
                 "GB/FB": "{:.2f}", "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -223,6 +226,7 @@ with statcast_tab:
                 "Barrel% Against": "{:.1f}", "Fastball Velo": "{:.1f}", "Induced Chase%": "{:.1f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -283,6 +287,7 @@ with custom_tab:
                 team_col="Tm",
                 team_color_fn=teams.color_for_abbr,
             ),
+            column_config=style.pin_first_column(display.rename(columns=_stat_label)),
             use_container_width=True,
             height=600,
         )

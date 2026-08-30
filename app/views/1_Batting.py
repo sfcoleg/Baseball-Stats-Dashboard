@@ -127,6 +127,7 @@ with standard_tab:
             team_color_fn=teams.color_for_abbr,
             precision={"BA": "{:.3f}", "OBP": "{:.3f}", "SLG": "{:.3f}", "OPS": "{:.3f}"},
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -163,6 +164,7 @@ with advanced_tab:
                 "WPA": "{:+.2f}", "WPA+": "{:+.2f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -189,6 +191,7 @@ with statcast_tab:
                 "xBA": "{:.3f}", "xSLG": "{:.3f}", "wOBA diff": "{:+.3f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -222,6 +225,7 @@ with discipline_tab:
                 "Chase%": "{:.1f}", "Bat Speed": "{:.1f}", "xISO": "{:.3f}", "xOBP": "{:.3f}",
             },
         ),
+        column_config=style.pin_first_column(display),
         use_container_width=True,
         height=600,
     )
@@ -264,6 +268,7 @@ with custom_tab:
                 team_col="Tm",
                 team_color_fn=teams.color_for_abbr,
             ),
+            column_config=style.pin_first_column(display.rename(columns=_stat_label)),
             use_container_width=True,
             height=600,
         )

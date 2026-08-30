@@ -1050,6 +1050,22 @@ def _resolve_table_gradient(theme_type: str) -> tuple[float, float]:
     return (0.35, 0.35) if theme_type == "dark" else (0.7, 0.7)
 
 
+def _dm_diverging_cmap(theme_type: str, reverse: bool = False):
+    """Red→amber→green colormap built from this app's own --dm-red/--dm-amber/
+    --dm-green tokens, in place of matplotlib's stock RdYlGn — keeps gradient
+    stat columns visually consistent with the badges, streaks, and playoff-odds
+    colors used everywhere else on the site instead of a generic default.
+    `reverse` swaps the ramp (green-at-low) for `lower_better` columns."""
+    from matplotlib.colors import LinearSegmentedColormap
+
+    red, amber, green = (
+        ("#F87171", "#F5B942", "#7CFC9A") if theme_type == "dark"
+        else ("#C0453F", "#B7791F", "#2E7D32")
+    )
+    colors = [green, amber, red] if reverse else [red, amber, green]
+    return LinearSegmentedColormap.from_list("dm_diverge", colors)
+
+
 def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
                        team_color_fn=None, team_abbr_fn=None, precision=None):
     """Return a pandas Styler for st.dataframe with:
@@ -1089,8 +1105,20 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     # text on a white grid — invisible. The gradient and the team badge
     # below deliberately overwrite this for their own cells.
     base_bg = "#1E2735" if theme_type == "dark" else "#FBFCFE"
+    stripe_bg = "#26314A" if theme_type == "dark" else "#F2F7FD"
     base_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
-    styler = styler.map(lambda _v: f"background-color: {base_bg}; color: {base_text}")
+
+    # Row-parity striping instead of a flat base — on tables running 50-800+
+    # rows (Batting/Pitching leaderboards) a plain grid makes it easy to lose
+    # your place scanning across 15 columns. Applied as the base layer so the
+    # gradient/team-badge overlays below still win on their own cells.
+    row_pos = {label: i for i, label in enumerate(df.index)}
+
+    def _zebra_row(row):
+        bg = stripe_bg if row_pos.get(row.name, 0) % 2 else base_bg
+        return [f"background-color: {bg}; color: {base_text}"] * len(row)
+
+    styler = styler.apply(_zebra_row, axis=1)
 
     # background_gradient renders a NaN cell solid BLACK (matplotlib's
     # default "bad" color) with near-white text on top — worse than any
@@ -1101,13 +1129,15 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     def _nan_transparent(v):
         return "background-color: transparent; color: inherit" if pd.isna(v) else ""
 
+    cmap_hi = _dm_diverging_cmap(theme_type, reverse=False)
+    cmap_lo = _dm_diverging_cmap(theme_type, reverse=True)
     for col in higher_better:
         styler = styler.background_gradient(
-            subset=[col], cmap="RdYlGn", low=grad_low, high=grad_high)
+            subset=[col], cmap=cmap_hi, low=grad_low, high=grad_high)
         styler = styler.map(_nan_transparent, subset=[col])
     for col in lower_better:
         styler = styler.background_gradient(
-            subset=[col], cmap="RdYlGn_r", low=grad_low, high=grad_high)
+            subset=[col], cmap=cmap_lo, low=grad_low, high=grad_high)
         styler = styler.map(_nan_transparent, subset=[col])
 
     if team_col and team_col in df.columns and team_color_fn:
@@ -1128,6 +1158,15 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
             styler = styler.format({team_col: team_abbr_fn})
 
     return styler
+
+
+def pin_first_column(df) -> dict:
+    """column_config that pins the leftmost column (Name, Team, ...) so it
+    stays visible while scrolling right through a wide stat table — pass as
+    st.dataframe(..., column_config=style.pin_first_column(display))."""
+    if df.columns.empty:
+        return {}
+    return {df.columns[0]: st.column_config.Column(pinned=True)}
 
 
 # The field itself is the user-supplied image (app/assets/baseballfield.png),

@@ -387,7 +387,7 @@ def _with_linked_names(df):
 
 
 _NAME_LINK_CONFIG = {
-    "Name": st.column_config.LinkColumn("Name", display_text=r"name=(.*)$"),
+    "Name": st.column_config.LinkColumn("Name", display_text=r"name=(.*)$", pinned=True),
 }
 
 style.colored_header("Batting", "batting")

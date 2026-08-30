@@ -65,6 +65,7 @@ st.dataframe(
         team_color_fn=teams.color_for_abbr,
         precision={"Arm Strength": "{:.1f}"},
     ),
+    column_config=style.pin_first_column(display),
     use_container_width=True,
     height=600,
 )
@@ -118,6 +119,7 @@ if not framing.empty or not poptime.empty:
                 "Arm (mph)": "{:.1f}",
             },
         ),
+        column_config=style.pin_first_column(disp),
         use_container_width=True, height=500, hide_index=True,
     )
 
