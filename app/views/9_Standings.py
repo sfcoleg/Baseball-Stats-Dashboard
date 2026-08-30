@@ -38,9 +38,38 @@ clinch_symbols = {
 
 DIVISION_ORDER = ["AL East", "AL Central", "AL West", "NL East", "NL Central", "NL West"]
 
+# Team crest instead of a plain colour-text badge, matching Today's Games
+# and Schedule — the Standings table was the one place on the site still
+# using initials-only.
+LOGO_SEASON = db.today_pacific().year
+
+
+def _logo(abbr: str):
+    ab = teams.normalize_mlb_abbr(abbr)
+    team_id = teams.team_id_for_abbr(ab)
+    return style.team_logo_for_season(ab, team_id, LOGO_SEASON) if team_id else None
+
+
+# The playoff field, computed once per LEAGUE rather than per division: which
+# two non-leaders make the wild card cut can only be decided by comparing
+# across the whole league, not by looking at one division in isolation.
+# Three division leaders + three wild cards is the actual format MLB has
+# used since 2022 — not two, which was the format before that.
+WILDCARD_SPOTS = 3
+
+
+def _playoff_field(league_standings) -> set:
+    leaders = set(league_standings.loc[league_standings["div_rank"].astype(str) == "1", "team_abbr"])
+    rest = league_standings[~league_standings["team_abbr"].isin(leaders)].sort_values("pct", ascending=False)
+    wildcards = set(rest.head(WILDCARD_SPOTS)["team_abbr"])
+    return leaders | wildcards
+
+
 for league in ["AL", "NL"]:
     style.colored_header(f"{league} — American League" if league == "AL" else f"{league} — National League", "batting" if league == "AL" else "pitching")
     league_divs = [d for d in DIVISION_ORDER if d.startswith(league)]
+    league_standings = standings[standings["league"] == league]
+    in_field = _playoff_field(league_standings) if not league_standings.empty else set()
     # Stacked full-width (not 3-across) — with RS/RA/Diff/Playoff Odds added,
     # the table is too wide for a third-of-page column at most viewport
     # sizes; each division's own horizontal scroll (rather than 3 squeezed
@@ -57,7 +86,10 @@ for league in ["AL", "NL"]:
         display = div_standings[list(display_cols)].rename(columns=display_cols)
         st.markdown(
             "<div style='overflow-x:auto'>"
-            + style.standings_table(display, teams.color_for_abbr, clinch_symbols)
+            + style.standings_table(
+                display, teams.color_for_abbr, clinch_symbols,
+                team_logo_fn=_logo, in_field=in_field,
+            )
             + "</div>",
             unsafe_allow_html=True,
         )

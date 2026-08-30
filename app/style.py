@@ -591,7 +591,8 @@ def _playoff_pct_color(pct: float) -> str:
 _CLINCH_SYMBOLS = {"division_clinch": "z", "wildcard_clinch": "x", "eliminated": "e"}
 
 
-def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=False) -> str:
+def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=False,
+                     team_logo_fn=None, in_field=None) -> str:
     """One division's standings as a plain HTML table, with each team's
     abbreviation rendered as a colored badge that's also a link to
     `?team=ABBR` — clicking the team name itself (not a checkbox/selector
@@ -607,22 +608,49 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
     `clinch_symbols`, if given, is {team_abbr: "z"/"x"/"e"} from
     db.clinch_elimination_status — the standard newspaper-standings
     notation (z = clinched division, x = clinched a playoff spot,
-    e = eliminated), rendered as a small superscript after the team badge."""
+    e = eliminated), rendered as a small superscript after the team badge.
+
+    `team_logo_fn`, if given, is abbr -> logo URL (or None) — takes the
+    team badge from a coloured initials pill to the actual crest, matching
+    Today's Games and Schedule. Optional and additive: omit it and the
+    badge renders exactly as before, so Home's compact table (which never
+    passes one) is untouched.
+
+    `in_field`, if given, is the set of team abbreviations currently inside
+    the playoff picture — 3 division leaders + 3 wild cards per league
+    under the format since 2022 (the caller computes this once, league-
+    wide, since which 2 non-leaders make the wild card cut cannot be
+    decided by looking at one division in isolation). A row in the field
+    gets a green-tinted left edge; a divider is drawn after the LAST such
+    row in this division's own list, wherever that happens to fall — for
+    a division with no wild-card team at all, that is just after its
+    leader."""
     has_playoff_pct = not compact and "Playoff%" in div_standings.columns
     clinch_symbols = clinch_symbols or {}
+    last_in_idx = None
+    if in_field:
+        in_rows = [i for i, (_, r) in enumerate(div_standings.iterrows()) if r["Team"] in in_field]
+        last_in_idx = max(in_rows) if in_rows else None
     rows = ""
-    for _, row in div_standings.iterrows():
+    for i, (_, row) in enumerate(div_standings.iterrows()):
         color = team_color_fn(row["Team"])
         symbol = clinch_symbols.get(row["Team"])
         symbol_html = f"<sup style='color:var(--dm-dim);font-weight:700;margin-left:2px'>{symbol}</sup>" if symbol else ""
+        logo_url = team_logo_fn(row["Team"]) if team_logo_fn else None
+        logo_html = f"<img src='{logo_url}' style='width:20px;height:20px;object-fit:contain;vertical-align:middle;margin-right:7px' />" if logo_url else ""
         team_cell = (
-            f"<td style='padding:5px 10px'><a href='?team={row['Team']}' target='_self' "
+            f"<td style='padding:5px 10px'>{logo_html}<a href='?team={row['Team']}' target='_self' "
             f"style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;border-radius:6px;"
-            f"font-weight:700;text-decoration:none;cursor:pointer'>{row['Team']}</a>{symbol_html}</td>"
+            f"font-weight:700;text-decoration:none;cursor:pointer;vertical-align:middle'>{row['Team']}</a>{symbol_html}</td>"
         )
+        # Division leader (rank 1 in this division's OWN sort order — the
+        # caller always passes rows pre-sorted by div_rank) gets its team
+        # colour as a left rail, the same "who's ahead" device used
+        # everywhere else on the site (game cards, last-game cards).
+        row_style = f"border-top:1px solid var(--dm-line);border-left:3px solid {color if i == 0 else 'transparent'}"
         if compact:
             rows += (
-                "<tr style='border-top:1px solid var(--dm-line)'>"
+                f"<tr style='{row_style}'>"
                 f"{team_cell}"
                 f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
                 f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
@@ -630,6 +658,12 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
             )
             continue
         streak = row["Streak"] if pd.notna(row["Streak"]) else "—"
+        streak_html = streak
+        if isinstance(streak, str) and streak[:1] in ("W", "L"):
+            # Green for a win streak, red for a losing one — the same
+            # meaning colour carries throughout the site, not a decoration.
+            streak_color = "var(--dm-green)" if streak[0] == "W" else "var(--dm-red)"
+            streak_html = f"<span style='color:{streak_color};font-weight:700'>{streak}</span>"
         gb = row["GB"] if pd.notna(row["GB"]) else "—"
         diff = row["Diff"]
         diff_str = f"+{diff:.0f}" if pd.notna(diff) and diff > 0 else (f"{diff:.0f}" if pd.notna(diff) else "—")
@@ -644,19 +678,31 @@ def standings_table(div_standings, team_color_fn, clinch_symbols=None, compact=F
                 f"border-radius:6px;font-weight:700'>{pct_str}</span></td>"
             )
         rows += (
-            "<tr style='border-top:1px solid var(--dm-line)'>"
+            f"<tr style='{row_style}'>"
             f"{team_cell}"
             f"<td style='padding:5px 10px;text-align:center'>{row['W']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['L']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['PCT']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{gb}</td>"
-            f"<td style='padding:5px 10px;text-align:center'>{streak}</td>"
+            f"<td style='padding:5px 10px;text-align:center'>{streak_html}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['RS']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{row['RA']}</td>"
             f"<td style='padding:5px 10px;text-align:center'>{diff_str}</td>"
             f"{playoff_cell}"
             "</tr>"
         )
+        if in_field and i == last_in_idx and i < len(div_standings) - 1:
+            # The wild-card cut line: a distinct row directly under the
+            # last team currently inside the playoff field, so the eye
+            # catches "everyone above this is in" without reading a
+            # single percentage.
+            col_count = 3 if compact else (10 if has_playoff_pct else 9)
+            rows += (
+                f"<tr><td colspan='{col_count}' style='padding:0;border-top:2px solid var(--dm-green);"
+                "position:relative'><span style='position:absolute;right:10px;top:-9px;"
+                "background:var(--dm-surface);color:var(--dm-green);font-size:0.62rem;"
+                "font-weight:800;letter-spacing:0.6px;padding:0 6px'>PLAYOFF LINE</span></td></tr>"
+            )
     header_cols = ["Team", "W", "L"] if compact else ["Team", "W", "L", "PCT", "GB", "Streak", "RS", "RA", "Diff"]
     if has_playoff_pct:
         header_cols.append("Playoff%")
