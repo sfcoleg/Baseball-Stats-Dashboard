@@ -99,12 +99,39 @@ jobs:
           python ingest/nfl_refresh.py
         continue-on-error: true
 
+      # On 2026-08-30 this step failed twice in a row with a bare "exit code
+      # 128" and no visible cause — the ingest itself succeeded both times,
+      # but the freshly-fetched data was silently discarded when the runner
+      # tore down, leaving the site stuck a day behind with every check still
+      # green. `safe.directory` (a git 2.35.2+ "dubious ownership" check that
+      # can trip on GitHub's runner images) is the most common cause of an
+      # unexplained exit 128 here, so it's set defensively even though it
+      # couldn't be confirmed as THE cause — the logs for a public repo are
+      # gated behind sign-in and weren't reachable to diagnose further. The
+      # retry loop is the real fix for the underlying failure mode: git pull
+      # --rebase races a same-day manual push (exactly what happened, twice)
+      # and there is no reason a transient non-fast-forward should burn the
+      # whole day's ingest instead of just re-fetching and trying again.
       - name: Commit updated data
         if: always()
         run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add data/stats.db data/nfl.db
-          git diff --cached --quiet || git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
-          git pull --rebase origin main
-          git push
+          if git diff --cached --quiet; then
+            echo "no data changes to commit"
+            exit 0
+          fi
+          git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
+          for attempt in 1 2 3 4 5; do
+            if git pull --rebase origin main && git push; then
+              echo "pushed on attempt $attempt"
+              exit 0
+            fi
+            echo "push attempt $attempt failed, retrying in 10s"
+            git rebase --abort 2>/dev/null || true
+            sleep 10
+          done
+          echo "::error::Commit updated data: all push attempts failed"
+          exit 1
