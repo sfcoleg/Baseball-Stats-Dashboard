@@ -14,6 +14,7 @@ Also called at the end of refresh_data.py's nightly run.
 import json
 import sqlite3
 from datetime import date, datetime, timezone
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import requests
@@ -143,7 +144,11 @@ def nhl_section() -> dict:
 def build() -> dict:
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "date": date.today().isoformat(),
+        # Pacific, not UTC date.today() — this runs on a UTC-clocked CI
+        # runner, which rolls to the next calendar day while it's still
+        # afternoon/evening in Pacific time (see refresh_data.py's
+        # _pacific_today()).
+        "date": datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
         "mlb": mlb_section(),
         "nhl": nhl_section(),
     }

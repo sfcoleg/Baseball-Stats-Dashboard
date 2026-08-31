@@ -73,7 +73,24 @@ except ImportError:
      statcast_outs_above_average, statcast_sprint_speed) = (None,) * 14
 
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
-CURRENT_SEASON = date.today().year
+
+
+def _pacific_today() -> date:
+    """Mirrors app/db.py's today_pacific() on the ingest side. GitHub Actions
+    (and Streamlit Community Cloud) run in UTC, which is far enough ahead of
+    Pacific that a plain date.today() rolls over to the next calendar day
+    while it's still afternoon/evening in Pacific time — a run that happens
+    to land after ~5pm Pacific (0:00 UTC) would then compute "yesterday" as
+    a day whose Pacific games haven't finished yet, fetching an empty/partial
+    day instead of the actually-complete previous day. Confirmed as the
+    cause of hr_log (Play of the Day) and the recent-batting/pitching
+    "headliner" windows falling behind on 2026-08-30/31 after a same-evening
+    manual run — every "what day is it for fetching purposes" call in this
+    script needs this instead of date.today()."""
+    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
+
+
+CURRENT_SEASON = _pacific_today().year
 
 # app/teams.py's nickname->abbreviation lookup, reused here so standings
 # rows get a team_abbr without duplicating the mapping. Zero third-party
@@ -1146,7 +1163,7 @@ def fetch_recent_batting():
     highlight hot recent performances rather than just season-to-date bests.
     Uses Baseball-Reference's date-range endpoint (games completed through
     yesterday, since today's games are still in progress when this runs)."""
-    today = date.today()
+    today = _pacific_today()
     yesterday = today - timedelta(days=1)
     windows = {
         "day": (yesterday, yesterday),
@@ -1215,7 +1232,7 @@ def fetch_recent_pitching():
     """Pitching stats over the last day/week/month, mirroring fetch_recent_batting.
     'day' includes Game Score (GSc), a well-known single-game dominance metric;
     week/month use ERA instead since Game Score isn't meaningful summed across starts."""
-    today = date.today()
+    today = _pacific_today()
     yesterday = today - timedelta(days=1)
     windows = {
         "day": (yesterday, yesterday),
@@ -1510,7 +1527,7 @@ def record_milestone_achievements(conn, career_totals):
         existing_keys = set()
         table_is_new = True
 
-    stamp = "1900-01-01" if table_is_new else date.today().isoformat()
+    stamp = "1900-01-01" if table_is_new else _pacific_today().isoformat()
     new_rows = []
     for row in career_totals.itertuples():
         for stat, thresholds in CAREER_MILESTONES.items():
@@ -1601,7 +1618,7 @@ def build_player_history(batting, pitching, recent_batting, recent_pitching):
     the recent-performance fetch rather than a new network call) power hit-
     streak / scoreless-streak tracking. Append-only (not replaced) like the
     other tables, so it accumulates real history over time."""
-    today = date.today().isoformat()
+    today = _pacific_today().isoformat()
 
     bat_hist = batting[["mlbID", "Name", "Tm", "PA", "OPS"]].copy()
     bat_hist["role"] = "Batter"
@@ -1860,7 +1877,7 @@ def fetch_and_store():
         try:
             conn.execute(
                 "DELETE FROM player_history WHERE date = ? AND season = ?",
-                (date.today().isoformat(), CURRENT_SEASON),
+                (_pacific_today().isoformat(), CURRENT_SEASON),
             )
         except sqlite3.OperationalError:
             pass  # table doesn't exist yet on first run
@@ -1910,7 +1927,7 @@ def fetch_and_store():
     # data/nhl.db, but only in-season: October through June. Over the
     # summer the numbers are final and there's nothing to pull. Same
     # non-fatal guard; the MLB refresh never waits on it.
-    if date.today().month >= 10 or date.today().month <= 6:
+    if _pacific_today().month >= 10 or _pacific_today().month <= 6:
         try:
             from nhl_refresh import update_latest as nhl_update_latest
             nhl_update_latest()
@@ -2006,7 +2023,7 @@ def _days_needing_update() -> list[str]:
     yesterday, capped at 7 days back (a longer outage should be healed
     with the explicit backfill scripts, not a silent hour-long catch-up
     inside the nightly job). First-ever run just does yesterday."""
-    yesterday = date.today() - timedelta(days=1)
+    yesterday = _pacific_today() - timedelta(days=1)
     last = None
     with sqlite3.connect(DB_PATH) as conn:
         try:
@@ -2026,7 +2043,7 @@ def _days_needing_update() -> list[str]:
 
 
 def _record_refresh_run() -> None:
-    yesterday = (date.today() - timedelta(days=1)).isoformat()
+    yesterday = (_pacific_today() - timedelta(days=1)).isoformat()
     with sqlite3.connect(DB_PATH) as conn:
         conn.execute("CREATE TABLE IF NOT EXISTS refresh_meta (key TEXT PRIMARY KEY, value TEXT)")
         conn.execute(
@@ -2046,7 +2063,7 @@ def snapshot_playoff_odds():
         print("playoff odds snapshot: no odds computed, skipped")
         return
     snap = odds[["team_abbr", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]].copy()
-    snap["date"] = date.today().isoformat()
+    snap["date"] = _pacific_today().isoformat()
     snap["season"] = CURRENT_SEASON
     with sqlite3.connect(DB_PATH) as conn:
         try:
@@ -2118,10 +2135,6 @@ def backfill_all_star(season):
     print(f"Backfilled {season} All-Star rosters: {len(roster)} players to {DB_PATH}")
 
 
-def _pacific_today() -> str:
-    return datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat()
-
-
 def record_refresh() -> None:
     """Stamp the Pacific date of a completed refresh into the database.
 
@@ -2136,7 +2149,7 @@ def record_refresh() -> None:
         )
         conn.execute(
             "INSERT OR REPLACE INTO refresh_log VALUES (?, ?)",
-            (_pacific_today(), datetime.now(timezone.utc).isoformat(timespec="seconds")),
+            (_pacific_today().isoformat(), datetime.now(timezone.utc).isoformat(timespec="seconds")),
         )
         conn.commit()
 
