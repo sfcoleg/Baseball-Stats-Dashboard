@@ -228,7 +228,33 @@ with header_col:
         f"{retired_badge}{hof_badge}{il_badge}",
         unsafe_allow_html=True,
     )
-    _caption = f"{nickname} · Age {age} · {selected_roles}"
+    # Position only means something for a batter/two-way player — a pure
+    # pitcher's primaryPosition is always just "P", which "Pitcher" (from
+    # selected_roles, right after this in the caption) already says.
+    _pos_text = ""
+    if is_batter_role:
+        _primary_pos = None
+        try:
+            _people = db._people_lookup((int(mlbID),))
+            if not _people.empty:
+                _primary_pos = _people.iloc[0].get("Pos")
+        except Exception:
+            pass
+        # fielding is already loaded above for the Fielding tab — every
+        # distinct position logged there this season, MLB Stats API's
+        # primaryPosition just isn't shown anywhere on the page today.
+        _secondary_pos = []
+        if not fielding.empty and "Pos" in fielding.columns:
+            _secondary_pos = sorted({
+                p for p in fielding["Pos"].dropna().unique() if p and p != _primary_pos
+            })
+        if _primary_pos:
+            _pos_text = _primary_pos
+            if _secondary_pos:
+                _pos_text += f" (also {', '.join(_secondary_pos)})"
+        elif _secondary_pos:
+            _pos_text = "/".join(_secondary_pos)
+    _caption = f"{nickname}" + (f" · {_pos_text}" if _pos_text else "") + f" · Age {age} · {selected_roles}"
     if _injury:
         # The badge gives the tier at a glance; the caption carries the actual
         # injury when the transactions feed had it, since "IL-60" alone
