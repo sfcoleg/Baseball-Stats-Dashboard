@@ -348,11 +348,19 @@ st.markdown(
     "[data-testid='stMainBlockContainer']{background:transparent;"
     "  padding:4px 0 34px !important;margin:6.4rem auto 0 !important;"
     "  max-width:calc(100% - 44px) !important;}"
-    # Substantial blocks — tables, charts, hand-written HTML tables — each get
-    # their own bubble. Captions, inputs and headings are left bare: bubbling
-    # every element turns the page into confetti.
-    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
-    "  [data-testid='stDataFrame']),"
+    # Substantial blocks — charts, hand-written HTML tables — each get their
+    # own bubble. Captions, inputs and headings are left bare: bubbling every
+    # element turns the page into confetti.
+    #
+    # st.dataframe is deliberately NOT included here (was, until a table's
+    # content was found rendering past the bottom of this box — its
+    # background/shadow/border-radius sized against a stale/smaller height
+    # than the dataframe's own iframe actually resized to, on every table
+    # site-wide, not any one page). st.dataframe already draws its own
+    # rounded/bordered chrome by default; doubling that with a second,
+    # independently-sized box was the bug, not a style choice worth
+    # re-solving blind. If this needs revisiting, reproduce it in a live
+    # browser with devtools open on the actual rendered iframe height first.
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  [data-testid='stPlotlyChart']),"
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has(table),"
