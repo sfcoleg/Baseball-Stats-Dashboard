@@ -1051,18 +1051,18 @@ def _resolve_table_gradient(theme_type: str) -> tuple[float, float]:
 
 
 def _dm_diverging_cmap(theme_type: str, reverse: bool = False):
-    """Red→amber→green colormap built from this app's own --dm-red/--dm-amber/
-    --dm-green tokens, in place of matplotlib's stock RdYlGn — keeps gradient
-    stat columns visually consistent with the badges, streaks, and playoff-odds
+    """Red→green colormap built from this app's own --dm-red/--dm-green
+    tokens, in place of matplotlib's stock RdYlGn — keeps gradient stat
+    columns visually consistent with the badges, streaks, and playoff-odds
     colors used everywhere else on the site instead of a generic default.
+    A straight two-stop red→green ramp rather than a red→amber→green one —
+    a middle amber stop blends into a muddy olive/brown across most of the
+    range instead of a clean red-to-green read.
     `reverse` swaps the ramp (green-at-low) for `lower_better` columns."""
     from matplotlib.colors import LinearSegmentedColormap
 
-    red, amber, green = (
-        ("#F87171", "#F5B942", "#7CFC9A") if theme_type == "dark"
-        else ("#C0453F", "#B7791F", "#2E7D32")
-    )
-    colors = [green, amber, red] if reverse else [red, amber, green]
+    red, green = ("#F87171", "#7CFC9A") if theme_type == "dark" else ("#C0453F", "#2E7D32")
+    colors = [green, red] if reverse else [red, green]
     return LinearSegmentedColormap.from_list("dm_diverge", colors)
 
 
