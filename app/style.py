@@ -1048,30 +1048,33 @@ def _resolve_table_gradient(theme_type: str) -> tuple[float, float]:
     """background_gradient's low/high compression for this theme.
 
     low/high EXTEND the virtual min/max background_gradient normalizes
-    against, which squeezes the real data into a narrower slice of the
-    colormap — at (0.7, 0.7) (light mode's old value), real data only ever
-    reaches the middle ~41%-59% of the colormap. That was a fine "pale
-    wash" back when the middle color was a bright amber; with the plain
-    red→green colormap (see _dm_diverging_cmap) the middle is the muddiest,
-    most desaturated point of a direct RGB blend, so squeezing everything
-    into it just reads as mud regardless of theme. Both themes now stay
-    close enough to the colormap's real ends to read as red/green."""
-    return (0.35, 0.35) if theme_type == "dark" else (0.15, 0.15)
+    against, compressing real data into a narrower slice of the colormap.
+    Now that the colormap itself fades to the page's own background at its
+    center (see _dm_diverging_cmap) rather than blending red into green,
+    there's no muddy middle to avoid — low compression is what lets the
+    real extremes actually reach solid, saturated red/green instead of
+    landing on a paler in-between tone."""
+    return (0.08, 0.08)
 
 
 def _dm_diverging_cmap(theme_type: str, reverse: bool = False):
-    """Red→green colormap built from this app's own --dm-red/--dm-green
-    tokens, in place of matplotlib's stock RdYlGn — keeps gradient stat
-    columns visually consistent with the badges, streaks, and playoff-odds
-    colors used everywhere else on the site instead of a generic default.
-    A straight two-stop red→green ramp rather than a red→amber→green one —
-    a middle amber stop blends into a muddy olive/brown across most of the
-    range instead of a clean red-to-green read.
+    """Red→[page background]→green colormap, in place of matplotlib's stock
+    RdYlGn or a direct red-green blend.
+
+    A plain two-stop red→green ramp blends the two hues directly, which
+    passes through a muddy olive/brown for most of the range — an
+    unavoidable property of mixing two roughly-complementary colors in RGB,
+    not a tuning issue. Fading each end toward the page's own surface color
+    instead reads the way the user actually wants it to: solid, straight
+    red and green at the extremes, softening smoothly toward "no signal"
+    (this cell's plain background) in the middle — visually like an alpha
+    fade, not a color blend.
     `reverse` swaps the ramp (green-at-low) for `lower_better` columns."""
     from matplotlib.colors import LinearSegmentedColormap
 
     red, green = ("#F87171", "#7CFC9A") if theme_type == "dark" else ("#C0453F", "#2E7D32")
-    colors = [green, red] if reverse else [red, green]
+    base_bg = "#1E2735" if theme_type == "dark" else "#FBFCFE"
+    colors = [green, base_bg, red] if reverse else [red, base_bg, green]
     return LinearSegmentedColormap.from_list("dm_diverge", colors)
 
 
