@@ -372,6 +372,15 @@ st.markdown(
     "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
     "  [data-testid='stMarkdown'] div[style]){"
     f"  background:var(--dm-surface);border-radius:14px;padding:20px 22px;{_CARD_SHADOW}}}"
+    # st.dataframe keeps its OWN native chrome (no bubble, see above) but
+    # still needs the same bottom breathing room the bubbled elements get
+    # from their padding — margin only, no background/shadow, so there's
+    # nothing here whose size can mismatch the dataframe's actual rendered
+    # height the way the removed bubble did. Section headings right after a
+    # table (colored_header's .dm-shead, below) carry their own small
+    # negative top margin, so without this the two visually ran together.
+    "[data-testid='stMainBlockContainer'] [data-testid='stElementContainer']:has("
+    "  [data-testid='stDataFrame']){margin-bottom:20px;}"
     # Keep a wide table INSIDE its bubble. The bubbles are flex children, and
     # a flex child defaults to min-width:auto — meaning it refuses to shrink
     # below its content's intrinsic width, so a table with many columns pushes
