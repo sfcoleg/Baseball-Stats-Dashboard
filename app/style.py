@@ -1045,9 +1045,18 @@ def _session_theme() -> str:
 
 
 def _resolve_table_gradient(theme_type: str) -> tuple[float, float]:
-    """background_gradient's low/high compression for this theme — light
-    mode wants a pale wash, dark mode a deeper, more saturated one."""
-    return (0.35, 0.35) if theme_type == "dark" else (0.7, 0.7)
+    """background_gradient's low/high compression for this theme.
+
+    low/high EXTEND the virtual min/max background_gradient normalizes
+    against, which squeezes the real data into a narrower slice of the
+    colormap — at (0.7, 0.7) (light mode's old value), real data only ever
+    reaches the middle ~41%-59% of the colormap. That was a fine "pale
+    wash" back when the middle color was a bright amber; with the plain
+    red→green colormap (see _dm_diverging_cmap) the middle is the muddiest,
+    most desaturated point of a direct RGB blend, so squeezing everything
+    into it just reads as mud regardless of theme. Both themes now stay
+    close enough to the colormap's real ends to read as red/green."""
+    return (0.35, 0.35) if theme_type == "dark" else (0.15, 0.15)
 
 
 def _dm_diverging_cmap(theme_type: str, reverse: bool = False):
