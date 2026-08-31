@@ -6,17 +6,25 @@ on:
     # (GitHub cron has no DST awareness, so one UTC hour cannot be 6am
     # Pacific year-round).
     #
-    # These are RETRIES, not extra refreshes, and the spread is wide on
-    # purpose. GitHub runs scheduled jobs best-effort: observed delays on
-    # this repo range from 30 minutes to over seven hours, and on 2026-08-27
-    # the 13:00 slot was dropped with no run recorded at all. A cluster of
-    # slots inside one narrow window is therefore no protection — if that
-    # window is being deprioritised, every slot in it misses together.
+    # These are RETRIES, not extra refreshes, and the spread across the DAY
+    # (13/16/19/22 UTC) is wide on purpose. GitHub runs scheduled jobs
+    # best-effort: observed delays on this repo range from 30 minutes to
+    # over seven hours, and on both 2026-08-27 and 2026-08-31 a slot was
+    # dropped with no run recorded at all — not delayed, not failed, simply
+    # never triggered. A cluster of slots inside one narrow window is
+    # therefore no protection against THAT day's window being
+    # deprioritised — every slot in it misses together — which is why the
+    # wide day-spread stays even though 12:30-13:15 below is a tight
+    # cluster: it raises the odds of a fresh-by-breakfast run specifically,
+    # while 16/19/22 remain the wide, low-correlation safety net for
+    # whenever the whole morning gets skipped.
     #
     # Each run asks `refresh_data.py --check`, which tests whether the DATA
     # is behind rather than whether a job has run, so a slot that fires at
     # any hour still does the right thing and the rest cost a few seconds.
-    - cron: "0 13,16,19,22 * * *"
+    - cron: "30,45 12 * * *"
+    - cron: "0,15 13 * * *"
+    - cron: "0 16,19,22 * * *"
   workflow_dispatch: {}  # lets you trigger a refresh manually from the Actions tab
 
 permissions:

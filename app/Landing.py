@@ -288,8 +288,12 @@ def _games_html(rows):
     the whole column, instead of a stray one-word bubble above it."""
     html = []
     for r in rows:
-        a_s = "" if r["away_score"] is None else int(r["away_score"])
-        h_s = "" if r["home_score"] is None else int(r["home_score"])
+        # `is None` alone doesn't catch a pandas NaN score (a not-yet-played
+        # game read straight off a DataFrame) — int(NaN) raises, which took
+        # the whole page down when a caller passed one through unconverted.
+        raw_a, raw_h = r["away_score"], r["home_score"]
+        a_s = "" if raw_a is None or pd.isna(raw_a) else int(raw_a)
+        h_s = "" if raw_h is None or pd.isna(raw_h) else int(raw_h)
         a_win = a_s != "" and h_s != "" and a_s > h_s
         h_win = a_s != "" and h_s != "" and h_s > a_s
 
@@ -481,7 +485,11 @@ def _team_recent_games(sport_label, team_abbr):
             if started and away_score is not None:
                 detail = "Final" if status == "Final" else (score.get("inning") or status)
             else:
-                away_score, home_score = g.get("away_score"), g.get("home_score")
+                # A not-yet-played game's score is a pandas NaN here, not
+                # None — int(NaN) is what actually crashed the page.
+                raw_a, raw_h = g.get("away_score"), g.get("home_score")
+                away_score = None if pd.isna(raw_a) else raw_a
+                home_score = None if pd.isna(raw_h) else raw_h
                 detail = "Final" if str(g.get("status")) == "Final" else g["date"]
             rows.append({
                 "away": g["away_abbr"], "home": g["home_abbr"],
