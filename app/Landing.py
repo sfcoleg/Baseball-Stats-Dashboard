@@ -84,20 +84,36 @@ def _pitch_type_name(code):
         return code
 
 
+_HR_LOG_PITCH_COLS = ("pitch_type", "release_speed", "plate_x", "plate_z", "sz_top", "sz_bot")
+
+
 def _play_of_the_day():
     try:
         with __import__("sqlite3").connect(db.DB_PATH) as conn:
+            # hr_log only grows these columns once ballparks.py's nightly
+            # update_day() actually runs its ALTER TABLE migration — a
+            # deploy can land here before that's happened on the live db,
+            # and a SELECT naming a column that doesn't exist yet raises
+            # OperationalError, which used to take out the whole card
+            # rather than just the pitch data. Check first, degrade instead.
+            existing = {r[1] for r in conn.execute("PRAGMA table_info(hr_log)")}
+            pitch_cols = [c for c in _HR_LOG_PITCH_COLS if c in existing]
+            select_cols = "game_date, game_pk, batter, des, hit_distance_sc, launch_speed" + (
+                ", " + ", ".join(pitch_cols) if pitch_cols else ""
+            )
             row = conn.execute(
-                "SELECT game_date, game_pk, batter, des, hit_distance_sc, launch_speed, "
-                "pitch_type, release_speed, plate_x, plate_z, sz_top, sz_bot "
-                "FROM hr_log WHERE des IS NOT NULL ORDER BY game_date DESC, rowid DESC LIMIT 1"
+                f"SELECT {select_cols} FROM hr_log WHERE des IS NOT NULL "
+                "ORDER BY game_date DESC, rowid DESC LIMIT 1"
             ).fetchone()
     except Exception:
         return None
     if not row:
         return None
-    (game_date, game_pk, batter, des, dist, ev,
-     pitch_type, pitch_speed, plate_x, plate_z, sz_top, sz_bot) = row
+    game_date, game_pk, batter, des, dist, ev = row[:6]
+    pitch_vals = dict(zip(pitch_cols, row[6:]))
+    pitch_type, pitch_speed, plate_x, plate_z, sz_top, sz_bot = (
+        pitch_vals.get(c) for c in _HR_LOG_PITCH_COLS
+    )
     number = re.search(r"\((\d+)\)", des or "")
     try:
         clip = db.find_home_run_clip(int(batter), int(game_pk), int(number.group(1)) if number else None)
