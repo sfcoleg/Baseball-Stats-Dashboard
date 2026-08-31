@@ -34,7 +34,32 @@ RAW_COLS = [
     "game_pk", "game_date", "events", "inning_topbot", "hc_x", "hc_y",
     "launch_speed", "launch_angle", "hit_distance_sc", "batter", "des",
     "home_team", "away_team", "post_home_score", "post_away_score",
+    # The pitch that was actually put in play — for Play of the Day's strike
+    # zone plot (type/speed/location), not used by the park-factor side of
+    # this module at all.
+    "pitch_type", "release_speed", "plate_x", "plate_z", "sz_top", "sz_bot",
 ]
+
+# hr_log columns added after the table already existed in production —
+# ADD COLUMN (not DROP+recreate) so historical rows are kept, just NULL for
+# these until they're re-backfilled. Matches the ALTER-not-DROP fix from the
+# batter dWAR incident: a schema-mismatch DROP here would erase every HR
+# logged before this column existed.
+_HR_LOG_PITCH_COLS = ["pitch_type", "release_speed", "plate_x", "plate_z", "sz_top", "sz_bot"]
+
+
+def _ensure_hr_log_pitch_columns(conn: sqlite3.Connection) -> None:
+    try:
+        existing = {r[1] for r in conn.execute("PRAGMA table_info(hr_log)")}
+    except sqlite3.OperationalError:
+        return  # table doesn't exist yet — to_sql will create it with every column
+    if not existing:
+        return
+    for col in _HR_LOG_PITCH_COLS:
+        if col not in existing:
+            conn.execute(f"ALTER TABLE hr_log ADD COLUMN {col} REAL" if col != "pitch_type"
+                         else "ALTER TABLE hr_log ADD COLUMN pitch_type TEXT")
+    conn.commit()
 
 SEASON_RANGES = {
     2021: ("2021-04-01", "2021-10-03"),
@@ -116,10 +141,17 @@ def _split_frames(df: pd.DataFrame, season: int) -> tuple[pd.DataFrame, pd.DataF
     hr["x_ft"] = (hr["hc_x"] - HC_X0) * HC_SCALE
     hr["y_ft"] = (HC_Y0 - hr["hc_y"]) * HC_SCALE
     hr["season"] = season
+    # A source day missing one of these (a cache chunk pulled before the
+    # column existed, or an odd Statcast day) shouldn't KeyError the whole
+    # split — just leave it null for that day rather than losing the HRs.
+    for col in _HR_LOG_PITCH_COLS:
+        if col not in hr.columns:
+            hr[col] = pd.NA
     hr_log = hr[[
         "season", "game_date", "game_pk", "batter", "home_team", "away_team",
         "inning_topbot", "x_ft", "y_ft", "launch_speed", "launch_angle",
         "hit_distance_sc", "des",
+        "pitch_type", "release_speed", "plate_x", "plate_z", "sz_top", "sz_bot",
     ]].reset_index(drop=True)
 
     games = df[df["_kind"] == "game"].drop_duplicates("game_pk").copy()
@@ -171,6 +203,7 @@ def update_day(day: str) -> None:
     finals.insert(0, "_kind", "game")
     hr_log, park_games = _split_frames(pd.concat([hr, finals], ignore_index=True), int(day[:4]))
     with sqlite3.connect(DB_PATH) as conn:
+        _ensure_hr_log_pitch_columns(conn)
         for table, df, key in [("hr_log", hr_log, "game_pk"), ("park_games", park_games, "game_pk")]:
             if df.empty:
                 continue

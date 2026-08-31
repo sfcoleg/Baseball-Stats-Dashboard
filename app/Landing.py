@@ -8,7 +8,7 @@ The depth stays in each league's own pages — this answers "what should I
 look at right now" and hands you off."""
 import re
 import sys
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
@@ -74,18 +74,30 @@ st.markdown(
 # nearly every home run, and hr_log already stores every one with its
 # game_pk. One lookup, cached half an hour, and the front door opens on
 # actual footage instead of a wall of numbers.
+def _pitch_type_name(code):
+    if not code:
+        return None
+    try:
+        from pybaseball.utils import pitch_code_to_name_map
+        return pitch_code_to_name_map.get(code, code)
+    except Exception:
+        return code
+
+
 def _play_of_the_day():
     try:
         with __import__("sqlite3").connect(db.DB_PATH) as conn:
             row = conn.execute(
-                "SELECT game_date, game_pk, batter, des, hit_distance_sc, launch_speed "
+                "SELECT game_date, game_pk, batter, des, hit_distance_sc, launch_speed, "
+                "pitch_type, release_speed, plate_x, plate_z, sz_top, sz_bot "
                 "FROM hr_log WHERE des IS NOT NULL ORDER BY game_date DESC, rowid DESC LIMIT 1"
             ).fetchone()
     except Exception:
         return None
     if not row:
         return None
-    game_date, game_pk, batter, des, dist, ev = row
+    (game_date, game_pk, batter, des, dist, ev,
+     pitch_type, pitch_speed, plate_x, plate_z, sz_top, sz_bot) = row
     number = re.search(r"\((\d+)\)", des or "")
     try:
         clip = db.find_home_run_clip(int(batter), int(game_pk), int(number.group(1)) if number else None)
@@ -98,21 +110,39 @@ def _play_of_the_day():
     match = batting[batting["mlbID"] == int(batter)]
     abbr = teams.team_meta_from_city(match.iloc[0]["Tm"], match.iloc[0].get("Lev"))[0] if not match.empty else ""
     color = teams.color_for_abbr(abbr) if abbr else "#2E86DE"
+    pitch_name = _pitch_type_name(pitch_type)
     stats = " · ".join(p for p in (
-        f"{int(dist)} ft" if pd.notna(dist) else "", f"{ev:.1f} mph" if pd.notna(ev) else "",
+        f"{int(dist)} ft" if pd.notna(dist) else "", f"{ev:.1f} mph exit velo" if pd.notna(ev) else "",
+        f"{pitch_speed:.1f} mph {pitch_name}" if pd.notna(pitch_speed) and pitch_name else "",
     ) if p)
+    # Older rows logged before hr_log tracked pitch location are simply
+    # missing these — the zone plot just doesn't render for them rather
+    # than crashing or showing a fake center-of-zone pitch.
+    pitch = None
+    if pd.notna(plate_x) and pd.notna(plate_z) and pd.notna(sz_top) and pd.notna(sz_bot):
+        pitch = {
+            "px": plate_x, "pz": plate_z, "sz_top": sz_top, "sz_bottom": sz_bot,
+            "pitch_type": pitch_name or "Pitch", "speed": pitch_speed if pd.notna(pitch_speed) else None,
+            "is_in_play": True, "is_strike": True, "description": "In play, home run", "number": 1,
+        }
     return {"clip": clip, "name": name, "abbr": abbr, "color": color,
-            "des": des, "stats": stats, "mlbID": int(batter),
+            "des": des, "stats": stats, "mlbID": int(batter), "pitch": pitch,
             "date": str(game_date)[:10]}
 
 
 _potd = _play_of_the_day()
 if _potd:
-    style.colored_header("Play of the Day", "headliners")
+    play_date = date.fromisoformat(_potd["date"])
+    style.colored_header(f"Play of {db.daily_label(play_date, TODAY)}", "headliners")
     with st.container(border=True):
-        vid_col, info_col = st.columns([3, 2])
+        vid_col, info_col, zone_col = st.columns([3, 2, 1.6])
         with vid_col:
             st.video(_potd["clip"])
+        if _potd["pitch"]:
+            with zone_col:
+                fig = style.strike_zone_chart([_potd["pitch"]])
+                fig.update_layout(height=300, margin=dict(l=0, r=0, t=6, b=0))
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         with info_col:
             c = _potd["color"]
             st.markdown(
