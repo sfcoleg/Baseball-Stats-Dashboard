@@ -73,7 +73,12 @@ DIAMOND_COLOR = "#2E86DE"
 # properties the hand-written HTML uses, so the same colours are repeated here
 # as literals. Light-theme values: charts sit on white cards.
 CHART_TEXT = "#0C1725"
-CHART_DIM = "#71829A"
+# Was #71829A (~3.9:1 against white — fails WCAG AA, and per user report was
+# genuinely unreadable on the light theme's axis ticks/legends/reference-line
+# labels across every sport's home page, all driven by this one constant via
+# chart_template()). Matches CHART_TEXT now rather than reading as a
+# secondary, de-emphasized tone.
+CHART_DIM = "#0C1725"
 CHART_GRID = "#D8E1EE"
 CHART_SURFACE = "#F7FAFD"
 CHART_BLUE = "#2E86DE"
@@ -2012,7 +2017,7 @@ def apply_theme(theme_type: str) -> None:
         CHART_AMBER, CHART_RED, CHART_GREEN = "#F5B942", "#F87171", "#7CFC9A"
         DIAMOND_COLOR = "#9BCAF3"
     else:
-        CHART_TEXT, CHART_DIM, CHART_GRID = "#0C1725", "#6B7C94", "#D8E1EE"
+        CHART_TEXT, CHART_DIM, CHART_GRID = "#0C1725", "#0C1725", "#D8E1EE"
         CHART_SURFACE, CHART_BLUE = "#FBFCFE", "#2E86DE"
         CHART_AMBER, CHART_RED, CHART_GREEN = "#B7791F", "#C0453F", "#2E7D32"
         DIAMOND_COLOR = "#2E86DE"
