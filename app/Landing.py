@@ -8,7 +8,7 @@ The depth stays in each league's own pages — this answers "what should I
 look at right now" and hands you off."""
 import re
 import sys
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
@@ -424,6 +424,118 @@ if _cards:
                 unsafe_allow_html=True,
             )
 
+_RECENT_DAYS = 4
+
+
+def _team_recent_games(sport_label, team_abbr):
+    """Rows for one followed team: today's live game (if in progress) plus
+    results/schedule from the last _RECENT_DAYS days, shaped the same as
+    _mlb_games()/_nhl_games()/_nfl_games()'s rows so _games_html() can
+    render them directly."""
+    cutoff = (TODAY - timedelta(days=_RECENT_DAYS)).isoformat()
+    today_str = TODAY.isoformat()
+
+    if sport_label == "MLB":
+        try:
+            sched = db.load_schedule(MTIME)
+        except Exception:
+            return []
+        if sched.empty:
+            return []
+        norm = teams.normalize_mlb_abbr(team_abbr)
+        home_norm = sched["home_abbr"].apply(teams.normalize_mlb_abbr)
+        away_norm = sched["away_abbr"].apply(teams.normalize_mlb_abbr)
+        mine = sched[
+            ((home_norm == norm) | (away_norm == norm))
+            & (sched["date"] >= cutoff) & (sched["date"] <= today_str)
+        ]
+        if mine.empty:
+            return []
+        try:
+            live = db.load_live_scores(today_str)
+        except Exception:
+            live = {}
+        rows = []
+        for _, g in mine.sort_values("date").iterrows():
+            score = live.get(int(g["game_pk"]), {}) if isinstance(live, dict) else {}
+            away_score, home_score = score.get("away_score"), score.get("home_score")
+            status = score.get("status") or str(g.get("status") or "")
+            started = status not in ("Scheduled", "Pre-Game", "Delayed Start")
+            live_now = started and status != "Final"
+            if started and away_score is not None:
+                detail = "Final" if status == "Final" else (score.get("inning") or status)
+            else:
+                away_score, home_score = g.get("away_score"), g.get("home_score")
+                detail = "Final" if str(g.get("status")) == "Final" else g["date"]
+            rows.append({
+                "away": g["away_abbr"], "home": g["home_abbr"],
+                "away_logo": _mlb_logo(g["away_abbr"]), "home_logo": _mlb_logo(g["home_abbr"]),
+                "away_score": away_score, "home_score": home_score,
+                "detail": detail, "live": live_now,
+                "color": teams.color_for_abbr(teams.normalize_mlb_abbr(g["home_abbr"])),
+            })
+        return rows
+
+    if sport_label == "NHL":
+        if ndb is None:
+            return []
+        try:
+            games = ndb.load_club_schedule(team_abbr)
+        except Exception:
+            return []
+        rows = []
+        for g in games:
+            gdate = str(g.get("gameDate") or g.get("startTimeUTC") or "")[:10]
+            if not (cutoff <= gdate <= today_str):
+                continue
+            away = (g.get("awayTeam") or {}).get("abbrev", "?")
+            home = (g.get("homeTeam") or {}).get("abbrev", "?")
+            state = g.get("gameState") or ""
+            rows.append({
+                "away": away, "home": home,
+                "away_logo": nteams.logo_url(away), "home_logo": nteams.logo_url(home),
+                "away_score": (g.get("awayTeam") or {}).get("score"),
+                "home_score": (g.get("homeTeam") or {}).get("score"),
+                "detail": state.title() if state else gdate, "live": state == "LIVE",
+                "color": nteams.color_for_abbr(home), "_sort": gdate,
+            })
+        return [{k: v for k, v in r.items() if k != "_sort"} for r in sorted(rows, key=lambda r: r["_sort"])]
+
+    if sport_label == "NFL":
+        if fdb is None:
+            return []
+        try:
+            fmtime = fdb.nfl_db_mtime()
+            available = fdb.seasons(fmtime)
+            season = available[0] if available else None
+            games = fdb.load_games(season, fmtime) if season else pd.DataFrame()
+        except Exception:
+            return []
+        if games.empty:
+            return []
+        gdays = games["gameday"].astype(str)
+        mine = games[
+            ((games["home_team"] == team_abbr) | (games["away_team"] == team_abbr))
+            & (gdays >= cutoff) & (gdays <= today_str)
+        ]
+        if mine.empty:
+            return []
+        rows = []
+        for _, g in mine.sort_values("gameday").iterrows():
+            played = pd.notna(g.get("home_score"))
+            rows.append({
+                "away": g["away_team"], "home": g["home_team"],
+                "away_logo": fteams.logo_url(g["away_team"]), "home_logo": fteams.logo_url(g["home_team"]),
+                "away_score": int(g["away_score"]) if played else None,
+                "home_score": int(g["home_score"]) if played else None,
+                "detail": "Final" if played else str(g.get("gameday") or ""), "live": False,
+                "color": fteams.color_for_abbr(g["home_team"]),
+            })
+        return rows
+
+    return []
+
+
 # --- Your teams --------------------------------------------------------------
 _TEAM_META = {"MLB": (teams.color_for_abbr, _mlb_logo)}
 if nteams is not None:
@@ -457,3 +569,30 @@ if _followed:
         unsafe_allow_html=True,
     )
     st.page_link("views/13_Following.py", label="Manage who you follow →")
+
+    # Live game (if any) plus the last few days' results for each followed
+    # team — not just today, so a team that isn't playing right now doesn't
+    # just vanish from its own section.
+    _team_blocks = []
+    for _label, _teams_list in _followed:
+        for _t in _teams_list:
+            _rows = _team_recent_games(_label, _t["abbr"])
+            if _rows:
+                _team_blocks.append((_label, _t, _rows))
+    if _team_blocks:
+        st.markdown("<div style='height:6px'></div>", unsafe_allow_html=True)
+        _tcols = st.columns(min(3, len(_team_blocks)))
+        for _i, (_label, _t, _rows) in enumerate(_team_blocks):
+            with _tcols[_i % len(_tcols)]:
+                colour_fn, logo_fn = _TEAM_META.get(_label, (None, None))
+                _c = colour_fn(_t["abbr"]) if colour_fn else "#666666"
+                _logo = logo_fn(_t["abbr"]) if logo_fn else None
+                _img = (f"<img src='{_logo}' style='width:18px;height:18px;object-fit:contain' />"
+                        if _logo else "")
+                _header = (
+                    f"<div style='display:flex;align-items:center;gap:7px;font-family:\"Archivo Narrow\","
+                    f"sans-serif;font-weight:700;letter-spacing:0.5px;color:var(--dm-text);margin-bottom:8px'>"
+                    f"{_img}{_t['abbr']} <span style='color:var(--dm-dim);font-weight:600;"
+                    f"font-size:0.72rem'>{_label}</span></div>"
+                )
+                st.markdown(_header + _games_html(list(reversed(_rows[-5:]))), unsafe_allow_html=True)
