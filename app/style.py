@@ -88,12 +88,26 @@ CHART_GREEN = "#2E7D32"
 
 
 
+def _tidy_svg(markup: str) -> str:
+    """Strip blank lines out of generated SVG before it goes to st.markdown.
+
+    These marks are rendered through markdown, and in CommonMark a
+    whitespace-only line ENDS an HTML block — every indented line after it is
+    then treated as an indented code block. The size-gated sections below
+    ({yard_lines}, {labels}, {zone_detail}) sit alone on their own lines, so
+    at header size, where they are empty, they collapsed to whitespace-only
+    lines and dumped the rest of the raw SVG onto the page as code. Removing
+    empty lines keeps the whole mark inside one HTML block at every size.
+    """
+    return "\n".join(line for line in markup.splitlines() if line.strip())
+
+
 def diamond_logo(size=64):
     """A small faceted-gemstone SVG (a literal diamond, not a baseball
     diamond) — brilliant-cut top view: a hexagonal crown facet, four
     pavilion facets shaded from light to dark for a 3D-ish look, dark
     outlines for the facet edges, and a white highlight streak for shine."""
-    return f"""
+    return _tidy_svg(f"""
     <svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
         <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
         <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
@@ -113,7 +127,7 @@ def diamond_logo(size=64):
         <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
             stroke="#FFFFFF" stroke-width="2.5" stroke-linejoin="round" />
     </svg>
-    """
+    """)
 
 
 # --- Per-sport marks ---------------------------------------------------------
@@ -178,7 +192,7 @@ def ballpark_logo(size=64):
         """
         if detailed else ""
     )
-    return f"""
+    return _tidy_svg(f"""
     <svg width="{size}" height="{size}" viewBox="{_PARK_VIEWBOX}" xmlns="http://www.w3.org/2000/svg">
         <defs><clipPath id="{clip_id}"><path d="{_PARK_CLIP_PATH}" /></clipPath></defs>
         <g clip-path="url(#{clip_id})">
@@ -202,7 +216,7 @@ def ballpark_logo(size=64):
                 stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
         </g>
     </svg>
-    """
+    """)
 
 
 # --- NFL gridiron ------------------------------------------------------------
@@ -308,7 +322,7 @@ def nfl_logo(size=64):
         """
         if detailed else ""
     )
-    return f"""
+    return _tidy_svg(f"""
     <svg width="{size * _NFL_ASPECT:g}" height="{size}" viewBox="{_NFL_VIEWBOX}"
         xmlns="http://www.w3.org/2000/svg">
         <rect x="4" y="30" width="92" height="44" fill="{_NFL_TURF_DARK}" />
@@ -334,7 +348,7 @@ def nfl_logo(size=64):
                 stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
         </g>
     </svg>
-    """
+    """)
 
 
 # --- NHL rink ----------------------------------------------------------------
@@ -410,7 +424,7 @@ def nhl_logo(size=64):
         """
         if detailed else ""
     )
-    return f"""
+    return _tidy_svg(f"""
     <svg width="{size * _NHL_ASPECT:g}" height="{size}" viewBox="{_NHL_VIEWBOX}"
         xmlns="http://www.w3.org/2000/svg">
         <defs><clipPath id="{clip_id}"><rect {_NHL_RINK} /></clipPath></defs>
@@ -436,7 +450,7 @@ def nhl_logo(size=64):
                 stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
         </g>
     </svg>
-    """
+    """)
 
 
 # Which mark each sport's header wears. Every league has its own now; the
