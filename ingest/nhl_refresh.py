@@ -19,6 +19,7 @@ import sqlite3
 import sys
 import time
 from datetime import date
+from _dates import pacific_today
 from pathlib import Path
 
 import pandas as pd
@@ -300,7 +301,7 @@ def record_refresh() -> None:
         )
         conn.execute(
             "INSERT OR REPLACE INTO refresh_log VALUES (?, ?)",
-            (datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
+            (pacific_today().isoformat(),
              datetime.now(timezone.utc).isoformat(timespec="seconds")),
         )
         conn.commit()
@@ -309,7 +310,7 @@ def record_refresh() -> None:
 def latest_season_start_year() -> int:
     """NHL seasons start in October; before October the latest complete
     season is the one that started last year."""
-    today = date.today()
+    today = pacific_today()
     return today.year if today.month >= 10 else today.year - 1
 
 

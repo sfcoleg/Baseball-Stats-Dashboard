@@ -17,6 +17,7 @@ import sqlite3
 import sys
 import time
 from datetime import date, timedelta
+from _dates import pacific_today
 from pathlib import Path
 
 import pandas as pd
@@ -141,7 +142,7 @@ def store_season(df: pd.DataFrame, start_year: int) -> None:
 
 
 def latest_season_start_year() -> int:
-    today = date.today()
+    today = pacific_today()
     return today.year if today.month >= 10 else today.year - 1
 
 
@@ -153,8 +154,8 @@ def update_latest() -> None:
 
 def recent_game_ids(days: int) -> list[int]:
     """Regular-season game ids finished in the last `days` days."""
-    ids, cursor = [], (date.today() - timedelta(days=days)).isoformat()
-    stop = (date.today() + timedelta(days=1)).isoformat()
+    ids, cursor = [], (pacific_today() - timedelta(days=days)).isoformat()
+    stop = (pacific_today() + timedelta(days=1)).isoformat()
     seen = set()
     while cursor < stop:
         payload = _with_retries(

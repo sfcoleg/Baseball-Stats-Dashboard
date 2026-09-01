@@ -43,6 +43,7 @@ import sqlite3
 import sys
 import time
 from datetime import date, timedelta
+from _dates import pacific_today
 from pathlib import Path
 
 import pandas as pd
@@ -261,7 +262,7 @@ def update_day(day: str):
 def backfill_season(season: int):
     """Month-chunked full-season backfill (memory-bounded: one month of
     league-wide Savant pitches at a time, subset immediately)."""
-    today = date.today()
+    today = pacific_today()
     with sqlite3.connect(DB_PATH) as conn:
         _ensure_table(conn)
         conn.execute("DELETE FROM ump_games WHERE season = ?", (season,))

@@ -55,6 +55,7 @@ import sqlite3
 import sys
 import time
 from datetime import date
+from _dates import pacific_today
 from pathlib import Path
 
 import numpy as np
@@ -267,7 +268,7 @@ def log5_replay(rows: list[dict]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
 
 
 def main():
-    today = date.today()
+    today = pacific_today()
     current_season = today.year
 
     print("Loading prior-season pitcher ERAs from stats.db...")

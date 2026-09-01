@@ -27,6 +27,7 @@ import json
 import sys
 import time
 from datetime import date, timedelta
+from _dates import pacific_today
 from pathlib import Path
 
 import numpy as np
@@ -81,7 +82,7 @@ def download_season(season: int) -> None:
 
     CACHE_DIR.mkdir(exist_ok=True)
     start_s, end_s = SEASON_RANGES[season]
-    end_s = end_s or (date.today() - timedelta(days=1)).isoformat()
+    end_s = end_s or (pacific_today() - timedelta(days=1)).isoformat()
     start, end = date.fromisoformat(start_s), date.fromisoformat(end_s)
 
     chunk_start = start

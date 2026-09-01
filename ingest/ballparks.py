@@ -20,7 +20,7 @@ import sys
 import time
 from datetime import date, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from _dates import pacific_today
 
 import pandas as pd
 
@@ -88,9 +88,8 @@ def download_season(season: int) -> None:
 
     CACHE_DIR.mkdir(exist_ok=True)
     start_s, end_s = SEASON_RANGES[season]
-    # Pacific, not UTC date.today() — see refresh_data.py's _pacific_today().
-    from datetime import datetime as _dt
-    end_s = end_s or (_dt.now(ZoneInfo("America/Los_Angeles")).date() - timedelta(days=1)).isoformat()
+    # Pacific, not UTC date.today() — see _dates.pacific_today().
+    end_s = end_s or (pacific_today() - timedelta(days=1)).isoformat()
     start, end = date.fromisoformat(start_s), date.fromisoformat(end_s)
 
     chunk_start = start

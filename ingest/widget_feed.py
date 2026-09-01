@@ -14,7 +14,7 @@ Also called at the end of refresh_data.py's nightly run.
 import json
 import sqlite3
 from datetime import date, datetime, timezone
-from zoneinfo import ZoneInfo
+from _dates import pacific_today
 from pathlib import Path
 
 import requests
@@ -148,7 +148,7 @@ def build() -> dict:
         # runner, which rolls to the next calendar day while it's still
         # afternoon/evening in Pacific time (see refresh_data.py's
         # _pacific_today()).
-        "date": datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
+        "date": pacific_today().isoformat(),
         "mlb": mlb_section(),
         "nhl": nhl_section(),
     }

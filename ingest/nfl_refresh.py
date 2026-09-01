@@ -17,6 +17,7 @@ import sys
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
+from _dates import pacific_today
 
 # Same fix, same reason, as refresh_data.py: --check is invoked by the
 # workflow BEFORE "Install dependencies" runs, on purpose, so a day that
@@ -49,7 +50,7 @@ def current_season() -> int:
     schedule for the coming season is published in May — using March as the
     boundary means the new season becomes "current" as soon as it exists as a
     thing to have data about, rather than only once games are played."""
-    today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+    today = pacific_today()
     return today.year if today.month >= 3 else today.year - 1
 
 
@@ -376,7 +377,7 @@ def record_refresh(conn) -> None:
     conn.execute("CREATE TABLE IF NOT EXISTS refresh_log (date TEXT PRIMARY KEY, finished_at TEXT)")
     conn.execute(
         "INSERT OR REPLACE INTO refresh_log VALUES (?, ?)",
-        (datetime.now(ZoneInfo("America/Los_Angeles")).date().isoformat(),
+        (pacific_today().isoformat(),
          datetime.now(timezone.utc).isoformat(timespec="seconds")),
     )
 
@@ -394,7 +395,7 @@ def data_is_current() -> bool:
         with sqlite3.connect(DB_PATH) as conn:
             missing = conn.execute(
                 "SELECT COUNT(*) FROM games WHERE gameday < ? AND home_score IS NULL",
-                (date.today().isoformat(),),
+                (pacific_today().isoformat(),),
             ).fetchone()[0]
     except sqlite3.Error:
         return False

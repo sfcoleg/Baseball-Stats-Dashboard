@@ -20,6 +20,8 @@ import sqlite3
 import sys
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
+
+from _dates import pacific_today as _pacific_today
 from pathlib import Path
 
 # THIS IS LOAD-BEARING, NOT A NICETY. `--check` (data_is_current /
@@ -75,19 +77,6 @@ except ImportError:
 DB_PATH = Path(__file__).resolve().parent.parent / "data" / "stats.db"
 
 
-def _pacific_today() -> date:
-    """Mirrors app/db.py's today_pacific() on the ingest side. GitHub Actions
-    (and Streamlit Community Cloud) run in UTC, which is far enough ahead of
-    Pacific that a plain date.today() rolls over to the next calendar day
-    while it's still afternoon/evening in Pacific time — a run that happens
-    to land after ~5pm Pacific (0:00 UTC) would then compute "yesterday" as
-    a day whose Pacific games haven't finished yet, fetching an empty/partial
-    day instead of the actually-complete previous day. Confirmed as the
-    cause of hr_log (Play of the Day) and the recent-batting/pitching
-    "headliner" windows falling behind on 2026-08-30/31 after a same-evening
-    manual run — every "what day is it for fetching purposes" call in this
-    script needs this instead of date.today()."""
-    return datetime.now(ZoneInfo("America/Los_Angeles")).date()
 
 
 CURRENT_SEASON = _pacific_today().year

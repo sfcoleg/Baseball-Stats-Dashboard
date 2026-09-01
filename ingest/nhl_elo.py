@@ -33,6 +33,7 @@ import json
 import sqlite3
 import sys
 from datetime import date
+from _dates import pacific_today
 from pathlib import Path
 
 import requests
@@ -230,7 +231,7 @@ def _store_history(history: list[dict]) -> None:
 
 
 def latest_season_start_year() -> int:
-    today = date.today()
+    today = pacific_today()
     return today.year if today.month >= 10 else today.year - 1
 
 
