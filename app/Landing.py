@@ -95,7 +95,23 @@ _HR_LOG_PITCH_COLS = ("pitch_type", "release_speed", "plate_x", "plate_z", "sz_t
 # the headline text. Set back to None to hand the slot back to the automatic
 # pick — which is worth doing once the moment has passed, since nothing
 # expires this on its own.
-FEATURED_PLAY = None
+FEATURED_PLAY = {
+    # Colton Cowser robs Jake McCarthy's walk-off two-run homer for the final
+    # out of BAL@COL, 2026-08-31 — Orioles win 2-1. Hand-picked because the
+    # automatic pick can never surface this: hr_log only holds home runs, and
+    # this play is the opposite of one (the ball was caught, so the box score
+    # records a flyout). The clip is looked up live by headline each render,
+    # so it needs no ingest and disappears gracefully if MLB ever pulls it.
+    "game_pk": 824314,
+    "match": "ROBS a walk-off homer",
+    "title": "Colton Cowser",
+    "abbr": "BAL",
+    "mlbID": 681297,
+    "note": "Robs a walk-off two-run homer in center field for the last out, "
+            "sealing a 2-1 Orioles win over the Rockies.",
+    "stats": "Game-ending catch \u00b7 9th inning",
+    "date": "2026-08-31",
+}
 
 
 def _featured_play():
