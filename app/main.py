@@ -862,7 +862,7 @@ else:
 # competes with the brand or the search box for the same strip of pixels.
 st.markdown(
     f"<div class='dm-banner'><a class='dm-brand' href='/' target='_self'>"
-    f"{style.diamond_logo(24)}<span class='diamond-title'>Diamond Metrics</span></a></div>",
+    f"{style.sport_logo(active_sport, 24)}<span class='diamond-title'>Diamond Metrics</span></a></div>",
     unsafe_allow_html=True,
 )
 

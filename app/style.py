@@ -116,6 +116,109 @@ def diamond_logo(size=64):
     """
 
 
+# --- Per-sport marks ---------------------------------------------------------
+# The ballpark below is drawn in the SAME 0-100 space diamond_logo() uses, so
+# the gem can be dropped in unchanged (scaled 0.42, bottom point landing on
+# home plate) rather than redrawn. Its two lower facet edges, continued
+# outward, ARE the foul lines — the park is built from the logo's own
+# geometry instead of a second, unrelated diamond.
+#
+# The wall is a shallow arc between the poles, not a half-circle: at the
+# half-circle radius (24.7, the poles' half-chord) it domes over the top and
+# reads as a stadium roof rather than a wall. 29.35 puts centre field ~8%
+# deeper than the corners, which is roughly a real park's proportion.
+_PARK_WALL_R = 29.35
+_PARK_CLIP_PATH = f"M 50 84 L 25.3 45.2 A {_PARK_WALL_R} {_PARK_WALL_R} 0 0 1 74.7 45.2 Z"
+_PARK_WALL_PATH = f"M 25.3 45.2 A {_PARK_WALL_R} {_PARK_WALL_R} 0 0 1 74.7 45.2"
+# The mark's own bounding box, not the gem's 0-100 — a viewBox of the full
+# square would render the park small and off-centre inside it.
+_PARK_VIEWBOX = "21 29 58 58"
+_GRASS_DARK, _GRASS_LIGHT, _PARK_WALL_COLOR = "#26643F", "#318053", "#8FD4AC"
+
+# clipPath ids are document-global: two marks on one page sharing an id would
+# both clip to whichever rendered last. A counter (not the size) keeps them
+# distinct even when the same size is drawn twice.
+_park_clip_seq = [0]
+
+
+def _next_park_clip_id() -> str:
+    _park_clip_seq[0] += 1
+    return f"dm-park-{_park_clip_seq[0]}"
+
+
+def ballpark_logo(size=64):
+    """The MLB mark: diamond_logo()'s gem sitting in a ballpark.
+
+    The gem is reused verbatim as the INFIELD — same facets, same shading,
+    same highlight streak — so this reads as the existing logo in a setting
+    rather than a different logo. Grass carries a fan mow cut from home
+    plate, the pattern most real parks use, and it echoes the foul lines.
+
+    Below ~40px the gem's facet outlines and highlight are dropped and its
+    white keyline thickened: at header and favicon sizes those hairlines
+    land sub-pixel and only muddy the mark."""
+    detailed = size >= 40
+    wall_w = max(1.8, 84 / size)
+    foul_w = max(1.5, 76 / size)
+    key_w = max(2.5, 140 / size)
+    clip_id = _next_park_clip_id()
+    facet_detail = (
+        """
+            <g stroke="#1E3A66" stroke-width="1.5" stroke-linejoin="round">
+                <line x1="30" y1="20" x2="15" y2="35" />
+                <line x1="70" y1="20" x2="85" y2="35" />
+                <line x1="15" y1="35" x2="85" y2="35" />
+                <line x1="30" y1="20" x2="50" y2="90" />
+                <line x1="70" y1="20" x2="50" y2="90" />
+                <line x1="15" y1="35" x2="50" y2="90" />
+                <line x1="85" y1="35" x2="50" y2="90" />
+                <polygon points="30,20 70,20 85,35 15,35" fill="none" />
+            </g>
+            <polygon points="35,23 45,23 39,31" fill="#FFFFFF" opacity="0.65" />
+        """
+        if detailed else ""
+    )
+    return f"""
+    <svg width="{size}" height="{size}" viewBox="{_PARK_VIEWBOX}" xmlns="http://www.w3.org/2000/svg">
+        <defs><clipPath id="{clip_id}"><path d="{_PARK_CLIP_PATH}" /></clipPath></defs>
+        <g clip-path="url(#{clip_id})">
+            <rect x="0" y="-20" width="100" height="120" fill="{_GRASS_DARK}" />
+            <polygon points="50,84 14.5,1.3 28.3,-3.4" fill="{_GRASS_LIGHT}" />
+            <polygon points="50,84 42.7,-5.7 57.3,-5.7" fill="{_GRASS_LIGHT}" />
+            <polygon points="50,84 71.7,-3.4 85.5,1.3" fill="{_GRASS_LIGHT}" />
+        </g>
+        <path d="{_PARK_WALL_PATH}" fill="none" stroke="{_PARK_WALL_COLOR}"
+            stroke-width="{wall_w:.2f}" stroke-linecap="round" />
+        <line x1="50" y1="84" x2="25.3" y2="45.2" stroke="#EFF3F9"
+            stroke-width="{foul_w:.2f}" stroke-linecap="round" />
+        <line x1="50" y1="84" x2="74.7" y2="45.2" stroke="#EFF3F9"
+            stroke-width="{foul_w:.2f}" stroke-linecap="round" />
+        <g transform="translate(29 46.2) scale(0.42)">
+            <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
+            <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
+            <polygon points="85,35 50,90 70,20" fill="#7DB8F5" />
+            <polygon points="15,35 85,35 50,90" fill="{ACCENT}" />{facet_detail}
+            <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
+                stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
+        </g>
+    </svg>
+    """
+
+
+# Which mark each sport's header wears. MLB has its own; NHL and NFL fall
+# back to the plain gem until they get equivalents of their own (a rink and
+# a gridiron, built the same way — the gem as the centre element, that
+# sport's field drawn around it), so adding one is a single entry here and
+# no change at any call site.
+SPORT_LOGOS = {"mlb": ballpark_logo}
+
+
+def sport_logo(sport: str, size=64):
+    """The header mark for `sport` ("mlb"/"nhl"/"nfl"/"home"), falling back
+    to the plain gem for any sport without one of its own."""
+    return SPORT_LOGOS.get(sport, diamond_logo)(size)
+
+
 # All section headers share one accent color now (see colored_header) rather
 # than a different hue per category — kept as a dict (not a bare constant)
 # so existing colored_header(..., category) call sites don't need to change.
