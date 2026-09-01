@@ -337,11 +337,112 @@ def nfl_logo(size=64):
     """
 
 
-# Which mark each sport's header wears. NHL still falls back to the plain
-# gem until it gets an equivalent of its own (a rink, built the same way —
-# the gem as the centre element, that sport's surface drawn around it), so
-# adding one is a single entry here and no change at any call site.
-SPORT_LOGOS = {"mlb": ballpark_logo, "nfl": nfl_logo}
+# --- NHL rink ----------------------------------------------------------------
+# Wide like the gridiron (2:1), and drawn in the same 0-100 space. The gem
+# sits at CENTRE ICE, inside the centre circle, where a real rink carries
+# its logo — noticeably smaller than in the other two marks (0.22 against
+# the ballpark's 0.42), because the circle has to read as a ring around it
+# rather than being crowded by it.
+#
+# Ice is a pale blue-grey rather than white: on the light theme a white
+# sheet dissolves into the page, and the mark has to hold its shape on both
+# themes. The rounded corners and the two blue lines are what make this
+# distinguishable from the gridiron at header size, where the faceoff
+# circles and creases have dropped out entirely.
+_NHL_VIEWBOX = "2 28 96 48"
+_NHL_ASPECT = 2.0
+_NHL_ICE, _NHL_ICE_END, _NHL_BOARDS = "#DCE9F5", "#C4DCF0", "#8FA8C4"
+_NHL_RED, _NHL_BLUE = "#C0392B", "#2E5FA8"
+_NHL_RINK = 'x="4" y="30" width="92" height="44" rx="15"'
+_nhl_clip_seq = [0]
+
+
+def _next_nhl_clip_id() -> str:
+    _nhl_clip_seq[0] += 1
+    return f"dm-rink-{_nhl_clip_seq[0]}"
+
+
+def nhl_logo(size=64):
+    """The NHL mark: diamond_logo()'s gem at centre ice.
+
+    Returns a 2:1 SVG — `size` is the height, the width is twice that.
+
+    Staged by size like the gridiron: goal lines, faceoff circles, creases
+    and the centre circle only appear from ~40px. Below that the mark is
+    boards, blue lines, the red centre line and the gem, which is all that
+    survives at 24px anyway."""
+    detailed = size >= 40
+    red_w = max(1.1, 26 / size)
+    blue_w = max(2.2, 52 / size)
+    centre_w = max(1.6, 38 / size)
+    board_w = max(1.2, 42 / size)
+    key_w = max(2.5, 120 / size)
+    clip_id = _next_nhl_clip_id()
+
+    # The crease belongs ON the goal line, bulging toward centre ice; drawn
+    # outside it (against the boards) it reads as a stray bump, not a crease.
+    zone_detail = (
+        f'<g stroke="{_NHL_RED}" stroke-width="{red_w:.2f}">'
+        f'<line x1="14" y1="30" x2="14" y2="74" /><line x1="86" y1="30" x2="86" y2="74" /></g>'
+        f'<g fill="none" stroke="{_NHL_RED}" stroke-width="0.9">'
+        f'<circle cx="22" cy="41" r="5" /><circle cx="22" cy="63" r="5" />'
+        f'<circle cx="78" cy="41" r="5" /><circle cx="78" cy="63" r="5" />'
+        f'<path d="M 14 47 A 5 5 0 0 1 14 57" /><path d="M 86 47 A 5 5 0 0 0 86 57" /></g>'
+        f'<g fill="{_NHL_RED}">'
+        f'<circle cx="22" cy="41" r="1" /><circle cx="22" cy="63" r="1" />'
+        f'<circle cx="78" cy="41" r="1" /><circle cx="78" cy="63" r="1" /></g>'
+        f'<circle cx="50" cy="52" r="12.5" fill="none" stroke="{_NHL_BLUE}" stroke-width="0.9" />'
+        if detailed else ""
+    )
+    facet_detail = (
+        """
+            <g stroke="#1E3A66" stroke-width="1.5" stroke-linejoin="round">
+                <line x1="30" y1="20" x2="15" y2="35" />
+                <line x1="70" y1="20" x2="85" y2="35" />
+                <line x1="15" y1="35" x2="85" y2="35" />
+                <line x1="30" y1="20" x2="50" y2="90" />
+                <line x1="70" y1="20" x2="50" y2="90" />
+                <line x1="15" y1="35" x2="50" y2="90" />
+                <line x1="85" y1="35" x2="50" y2="90" />
+                <polygon points="30,20 70,20 85,35 15,35" fill="none" />
+            </g>
+            <polygon points="35,23 45,23 39,31" fill="#FFFFFF" opacity="0.65" />
+        """
+        if detailed else ""
+    )
+    return f"""
+    <svg width="{size * _NHL_ASPECT:g}" height="{size}" viewBox="{_NHL_VIEWBOX}"
+        xmlns="http://www.w3.org/2000/svg">
+        <defs><clipPath id="{clip_id}"><rect {_NHL_RINK} /></clipPath></defs>
+        <rect {_NHL_RINK} fill="{_NHL_ICE}" />
+        <g clip-path="url(#{clip_id})">
+            <rect x="4" y="30" width="10" height="44" fill="{_NHL_ICE_END}" />
+            <rect x="86" y="30" width="10" height="44" fill="{_NHL_ICE_END}" />
+            {zone_detail}
+            <g stroke="{_NHL_BLUE}" stroke-width="{blue_w:.2f}">
+                <line x1="35" y1="30" x2="35" y2="74" />
+                <line x1="65" y1="30" x2="65" y2="74" />
+            </g>
+            <line x1="50" y1="30" x2="50" y2="74" stroke="{_NHL_RED}"
+                stroke-width="{centre_w:.2f}" />
+        </g>
+        <rect {_NHL_RINK} fill="none" stroke="{_NHL_BOARDS}" stroke-width="{board_w:.2f}" />
+        <g transform="translate(39 39.9) scale(0.22)">
+            <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
+            <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
+            <polygon points="85,35 50,90 70,20" fill="#7DB8F5" />
+            <polygon points="15,35 85,35 50,90" fill="{ACCENT}" />{facet_detail}
+            <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
+                stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
+        </g>
+    </svg>
+    """
+
+
+# Which mark each sport's header wears. Every league has its own now; the
+# plain gem remains the fallback, which is what the cross-sport landing page
+# ("home") wears since it belongs to no single league.
+SPORT_LOGOS = {"mlb": ballpark_logo, "nfl": nfl_logo, "nhl": nhl_logo}
 
 
 def sport_logo(sport: str, size=64):
