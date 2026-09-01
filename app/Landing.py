@@ -86,6 +86,51 @@ def _pitch_type_name(code):
 
 _HR_LOG_PITCH_COLS = ("pitch_type", "release_speed", "plate_x", "plate_z", "sz_top", "sz_bot")
 
+# Hand-pick a play to feature instead of the automatic one. hr_log holds only
+# HOME RUNS, so anything else — a robbery at the wall, a diving stop, a
+# walk-off slide — can never be chosen automatically no matter how the query
+# is ranked; this is the only way such a play reaches the card. Set it to
+# {"game_pk": ..., "match": "<part of the clip's headline>"} and optionally
+# "mlbID" for the headshot, "abbr" for the colour, "title"/"note" to override
+# the headline text. Set back to None to hand the slot back to the automatic
+# pick — which is worth doing once the moment has passed, since nothing
+# expires this on its own.
+FEATURED_PLAY = None
+
+
+def _featured_play():
+    """The hand-picked play in FEATURED_PLAY, if one is set and its clip is
+    still reachable. Returns None on any miss so the caller falls straight
+    back to the automatic pick rather than showing an empty card."""
+    cfg = FEATURED_PLAY
+    if not cfg or not cfg.get("game_pk") or not cfg.get("match"):
+        return None
+    try:
+        needle = cfg["match"].lower()
+        for item in db.highlight_items_by_game_pk(int(cfg["game_pk"])):
+            text = " ".join(filter(None, [item.get("headline"), item.get("description"),
+                                          item.get("blurb")]))
+            if needle not in text.lower():
+                continue
+            clip = db._clip_mp4_url(item)
+            if not clip:
+                continue
+            abbr = cfg.get("abbr", "")
+            return {
+                "clip": clip,
+                "name": cfg.get("title") or item.get("headline") or "Play of the Day",
+                "abbr": abbr,
+                "color": teams.color_for_abbr(abbr) if abbr else "#2E86DE",
+                "des": cfg.get("note") or item.get("description") or "",
+                "stats": cfg.get("stats", ""),
+                "mlbID": cfg.get("mlbID"),
+                "pitch": None,
+                "date": cfg.get("date") or str(item.get("date") or TODAY.isoformat())[:10],
+            }
+    except Exception:
+        return None
+    return None
+
 
 def _play_of_the_day():
     try:
@@ -101,9 +146,17 @@ def _play_of_the_day():
             select_cols = "game_date, game_pk, batter, des, hit_distance_sc, launch_speed" + (
                 ", " + ", ".join(pitch_cols) if pitch_cols else ""
             )
+            # Ranked by distance, NOT by rowid. The old ordering took the
+            # last row INSERTED for the latest date, which is whatever order
+            # Statcast happened to return — a stable order, so the same few
+            # parks won every day (8 of 14 straight days were the same home
+            # team) and the clip was rarely the day's best swing: 4 of the
+            # last 5 days it showed a 398-406 ft homer while a 440-464 ft
+            # one sat in the same table.
             row = conn.execute(
-                f"SELECT {select_cols} FROM hr_log WHERE des IS NOT NULL "
-                "ORDER BY game_date DESC, rowid DESC LIMIT 1"
+                f"SELECT {select_cols} FROM hr_log "
+                "WHERE des IS NOT NULL AND hit_distance_sc IS NOT NULL "
+                "ORDER BY game_date DESC, hit_distance_sc DESC, launch_speed DESC LIMIT 1"
             ).fetchone()
     except Exception:
         return None
@@ -146,7 +199,7 @@ def _play_of_the_day():
             "date": str(game_date)[:10]}
 
 
-_potd = _play_of_the_day()
+_potd = _featured_play() or _play_of_the_day()
 if _potd:
     play_date = date.fromisoformat(_potd["date"])
     style.colored_header(f"Play of {db.daily_label(play_date, TODAY)}", "headliners")
@@ -161,19 +214,32 @@ if _potd:
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         with info_col:
             c = _potd["color"]
-            st.markdown(
-                f"<div style='display:flex;align-items:center;gap:14px;padding:10px 4px;"
-                f"border-left:4px solid {c};padding-left:14px'>"
+            # Headshot and team chip are both optional: a hand-picked play
+            # (see FEATURED_PLAY) has no batter and no team behind it, and a
+            # blank headshot frame or an empty colour pill reads as broken.
+            headshot = (
                 f"<img src='{style.headshot_url(_potd['mlbID'], width=180)}' "
                 f"style='width:72px;height:72px;border-radius:50%;object-fit:cover;"
                 f"object-position:center 20%;border:2.5px solid {c}' />"
-                f"<div><div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:800;"
-                f"font-size:1.35rem;color:var(--dm-text)'>{_potd['name']} "
+                if _potd.get("mlbID") else ""
+            )
+            chip = (
                 f"<span style='background-color:{c}66;color:var(--dm-text);padding:2px 9px;"
-                f"border-radius:8px;font-size:0.6em;vertical-align:middle;font-weight:600'>{_potd['abbr']}</span></div>"
-                + (f"<div style='color:{style.team_text_color(c)};font-family:\"Archivo Narrow\",sans-serif;"
-                   f"font-weight:700;font-size:1.05rem;margin-top:2px'>{_potd['stats']}</div>" if _potd["stats"] else "")
-                + f"</div></div>"
+                f"border-radius:8px;font-size:0.6em;vertical-align:middle;font-weight:600'>"
+                f"{_potd['abbr']}</span>"
+                if _potd.get("abbr") else ""
+            )
+            stat_line = (
+                f"<div style='color:{style.team_text_color(c)};font-family:\"Archivo Narrow\",sans-serif;"
+                f"font-weight:700;font-size:1.05rem;margin-top:2px'>{_potd['stats']}</div>"
+                if _potd.get("stats") else ""
+            )
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:14px;padding:10px 4px;"
+                f"border-left:4px solid {c};padding-left:14px'>{headshot}"
+                f"<div><div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:800;"
+                f"font-size:1.35rem;color:var(--dm-text)'>{_potd['name']} {chip}</div>"
+                f"{stat_line}</div></div>"
                 f"<p style='color:var(--dm-dim);font-size:0.86rem;margin:8px 0 0 18px'>{_potd['des']}</p>",
                 unsafe_allow_html=True,
             )
