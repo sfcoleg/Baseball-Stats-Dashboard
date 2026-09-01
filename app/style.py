@@ -1592,6 +1592,45 @@ def win_probability_chart(wp_df, away_abbr: str, home_abbr: str, away_color: str
     return fig
 
 
+def win_probability_sparkline(wp_df, away_color: str, home_color: str,
+                               width: int = 72, height: int = 22) -> str:
+    """A tiny inline win-probability line for a LIVE game card — same
+    home_win_pct series as win_probability_chart(), but a hand-built SVG
+    string rather than a plotly figure: these render inside a hand-written
+    HTML card (see Landing.py's _games_html()), which builds ALL of a
+    column's game cards as one combined markdown string for a single
+    bubble around the column — a real plotly figure can't go inside that
+    string, and paying for a plotly-to-image (kaleido) export per live game
+    on every page load is real latency for something this small. A plain
+    <svg> polyline costs nothing to build and nothing to render.
+
+    Colored toward whichever team is CURRENTLY favored (the line's last
+    point), not fixed to the home team — a card glancing at "who's ahead
+    right now" reads oddly in the away team's color when the away team is
+    the one actually winning."""
+    if wp_df is None or wp_df.empty or "home_win_pct" not in wp_df.columns:
+        return ""
+    pct = pd.to_numeric(wp_df["home_win_pct"], errors="coerce").dropna()
+    if len(pct) < 2:
+        return ""
+    n = len(pct)
+    color = home_color if pct.iloc[-1] >= 50 else away_color
+    points = " ".join(
+        f"{(i / (n - 1)) * width:.1f},{height - (v / 100) * height:.1f}"
+        for i, v in enumerate(pct)
+    )
+    mid_y = height / 2
+    return (
+        f"<svg width='{width}' height='{height}' viewBox='0 0 {width} {height}' "
+        f"style='display:block' preserveAspectRatio='none'>"
+        f"<line x1='0' y1='{mid_y}' x2='{width}' y2='{mid_y}' "
+        f"stroke='{_hex_to_rgba(CHART_DIM, 0.35)}' stroke-width='1' stroke-dasharray='2,2' />"
+        f"<polyline points='{points}' fill='none' stroke='{color}' "
+        f"stroke-width='1.6' stroke-linejoin='round' stroke-linecap='round' />"
+        f"</svg>"
+    )
+
+
 def field_wall_lines(stadium_outline: dict | None) -> list:
     """Wall/foul-line segments as plain [(x_list, y_list), ...] pairs, feet
     from home plate — shared ground-shape data for both the 2D spray chart

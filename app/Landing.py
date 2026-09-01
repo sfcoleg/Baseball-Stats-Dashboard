@@ -218,6 +218,7 @@ def _mlb_games():
             "away_score": away_score, "home_score": home_score,
             "detail": detail, "live": live_now,
             "color": teams.color_for_abbr(teams.normalize_mlb_abbr(g["home_abbr"])),
+            "game_pk": int(g["game_pk"]) if live_now else None,
         })
     return rows, None
 
@@ -312,6 +313,20 @@ def _games_html(rows):
         live_chip = ("<span style='background:var(--dm-red);color:#fff;font-size:0.56rem;"
                      "font-weight:800;letter-spacing:1px;padding:1px 6px;border-radius:999px'>LIVE</span> "
                      if r.get("live") else "")
+        # A live game's win-probability sparkline (MLB only — the only sport
+        # with this data). Fails silently: a card missing its sparkline is
+        # a much smaller problem than a network hiccup taking out the whole
+        # games column.
+        spark_html = ""
+        if r.get("live") and r.get("game_pk"):
+            try:
+                wp = db.load_win_probability(r["game_pk"])
+                away_color = teams.color_for_abbr(teams.normalize_mlb_abbr(r["away"]))
+                svg = style.win_probability_sparkline(wp, away_color, r["color"])
+                if svg:
+                    spark_html = f"<div style='margin-top:6px;opacity:0.9'>{svg}</div>"
+            except Exception:
+                pass
         html.append(
             f"<div style='background:var(--dm-card);border-left:4px solid {r['color']};"
             f"border-radius:0 9px 9px 0;padding:8px 12px;margin-bottom:8px'>"
@@ -321,7 +336,7 @@ def _games_html(rows):
             f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px'>"
             f"{side(r['away'], r['away_logo'], a_s, a_win)}"
             f"{side(r['home'], r['home_logo'], h_s, h_win)}"
-            "</div></div>"
+            f"</div>{spark_html}</div>"
         )
     return "".join(html)
 
@@ -497,6 +512,7 @@ def _team_recent_games(sport_label, team_abbr):
                 "away_score": away_score, "home_score": home_score,
                 "detail": detail, "live": live_now,
                 "color": teams.color_for_abbr(teams.normalize_mlb_abbr(g["home_abbr"])),
+                "game_pk": int(g["game_pk"]) if live_now else None,
             })
         return rows
 
