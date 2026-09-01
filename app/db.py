@@ -2407,6 +2407,54 @@ def load_injury_report() -> pd.DataFrame:
 # Short forms for the IL badge. The report itself says "10-Day IL", which
 # reads fine in a table cell but is too long to sit beside a player's name,
 # so the badge uses the shorthand the sport actually uses in conversation.
+# Mirrors ingest/refresh_data.py's CAREER_MILESTONES — kept here as a small,
+# stable, duplicated constant rather than importing from ingest/, matching
+# how other ingest-side thresholds (e.g. RECENT_MIN_PA) get their own
+# app-side copy instead of a cross-package import.
+CAREER_MILESTONES = {
+    "HR": [300, 400, 500, 600, 700, 800],
+    "H": [2000, 2500, 3000, 3500, 4000],
+    "RBI": [1000, 1500, 2000],
+    "SB": [300, 400, 500, 600],
+    "W": [150, 200, 250, 300],
+    "SO": [2000, 2500, 3000, 3500, 4000],
+    "SV": [200, 300, 400, 500],
+}
+_MILESTONE_WATCH_FRACTION = 0.05  # "close enough to watch" = within 5% of the milestone
+
+
+@st.cache_data(show_spinner=False, ttl=3600 * 6, max_entries=1000)
+def career_milestone_watch(mlbID: int) -> list[dict]:
+    """This player's nearest not-yet-reached career milestones (see
+    ingest/refresh_data.py's CAREER_MILESTONES / the nightly career_totals
+    table — true career counts, not just this app's cached 2010+ seasons).
+    Only the single next threshold per stat, and only when close enough to
+    actually be a "watch" (within 5% of the milestone) — a player with 40
+    career homers isn't meaningfully approaching 300. Empty list is the
+    common case for most players."""
+    try:
+        with sqlite3.connect(DB_PATH) as conn:
+            row = pd.read_sql("SELECT * FROM career_totals WHERE mlbID = ?", conn, params=(int(mlbID),))
+    except Exception:
+        return []
+    if row.empty:
+        return []
+    row = row.iloc[0]
+    watches = []
+    for stat, thresholds in CAREER_MILESTONES.items():
+        total = row.get(stat)
+        if total is None or pd.isna(total):
+            continue
+        total = int(total)
+        for threshold in thresholds:
+            if total < threshold:
+                remaining = threshold - total
+                if remaining <= threshold * _MILESTONE_WATCH_FRACTION:
+                    watches.append({"stat": stat, "total": total, "threshold": threshold, "remaining": remaining})
+                break  # only the next un-reached threshold for this stat
+    return watches
+
+
 _IL_BADGE_LABELS = {
     "7-Day IL": "IL-7",
     "10-Day IL": "IL-10",

@@ -263,6 +263,29 @@ with header_col:
         _has_detail = _detail and str(_detail).lower() != "nan"
         _caption += f" · {_injury['status']}" + (f" ({_detail})" if _has_detail else "")
     st.caption(_caption)
+    # Career milestone watch — this player's own page shows it whenever
+    # they're actually close, not just when they happen to be featured in
+    # the Home page's rotating banner (db.batting_milestone_watch there is
+    # a different, single-game thing entirely — cycles/4-HR bids, not
+    # career counts).
+    _STAT_LABELS = {
+        "HR": "home runs", "H": "hits", "RBI": "RBIs", "SB": "stolen bases",
+        "W": "wins", "SO": "strikeouts", "SV": "saves",
+    }
+    try:
+        _watches = db.career_milestone_watch(mlbID)
+    except Exception:
+        _watches = []
+    if _watches:
+        _watch_text = " · ".join(
+            f"{w['remaining']} {_STAT_LABELS.get(w['stat'], w['stat'])} from {w['threshold']:,}"
+            for w in _watches
+        )
+        st.markdown(
+            f"<div style='color:var(--dm-amber);font-weight:600;font-size:0.88rem;margin-top:2px'>"
+            f"Milestone watch: {_watch_text}</div>",
+            unsafe_allow_html=True,
+        )
 
     # Follow/unfollow, mirroring the Following page's own list (same
     # session_state keys, same localStorage payload) so the two stay in
