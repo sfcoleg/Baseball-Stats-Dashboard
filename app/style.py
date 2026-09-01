@@ -205,17 +205,149 @@ def ballpark_logo(size=64):
     """
 
 
-# Which mark each sport's header wears. MLB has its own; NHL and NFL fall
-# back to the plain gem until they get equivalents of their own (a rink and
-# a gridiron, built the same way — the gem as the centre element, that
-# sport's field drawn around it), so adding one is a single entry here and
-# no change at any call site.
-SPORT_LOGOS = {"mlb": ballpark_logo}
+# --- NFL gridiron ------------------------------------------------------------
+# Unlike the ballpark, this mark is WIDE: a real field is about 2:1, and
+# squeezing it into a square would either letterbox it or distort it, so
+# nfl_logo() returns width = 2 x size (size is the HEIGHT, matching how
+# every caller uses it). Same construction as the ballpark otherwise — the
+# gem dropped in unchanged, here at midfield, the way a real field wears
+# its logo on the 50.
+_NFL_VIEWBOX = "2 28 96 48"
+_NFL_ASPECT = 2.0
+_NFL_TURF_DARK, _NFL_TURF_LIGHT, _NFL_ENDZONE = "#26643F", "#318053", "#1B5FA8"
+_NFL_LINE, _NFL_NUM_RIM = "#EFF3F9", "#1B4D33"
+_NFL_FONT = "'Archivo Narrow','Arial Narrow',sans-serif"
+_NFL_YARD_X = (22.8, 29.6, 36.4, 43.2, 50, 56.8, 63.6, 70.4, 77.2)
+_NFL_LABELS = (("1", "0"), ("2", "0"), ("3", "0"), ("4", "0"), ("5", "0"),
+               ("4", "0"), ("3", "0"), ("2", "0"), ("1", "0"))
+# Digits straddle their own line, as a real field paints them. 1.8 clears the
+# line on the inside and still leaves air between neighbouring numbers, which
+# sit only 6.8 apart — above about font 5.5 the two constraints stop both
+# fitting at once.
+_NFL_NUM_GAP, _NFL_NUM_SIZE = 1.8, 5
+_NFL_NUM_BOTTOM, _NFL_NUM_TOP, _NFL_NUM_TOP_PIVOT = 71.6, 36.8, 34.82
+
+
+def nfl_logo(size=64):
+    """The NFL mark: diamond_logo()'s gem at midfield on a gridiron.
+
+    Returns a 2:1 SVG — `size` is the height, the width is twice that.
+
+    Detail is staged by size because this mark carries far more of it than
+    the ballpark: interior yard lines appear from ~40px, and the yard
+    numbers and end-zone wordmarks only from ~88px, below which they render
+    under about 3px and turn to mud. The header's 24px shows turf, end
+    zones, goal lines and the gem, which is what actually reads at that
+    size."""
+    detailed = size >= 40
+    labeled = size >= 88
+    yard_w = max(0.7, 32 / size)
+    goal_w = max(1.1, 48 / size)
+    border_w = max(1.2, 52.8 / size)
+    key_w = max(2.5, 120 / size)
+
+    yard_lines = (
+        '<g stroke="%s" stroke-width="%.2f" opacity="0.75">%s</g>' % (
+            _NFL_LINE, yard_w,
+            "".join(f'<line x1="{x}" y1="30" x2="{x}" y2="74" />' for x in _NFL_YARD_X),
+        ) if detailed else ""
+    )
+
+    labels = ""
+    if labeled:
+        g = _NFL_NUM_GAP
+        near = "".join(
+            f'<text x="{x - g:g}" y="{_NFL_NUM_BOTTOM}">{a}</text>'
+            f'<text x="{x + g:g}" y="{_NFL_NUM_BOTTOM}">{b}</text>'
+            for x, (a, b) in zip(_NFL_YARD_X, _NFL_LABELS)
+        )
+        # The far row is rotated a half turn so it reads from that sideline.
+        # Rotating each number about its own centre also swaps its digits,
+        # which is exactly how the far numbers look from this side.
+        far = "".join(
+            f'<text x="{x - g:g}" y="{_NFL_NUM_TOP}" '
+            f'transform="rotate(180 {x:g} {_NFL_NUM_TOP_PIVOT})">{a}</text>'
+            f'<text x="{x + g:g}" y="{_NFL_NUM_TOP}" '
+            f'transform="rotate(180 {x:g} {_NFL_NUM_TOP_PIVOT})">{b}</text>'
+            for x, (a, b) in zip(_NFL_YARD_X, _NFL_LABELS)
+        )
+        # White on white lines needs the dark rim (painted under the fill) to
+        # keep the digits from merging into the yard line beside them.
+        labels = (
+            f'<g font-family="{_NFL_FONT}" font-weight="800" font-size="{_NFL_NUM_SIZE}" '
+            f'text-anchor="middle" fill="#FFFFFF" paint-order="stroke" '
+            f'stroke="{_NFL_NUM_RIM}" stroke-width="0.45" stroke-opacity="0.55" '
+            f'stroke-linejoin="round">{near}{far}</g>'
+            # End-zone wordmarks run along the field's WIDTH, a quarter turn
+            # over, and are mirrored so each reads toward midfield. The
+            # baseline sits half a cap-height off the end zone's centre line,
+            # which is what actually centres the glyphs in the 12-unit strip
+            # once rotated. textLength pins them to the zone's depth so they
+            # fill it identically whatever the font does.
+            f'<g font-family="{_NFL_FONT}" font-weight="800" font-size="5" '
+            f'text-anchor="middle" fill="#FFFFFF">'
+            f'<text x="10" y="53.8" transform="rotate(-90 10 52)" textLength="38" '
+            f'lengthAdjust="spacingAndGlyphs">DIAMOND METRICS</text>'
+            f'<text x="90" y="53.8" transform="rotate(90 90 52)" textLength="38" '
+            f'lengthAdjust="spacingAndGlyphs">DIAMOND METRICS</text></g>'
+        )
+
+    facet_detail = (
+        """
+            <g stroke="#1E3A66" stroke-width="1.5" stroke-linejoin="round">
+                <line x1="30" y1="20" x2="15" y2="35" />
+                <line x1="70" y1="20" x2="85" y2="35" />
+                <line x1="15" y1="35" x2="85" y2="35" />
+                <line x1="30" y1="20" x2="50" y2="90" />
+                <line x1="70" y1="20" x2="50" y2="90" />
+                <line x1="15" y1="35" x2="50" y2="90" />
+                <line x1="85" y1="35" x2="50" y2="90" />
+                <polygon points="30,20 70,20 85,35 15,35" fill="none" />
+            </g>
+            <polygon points="35,23 45,23 39,31" fill="#FFFFFF" opacity="0.65" />
+        """
+        if detailed else ""
+    )
+    return f"""
+    <svg width="{size * _NFL_ASPECT:g}" height="{size}" viewBox="{_NFL_VIEWBOX}"
+        xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="30" width="92" height="44" fill="{_NFL_TURF_DARK}" />
+        <rect x="16" y="30" width="13.6" height="44" fill="{_NFL_TURF_LIGHT}" />
+        <rect x="43.2" y="30" width="13.6" height="44" fill="{_NFL_TURF_LIGHT}" />
+        <rect x="70.4" y="30" width="13.6" height="44" fill="{_NFL_TURF_LIGHT}" />
+        <rect x="4" y="30" width="12" height="44" fill="{_NFL_ENDZONE}" />
+        <rect x="84" y="30" width="12" height="44" fill="{_NFL_ENDZONE}" />
+        {yard_lines}
+        <g stroke="{_NFL_LINE}" stroke-width="{goal_w:.2f}">
+            <line x1="16" y1="30" x2="16" y2="74" />
+            <line x1="84" y1="30" x2="84" y2="74" />
+        </g>
+        {labels}
+        <rect x="4" y="30" width="92" height="44" fill="none"
+            stroke="{_NFL_LINE}" stroke-width="{border_w:.2f}" />
+        <g transform="translate(31 31.1) scale(0.38)">
+            <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
+            <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
+            <polygon points="85,35 50,90 70,20" fill="#7DB8F5" />
+            <polygon points="15,35 85,35 50,90" fill="{ACCENT}" />{facet_detail}
+            <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
+                stroke="#FFFFFF" stroke-width="{key_w:.2f}" stroke-linejoin="round" />
+        </g>
+    </svg>
+    """
+
+
+# Which mark each sport's header wears. NHL still falls back to the plain
+# gem until it gets an equivalent of its own (a rink, built the same way —
+# the gem as the centre element, that sport's surface drawn around it), so
+# adding one is a single entry here and no change at any call site.
+SPORT_LOGOS = {"mlb": ballpark_logo, "nfl": nfl_logo}
 
 
 def sport_logo(sport: str, size=64):
     """The header mark for `sport` ("mlb"/"nhl"/"nfl"/"home"), falling back
-    to the plain gem for any sport without one of its own."""
+    to the plain gem for any sport without one of its own. `size` is the
+    HEIGHT — most marks are square, but the gridiron is 2:1 wide."""
     return SPORT_LOGOS.get(sport, diamond_logo)(size)
 
 
