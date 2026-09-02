@@ -1032,7 +1032,17 @@ def fetch_batted_ball_profile(season=CURRENT_SEASON):
     """Batted-ball direction/type rates (ground ball / fly ball / line
     drive / popup, and pull / straightaway / opposite field) for batters —
     a hitter's approach, distinct from the outcome stats (BA/SLG/etc.)
-    already covered elsewhere."""
+    already covered elsewhere.
+
+    Also carries the cross of the two: pull/straight/oppo rate BROKEN OUT
+    by ground vs. air (pull_air_rate etc.). This is the more telling half —
+    pulling the ball in the air is how a hitter actually gets to his power
+    (the pull-side pole, the gap), while pulling on the ground is mostly
+    rollover contact that plays worse than a random grounder. Two hitters
+    with the same plain pull_rate can have opposite pull_air_rate /
+    pull_gb_rate splits and be completely different types of hitters — that
+    distinction doesn't exist anywhere else on the site. Same endpoint
+    already returns these columns; the site just wasn't asking for them."""
     print(f"Fetching {season} Statcast batted-ball profile...")
     try:
         resp = requests.get(
@@ -1048,7 +1058,9 @@ def fetch_batted_ball_profile(season=CURRENT_SEASON):
     df = df.rename(columns={"id": "mlbID"})
     df["season"] = season
     return df[["mlbID", "gb_rate", "air_rate", "fb_rate", "ld_rate", "pu_rate",
-               "pull_rate", "straight_rate", "oppo_rate", "season"]]
+               "pull_rate", "straight_rate", "oppo_rate",
+               "pull_air_rate", "straight_air_rate", "oppo_air_rate",
+               "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate", "season"]]
 
 
 def fetch_bat_tracking(season=CURRENT_SEASON):

@@ -477,8 +477,12 @@ if batting is not None and is_batter_role:
             st.caption("No batted-ball or bat-tracking data for this season.")
         if not bb_row.empty:
             st.caption("Batted-ball direction and type — how this player's contact is distributed.")
+            # gb_rate/pull_rate/etc. are stored as fractions (0-1), not
+            # percentages — scale to 0-100 here so "GB%" actually reads as
+            # a percent instead of a bare 0.46.
             st.dataframe(
-                bb_row[["gb_rate", "fb_rate", "ld_rate", "pu_rate", "pull_rate", "straight_rate", "oppo_rate"]]
+                (bb_row[["gb_rate", "fb_rate", "ld_rate", "pu_rate", "pull_rate", "straight_rate", "oppo_rate"]] * 100)
+                .round(1)
                 .rename(columns={
                     "gb_rate": "GB%", "fb_rate": "FB%", "ld_rate": "LD%", "pu_rate": "PU%",
                     "pull_rate": "Pull%", "straight_rate": "Straight%", "oppo_rate": "Oppo%",
@@ -486,6 +490,24 @@ if batting is not None and is_batter_role:
                 use_container_width=True,
                 hide_index=True,
             )
+            # Pull/straight/oppo crossed with ground vs. air — the more
+            # telling split. Pulling the ball in the AIR is how a hitter
+            # gets to his power (the pull-side pole, the gap); pulling on
+            # the GROUND is mostly rollover contact that plays worse than a
+            # random grounder. Two hitters with the same plain Pull% above
+            # can have opposite splits here and be very different hitters.
+            air_ground = {c for c in (
+                "pull_air_rate", "straight_air_rate", "oppo_air_rate",
+                "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate",
+            ) if c in bb_row.columns}
+            if air_ground:
+                cross = pd.DataFrame({
+                    "Pull%": [bb_row["pull_air_rate"].iloc[0], bb_row["pull_gb_rate"].iloc[0]],
+                    "Straight%": [bb_row["straight_air_rate"].iloc[0], bb_row["straight_gb_rate"].iloc[0]],
+                    "Oppo%": [bb_row["oppo_air_rate"].iloc[0], bb_row["oppo_gb_rate"].iloc[0]],
+                }, index=["In the Air", "On the Ground"]) * 100
+                st.caption("Direction split by contact type — pull in the air is a power indicator; pull on the ground is weak contact.")
+                st.dataframe(cross.round(1), use_container_width=True)
         if not bt_row.empty:
             st.caption("Bat tracking — 2023+ only.")
             st.dataframe(
