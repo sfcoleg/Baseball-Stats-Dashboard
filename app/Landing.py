@@ -114,12 +114,34 @@ FEATURED_PLAY = {
 }
 
 
-def _featured_play():
+def _latest_data_day():
+    """The most recent day hr_log actually has plays for — i.e. the day the
+    automatic pick describes. Used to retire a stale hand-picked play."""
+    try:
+        with __import__("sqlite3").connect(db.DB_PATH) as conn:
+            row = conn.execute(
+                "SELECT MAX(game_date) FROM hr_log WHERE des IS NOT NULL"
+            ).fetchone()
+        return str(row[0])[:10] if row and row[0] else None
+    except Exception:
+        return None
+
+
+def _featured_play(latest_day=None):
     """The hand-picked play in FEATURED_PLAY, if one is set and its clip is
     still reachable. Returns None on any miss so the caller falls straight
     back to the automatic pick rather than showing an empty card."""
     cfg = FEATURED_PLAY
     if not cfg or not cfg.get("game_pk") or not cfg.get("match"):
+        return None
+    # A pin describes ONE day's standout play, so it retires by itself once
+    # the data moves past that day and the card goes back to updating daily.
+    # Without this the front page freezes on whatever was pinned until
+    # somebody remembers to clear it — the same silent-staleness failure
+    # this card already had when it was ordered by insertion instead of
+    # merit. Set "until" to hold a play deliberately for longer.
+    until = str(cfg.get("until") or cfg.get("date") or "")[:10]
+    if until and latest_day and str(latest_day)[:10] > until:
         return None
     try:
         needle = cfg["match"].lower()
@@ -215,7 +237,7 @@ def _play_of_the_day():
             "date": str(game_date)[:10]}
 
 
-_potd = _featured_play() or _play_of_the_day()
+_potd = _featured_play(_latest_data_day()) or _play_of_the_day()
 if _potd:
     play_date = date.fromisoformat(_potd["date"])
     style.colored_header(f"Play of {db.daily_label(play_date, TODAY)}", "headliners")
