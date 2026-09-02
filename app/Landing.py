@@ -170,6 +170,107 @@ def _featured_play(latest_day=None):
     return None
 
 
+def _clip_for_play(game_pk, batter, des, events):
+    """A clip for one specific play, home run or not.
+
+    find_home_run_clip() only matches the "home-run" taxonomy tag, so it
+    cannot resolve a walk-off single or a bases-clearing double. This falls
+    back to matching on the batter's own player_id and then preferring the
+    item whose text shares the most distinctive words with the play's own
+    description, which is what separates his big hit from his other three
+    at-bats in the same game."""
+    number = re.search(r"\((\d+)\)", des or "")
+    if events == "home_run":
+        try:
+            clip = db.find_home_run_clip(int(batter), int(game_pk),
+                                         int(number.group(1)) if number else None)
+            if clip:
+                return clip
+        except Exception:
+            pass
+    # Words worth matching on: the event nouns and any "(N)" season count.
+    tokens = {w for w in re.findall(r"[a-z]{5,}", (des or "").lower())
+              if w not in {"fielder", "field", "center", "right", "scores", "ground", "sharp"}}
+    best, best_score = None, -1
+    try:
+        for item in db.highlight_items_by_game_pk(int(game_pk)):
+            keywords = item.get("keywordsAll", [])
+            if str(int(batter)) not in {k["value"] for k in keywords if k.get("type") == "player_id"}:
+                continue
+            if {k["value"] for k in keywords if k.get("type") == "taxonomy"} & db._NON_HIGHLIGHT_TAGS:
+                continue
+            url = db._clip_mp4_url(item)
+            if not url:
+                continue
+            text = " ".join(filter(None, [item.get("headline"), item.get("description"),
+                                          item.get("blurb")])).lower()
+            score = sum(1 for t in tokens if t in text)
+            if number and f"({int(number.group(1))})" in text:
+                score += 3
+            if score > best_score:
+                best, best_score = url, score
+    except Exception:
+        return None
+    return best
+
+
+def _wpa_play_of_the_day(latest_day=None):
+    """The day's biggest win-probability swing, walk-offs first.
+
+    A better answer than "longest home run", which ranks on distance and so
+    cannot tell a 460 ft blowout souvenir from a 380 ft shot that actually
+    won the game. wpa_top_plays already stores the swing per play, and a
+    home-team win ends with wp_after at 1.0, which is exactly a walk-off.
+
+    Gated on freshness: wpa_top_plays is fed by a nightly step that fails
+    non-fatally, and on 2026-09-01 it had been stuck on 2026-08-14 for
+    eighteen days while the rest of the refresh ran fine. Ranking off a
+    stale table would pin the front page to whatever happened weeks ago —
+    a worse version of the bug this card already had — so if the WPA data
+    is not current with hr_log, this defers to the distance ranking rather
+    than showing an old play as today's."""
+    try:
+        with __import__("sqlite3").connect(db.DB_PATH) as conn:
+            row = conn.execute("SELECT MAX(date) FROM wpa_top_plays").fetchone()
+            wpa_day = str(row[0])[:10] if row and row[0] else None
+            if not wpa_day or (latest_day and wpa_day < str(latest_day)[:10]):
+                return None
+            plays = conn.execute(
+                "SELECT game_pk, batter, events, des, wpa_batter, wp_before, wp_after "
+                "FROM wpa_top_plays WHERE date = ? "
+                # Walk-offs first (a home win ends at wp_after 1.0), then by
+                # the size of the swing.
+                "ORDER BY (wp_after >= 0.9995) DESC, ABS(wpa_batter) DESC",
+                (wpa_day,),
+            ).fetchall()
+    except Exception:
+        return None
+
+    batting = db.load_batting(TODAY.year, MTIME)
+    for game_pk, batter, events, des, wpa, wp_before, wp_after in plays:
+        clip = _clip_for_play(game_pk, batter, des, events)
+        if not clip:
+            continue  # try the next-biggest swing rather than dropping the card
+        match = batting[batting["mlbID"] == int(batter)]
+        if not match.empty:
+            name = match.iloc[0]["Name"]
+            abbr = teams.team_meta_from_city(match.iloc[0]["Tm"], match.iloc[0].get("Lev"))[0]
+        else:
+            name, abbr = re.split(r" homers | hits | singles | doubles | triples ", des)[0].strip(), ""
+        walk_off = wp_after is not None and wp_after >= 0.9995
+        stats = " \u00b7 ".join(p for p in (
+            "Walk-off" if walk_off else "",
+            f"Win probability {wpa:+.0%}" if wpa is not None else "",
+        ) if p)
+        return {
+            "clip": clip, "name": name, "abbr": abbr,
+            "color": teams.color_for_abbr(abbr) if abbr else "#2E86DE",
+            "des": des, "stats": stats, "mlbID": int(batter),
+            "pitch": None, "date": wpa_day,
+        }
+    return None
+
+
 def _play_of_the_day():
     try:
         with __import__("sqlite3").connect(db.DB_PATH) as conn:
@@ -237,7 +338,10 @@ def _play_of_the_day():
             "date": str(game_date)[:10]}
 
 
-_potd = _featured_play(_latest_data_day()) or _play_of_the_day()
+_latest_day = _latest_data_day()
+_potd = (_featured_play(_latest_day)
+         or _wpa_play_of_the_day(_latest_day)
+         or _play_of_the_day())
 if _potd:
     play_date = date.fromisoformat(_potd["date"])
     style.colored_header(f"Play of {db.daily_label(play_date, TODAY)}", "headliners")
