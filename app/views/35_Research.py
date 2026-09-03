@@ -41,9 +41,10 @@ def _wrc_decline_piece():
             """
             SELECT b26.Name, b26.Tm, b26.Lev,
                    ROUND(b26.wRC_plus - b25.wRC_plus, 0) AS wrc_chg,
-                   ROUND((bb26.pull_air_rate - bb25.pull_air_rate) * 100, 1) AS pull_air_chg,
-                   ROUND((bb26.pull_gb_rate  - bb25.pull_gb_rate)  * 100, 1) AS pull_gb_chg,
-                   ROUND((bb26.pull_ld_rate  - bb25.pull_ld_rate)  * 100, 1) AS pull_ld_chg
+                   ROUND((bb26.pull_air_rate  - bb25.pull_air_rate)  * 100, 1) AS pull_air_chg,
+                   ROUND((bb26.pull_gb_rate   - bb25.pull_gb_rate)   * 100, 1) AS pull_gb_chg,
+                   ROUND((bb26.straight_ld_rate - bb25.straight_ld_rate) * 100, 1) AS straight_ld_chg,
+                   ROUND((bb26.oppo_gb_rate   - bb25.oppo_gb_rate)   * 100, 1) AS oppo_gb_chg
             FROM batting b26
             JOIN batting b25       ON b25.mlbID = b26.mlbID AND b25.season = 2025
             JOIN batted_ball bb26  ON bb26.mlbID = b26.mlbID AND bb26.season = 2026
@@ -56,16 +57,18 @@ def _wrc_decline_piece():
 
     display = teams.add_team_abbr(decline).drop(columns="Lev").rename(columns={
         "wrc_chg": "wRC+ Change", "pull_air_chg": "Pull-Air% Chg",
-        "pull_gb_chg": "Pull-GB% Chg", "pull_ld_chg": "Pull-LD% Chg",
+        "pull_gb_chg": "Pull-GB% Chg", "straight_ld_chg": "Straight-LD% Chg",
+        "oppo_gb_chg": "Oppo-GB% Chg",
     })
     st.dataframe(
         style.style_stats_table(
             display,
-            lower_better=["wRC+ Change", "Pull-GB% Chg"],
+            lower_better=["wRC+ Change", "Pull-GB% Chg", "Oppo-GB% Chg"],
             higher_better=["Pull-Air% Chg"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
-            precision={c: "{:+.1f}" for c in ("Pull-Air% Chg", "Pull-GB% Chg", "Pull-LD% Chg")}
+            precision={c: "{:+.1f}" for c in
+                       ("Pull-Air% Chg", "Pull-GB% Chg", "Straight-LD% Chg", "Oppo-GB% Chg")}
                       | {"wRC+ Change": "{:+.0f}"},
         ),
         column_config=style.pin_first_column(display),
