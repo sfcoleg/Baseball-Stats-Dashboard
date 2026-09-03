@@ -744,6 +744,7 @@ PAGES = [
     st.Page("views/31_Streaks.py", title="Streaks"),
     st.Page("views/32_Postseason.py", title="Postseason"),
     st.Page("views/33_Ballparks.py", title="Ballparks"),
+    st.Page("views/35_Research.py", title="Research"),
     st.Page("views/23_Umpires.py", title="Umpires"),
     st.Page("views/27_Injury_Report.py", title="Injury Report"),
     st.Page("views/28_Transactions.py", title="Transactions"),

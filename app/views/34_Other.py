@@ -16,6 +16,7 @@ st.set_page_config(page_title="Other | Diamond Metrics", layout="wide")
 st.title("Other")
 
 SECTIONS = [
+    ("views/35_Research.py", "Research"),
     ("views/30_League_Trends.py", "League Trends"),
     ("views/33_Ballparks.py", "Ballparks"),
     ("views/23_Umpires.py", "Umpires"),
