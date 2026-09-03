@@ -465,42 +465,38 @@ if batting is not None and is_batter_role:
             use_container_width=True,
             hide_index=True,
         )
-        # Pull/straight/oppo crossed with ground vs. air — the more
-        # telling split. Pulling the ball in the AIR is how a hitter
-        # gets to his power (the pull-side pole, the gap); pulling on
-        # the GROUND is mostly rollover contact that plays worse than a
-        # random grounder. Two hitters with the same plain Pull% above
-        # can have opposite splits here and be very different hitters.
-        air_ground = {c for c in (
-            "pull_air_rate", "straight_air_rate", "oppo_air_rate",
-            "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate",
-        ) if c in bb_row.columns}
-        if air_ground:
-            cross = pd.DataFrame({
-                "Pull%": [bb_row["pull_air_rate"].iloc[0], bb_row["pull_gb_rate"].iloc[0]],
-                "Straight%": [bb_row["straight_air_rate"].iloc[0], bb_row["straight_gb_rate"].iloc[0]],
-                "Oppo%": [bb_row["oppo_air_rate"].iloc[0], bb_row["oppo_gb_rate"].iloc[0]],
-            }, index=["In the Air", "On the Ground"]) * 100
-            st.caption("Direction split by contact type — pull in the air is a power indicator; pull on the ground is weak contact.")
-            st.dataframe(cross.round(1), use_container_width=True)
-        # Line-drive-only pull/straight/oppo — Statcast's own leaderboard
-        # has no line-drive-specific cross at all (only air, which bundles
-        # fly balls + line drives + popups together), so this is computed
-        # in-house from raw pitch-level Statcast data (see
-        # ingest/line_drive_direction.py) rather than pulled from Savant.
-        # Validated against Savant's own known-good pull/straight/oppo
-        # rates on ALL batted balls — typically within ~2-3 percentage
-        # points, occasionally more — so it's shown as our own estimate,
-        # not an official Statcast number.
-        ld_cols = {"pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"} & set(bb_row.columns)
-        if len(ld_cols) == 3 and bb_row[list(ld_cols)].notna().all(axis=1).iloc[0]:
-            ld_split = (bb_row[["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]] * 100).round(1)
-            ld_split.columns = ["Pull%", "Straight%", "Oppo%"]
+        # Pull/straight/oppo crossed with contact type — the more telling
+        # split. Pulling the ball in the AIR is how a hitter gets to his
+        # power (the pull-side pole, the gap); pulling on the GROUND is
+        # mostly rollover contact that plays worse than a random grounder.
+        # Two hitters with the same plain Pull% above can have opposite
+        # splits here and be very different hitters. Air/Ground come
+        # straight from Statcast; Line Drives is computed in-house (see
+        # ingest/line_drive_direction.py) since Statcast's own leaderboard
+        # has no line-drive-specific cross at all — validated against
+        # Statcast's known-good rates on all batted balls, typically
+        # accurate to within a few percentage points, shown as our own
+        # estimate rather than an official Statcast number. Each row only
+        # appears if its columns are actually populated for this player.
+        rows, labels = [], []
+        if {"pull_air_rate", "straight_air_rate", "oppo_air_rate"} <= set(bb_row.columns):
+            rows.append([bb_row["pull_air_rate"].iloc[0], bb_row["straight_air_rate"].iloc[0], bb_row["oppo_air_rate"].iloc[0]])
+            labels.append("In the Air")
+        if {"pull_gb_rate", "straight_gb_rate", "oppo_gb_rate"} <= set(bb_row.columns):
+            rows.append([bb_row["pull_gb_rate"].iloc[0], bb_row["straight_gb_rate"].iloc[0], bb_row["oppo_gb_rate"].iloc[0]])
+            labels.append("On the Ground")
+        ld_cols = {"pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"}
+        if ld_cols <= set(bb_row.columns) and bb_row[list(ld_cols)].notna().all(axis=1).iloc[0]:
+            rows.append([bb_row["pull_ld_rate"].iloc[0], bb_row["straight_ld_rate"].iloc[0], bb_row["oppo_ld_rate"].iloc[0]])
+            labels.append("Line Drives (est.)")
+        if rows:
+            cross = pd.DataFrame(rows, columns=["Pull%", "Straight%", "Oppo%"], index=labels) * 100
             st.caption(
-                "Line drives only, pull/straight/oppo — our own estimate from raw Statcast spray angle "
-                "(not an official Statcast stat), typically accurate to within a few percentage points."
+                "Direction split by contact type — pull in the air is a power indicator, pull on the "
+                "ground is weak contact. Line Drives is our own estimate from raw Statcast spray angle, "
+                "not an official Statcast number."
             )
-            st.dataframe(ld_split, use_container_width=True, hide_index=True)
+            st.dataframe(cross.round(1), use_container_width=True)
     if not bt_row.empty:
         st.caption("Bat tracking — 2023+ only.")
         st.dataframe(

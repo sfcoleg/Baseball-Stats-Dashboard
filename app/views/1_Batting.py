@@ -221,74 +221,47 @@ with statcast_tab:
     st.plotly_chart(fig, use_container_width=True)
 
 with bb_tab:
-    _bb_cols = ["pull_air_rate", "straight_air_rate", "oppo_air_rate",
-                "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate"]
-    # These 6 columns are a recent addition to the batted_ball table (see
-    # fetch_batted_ball_profile) — a season already fetched before that
-    # change simply lacks them in stats.db until the next nightly refresh
-    # re-fetches it. Indexing table_rows[_bb_cols] would then KeyError the
-    # whole tab rather than just show empty data, so check presence first.
-    if not all(c in table_rows.columns for c in _bb_cols):
+    st.caption(
+        "Pull/straight/oppo crossed with ground vs. air, plus a line-drive-only cut. Pulling the ball "
+        "in the AIR is how a hitter gets to his power (the pull-side pole, the gap); pulling on the "
+        "GROUND is mostly weak rollover contact. The Air and Ground columns come straight from Statcast; "
+        "the Line-Drive columns are our own estimate from raw Statcast spray angle (not an official "
+        "Statcast stat, since Statcast's own leaderboard has no line-drive-specific cross at all), "
+        "typically accurate to within a few percentage points — see ingest/line_drive_direction.py."
+    )
+    # Each trio has its own presence gate and its own backfill schedule —
+    # air/gb comes from fetch_batted_ball_profile (nightly-eligible), LD
+    # from the separate occasional line_drive_direction.py backfill — so
+    # build the column list from whichever are actually in the DB right
+    # now rather than requiring all 9, which would blank the whole tab
+    # over one trio not having run yet.
+    _bb_groups = [
+        ("Air", ["pull_air_rate", "straight_air_rate", "oppo_air_rate"]),
+        ("GB", ["pull_gb_rate", "straight_gb_rate", "oppo_gb_rate"]),
+        ("LD", ["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]),
+    ]
+    _bb_cols = [c for _, cols in _bb_groups for c in cols if c in table_rows.columns]
+    if not _bb_cols:
         st.caption("Batted-ball direction data isn't in the database yet for this season — it fills in on the next data refresh.")
     else:
-        st.caption(
-            "Pull/straight/oppo crossed with ground vs. air. Pulling the ball in the AIR is how a hitter "
-            "gets to his power (the pull-side pole, the gap); pulling on the GROUND is mostly weak rollover "
-            "contact. Two hitters with the same plain pull rate can have opposite splits here."
-        )
         _bb_rows = table_rows.dropna(subset=_bb_cols, how="all")
         display = teams.add_team_abbr(_bb_rows)[["Name", "Age", "Tm", "PA"] + _bb_cols].copy()
         display[_bb_cols] = display[_bb_cols] * 100  # stored as fractions, not percentages
         display = display.rename(columns={
             "pull_air_rate": "Pull-Air%", "straight_air_rate": "Straight-Air%", "oppo_air_rate": "Oppo-Air%",
             "pull_gb_rate": "Pull-GB%", "straight_gb_rate": "Straight-GB%", "oppo_gb_rate": "Oppo-GB%",
-        })
-        st.dataframe(
-            style.style_stats_table(
-                display,
-                higher_better=["Pull-Air%"],
-                lower_better=["Pull-GB%"],
-                team_col="Tm",
-                team_color_fn=teams.color_for_abbr,
-                precision={c: "{:.1f}" for c in
-                           ["Pull-Air%", "Straight-Air%", "Oppo-Air%", "Pull-GB%", "Straight-GB%", "Oppo-GB%"]},
-            ),
-            column_config=style.pin_first_column(display),
-            use_container_width=True,
-            height=600,
-        )
-
-    # Line-drive-only pull/straight/oppo — Statcast's leaderboard has no
-    # line-drive-specific cross at all (only air, which bundles fly balls +
-    # line drives + popups together), so this is computed in-house from raw
-    # pitch-level Statcast data (see ingest/line_drive_direction.py), not
-    # pulled from Savant. Validated against Savant's own known-good
-    # pull/straight/oppo rates on all batted balls — typically within ~2-3
-    # points, occasionally more — labeled as our own estimate accordingly.
-    # Independent presence gate: populated on a separate, occasional-backfill
-    # schedule from the air/ground columns above, not the nightly refresh.
-    _ld_cols = ["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]
-    if all(c in table_rows.columns for c in _ld_cols):
-        st.divider()
-        st.caption(
-            "Line drives only, pull/straight/oppo — our own estimate from raw Statcast spray angle "
-            "(not an official Statcast stat), typically accurate to within a few percentage points."
-        )
-        _ld_rows = table_rows.dropna(subset=_ld_cols, how="all")
-        ld_display = teams.add_team_abbr(_ld_rows)[["Name", "Age", "Tm", "PA"] + _ld_cols].copy()
-        ld_display[_ld_cols] = ld_display[_ld_cols] * 100
-        ld_display = ld_display.rename(columns={
             "pull_ld_rate": "Pull-LD%", "straight_ld_rate": "Straight-LD%", "oppo_ld_rate": "Oppo-LD%",
         })
         st.dataframe(
             style.style_stats_table(
-                ld_display,
-                higher_better=["Pull-LD%"],
+                display,
+                higher_better=[c for c in ("Pull-Air%", "Pull-LD%") if c in display.columns],
+                lower_better=[c for c in ("Pull-GB%",) if c in display.columns],
                 team_col="Tm",
                 team_color_fn=teams.color_for_abbr,
-                precision={c: "{:.1f}" for c in ["Pull-LD%", "Straight-LD%", "Oppo-LD%"]},
+                precision={c: "{:.1f}" for c in display.columns if c.endswith("%")},
             ),
-            column_config=style.pin_first_column(ld_display),
+            column_config=style.pin_first_column(display),
             use_container_width=True,
             height=600,
         )
