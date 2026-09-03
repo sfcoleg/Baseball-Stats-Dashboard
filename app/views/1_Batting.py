@@ -28,6 +28,16 @@ batting = db.load_batting(season, db.db_mtime())
 # user currently has the page filtered down to.
 batting["HVS"] = db.hitting_value_score(batting)
 
+# Batted-ball direction/type lives in its own table (see db.load_batted_ball),
+# not `batting` — merge it in here so the whole page (Custom Leaderboard's
+# any-stat picker included, since that works off batting.columns) can see
+# it, not just a dedicated tab below.
+_bb = db.load_batted_ball(season, db.db_mtime())
+if not _bb.empty:
+    batting = batting.merge(
+        _bb.drop(columns="season", errors="ignore"), on="mlbID", how="left",
+    )
+
 col1, col2, col3 = st.columns(3)
 with col1:
     team_options = ["All"] + sorted(batting["Tm"].dropna().unique().tolist())
@@ -111,8 +121,8 @@ filtered = filtered.sort_values(sort_by, ascending=False).reset_index(drop=True)
 table_rows = filtered
 st.caption(f"{len(filtered)} players match filters.")
 
-standard_tab, advanced_tab, statcast_tab, discipline_tab, custom_tab, explore_tab = st.tabs(
-    ["Standard", "Advanced", "Statcast", "Plate Discipline", "Custom Leaderboard", "Chart Explorer"]
+standard_tab, advanced_tab, statcast_tab, discipline_tab, bb_tab, custom_tab, explore_tab = st.tabs(
+    ["Standard", "Advanced", "Statcast", "Plate Discipline", "Batted Ball", "Custom Leaderboard", "Chart Explorer"]
 )
 
 with standard_tab:
@@ -209,6 +219,44 @@ with statcast_tab:
         font_color=style.CHART_TEXT,
     )
     st.plotly_chart(fig, use_container_width=True)
+
+with bb_tab:
+    _bb_cols = ["pull_air_rate", "straight_air_rate", "oppo_air_rate",
+                "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate"]
+    # These 6 columns are a recent addition to the batted_ball table (see
+    # fetch_batted_ball_profile) — a season already fetched before that
+    # change simply lacks them in stats.db until the next nightly refresh
+    # re-fetches it. Indexing table_rows[_bb_cols] would then KeyError the
+    # whole tab rather than just show empty data, so check presence first.
+    if not all(c in table_rows.columns for c in _bb_cols):
+        st.caption("Batted-ball direction data isn't in the database yet for this season — it fills in on the next data refresh.")
+    else:
+        st.caption(
+            "Pull/straight/oppo crossed with ground vs. air. Pulling the ball in the AIR is how a hitter "
+            "gets to his power (the pull-side pole, the gap); pulling on the GROUND is mostly weak rollover "
+            "contact. Two hitters with the same plain pull rate can have opposite splits here."
+        )
+        _bb_rows = table_rows.dropna(subset=_bb_cols, how="all")
+        display = teams.add_team_abbr(_bb_rows)[["Name", "Age", "Tm", "PA"] + _bb_cols].copy()
+        display[_bb_cols] = display[_bb_cols] * 100  # stored as fractions, not percentages
+        display = display.rename(columns={
+            "pull_air_rate": "Pull-Air%", "straight_air_rate": "Straight-Air%", "oppo_air_rate": "Oppo-Air%",
+            "pull_gb_rate": "Pull-GB%", "straight_gb_rate": "Straight-GB%", "oppo_gb_rate": "Oppo-GB%",
+        })
+        st.dataframe(
+            style.style_stats_table(
+                display,
+                higher_better=["Pull-Air%"],
+                lower_better=["Pull-GB%"],
+                team_col="Tm",
+                team_color_fn=teams.color_for_abbr,
+                precision={c: "{:.1f}" for c in
+                           ["Pull-Air%", "Straight-Air%", "Oppo-Air%", "Pull-GB%", "Straight-GB%", "Oppo-GB%"]},
+            ),
+            column_config=style.pin_first_column(display),
+            use_container_width=True,
+            height=600,
+        )
 
 with discipline_tab:
     display = teams.add_team_abbr(table_rows)[
