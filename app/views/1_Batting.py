@@ -258,6 +258,41 @@ with bb_tab:
             height=600,
         )
 
+    # Line-drive-only pull/straight/oppo — Statcast's leaderboard has no
+    # line-drive-specific cross at all (only air, which bundles fly balls +
+    # line drives + popups together), so this is computed in-house from raw
+    # pitch-level Statcast data (see ingest/line_drive_direction.py), not
+    # pulled from Savant. Validated against Savant's own known-good
+    # pull/straight/oppo rates on all batted balls — typically within ~2-3
+    # points, occasionally more — labeled as our own estimate accordingly.
+    # Independent presence gate: populated on a separate, occasional-backfill
+    # schedule from the air/ground columns above, not the nightly refresh.
+    _ld_cols = ["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]
+    if all(c in table_rows.columns for c in _ld_cols):
+        st.divider()
+        st.caption(
+            "Line drives only, pull/straight/oppo — our own estimate from raw Statcast spray angle "
+            "(not an official Statcast stat), typically accurate to within a few percentage points."
+        )
+        _ld_rows = table_rows.dropna(subset=_ld_cols, how="all")
+        ld_display = teams.add_team_abbr(_ld_rows)[["Name", "Age", "Tm", "PA"] + _ld_cols].copy()
+        ld_display[_ld_cols] = ld_display[_ld_cols] * 100
+        ld_display = ld_display.rename(columns={
+            "pull_ld_rate": "Pull-LD%", "straight_ld_rate": "Straight-LD%", "oppo_ld_rate": "Oppo-LD%",
+        })
+        st.dataframe(
+            style.style_stats_table(
+                ld_display,
+                higher_better=["Pull-LD%"],
+                team_col="Tm",
+                team_color_fn=teams.color_for_abbr,
+                precision={c: "{:.1f}" for c in ["Pull-LD%", "Straight-LD%", "Oppo-LD%"]},
+            ),
+            column_config=style.pin_first_column(ld_display),
+            use_container_width=True,
+            height=600,
+        )
+
 with discipline_tab:
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm", "PA", "chase_pct", "bat_speed", "xISO", "xOBP"]

@@ -483,6 +483,24 @@ if batting is not None and is_batter_role:
             }, index=["In the Air", "On the Ground"]) * 100
             st.caption("Direction split by contact type — pull in the air is a power indicator; pull on the ground is weak contact.")
             st.dataframe(cross.round(1), use_container_width=True)
+        # Line-drive-only pull/straight/oppo — Statcast's own leaderboard
+        # has no line-drive-specific cross at all (only air, which bundles
+        # fly balls + line drives + popups together), so this is computed
+        # in-house from raw pitch-level Statcast data (see
+        # ingest/line_drive_direction.py) rather than pulled from Savant.
+        # Validated against Savant's own known-good pull/straight/oppo
+        # rates on ALL batted balls — typically within ~2-3 percentage
+        # points, occasionally more — so it's shown as our own estimate,
+        # not an official Statcast number.
+        ld_cols = {"pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"} & set(bb_row.columns)
+        if len(ld_cols) == 3 and bb_row[list(ld_cols)].notna().all(axis=1).iloc[0]:
+            ld_split = (bb_row[["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]] * 100).round(1)
+            ld_split.columns = ["Pull%", "Straight%", "Oppo%"]
+            st.caption(
+                "Line drives only, pull/straight/oppo — our own estimate from raw Statcast spray angle "
+                "(not an official Statcast stat), typically accurate to within a few percentage points."
+            )
+            st.dataframe(ld_split, use_container_width=True, hide_index=True)
     if not bt_row.empty:
         st.caption("Bat tracking — 2023+ only.")
         st.dataframe(
