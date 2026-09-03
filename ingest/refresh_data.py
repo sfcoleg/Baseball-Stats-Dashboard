@@ -1042,7 +1042,20 @@ def fetch_batted_ball_profile(season=CURRENT_SEASON):
     with the same plain pull_rate can have opposite pull_air_rate /
     pull_gb_rate splits and be completely different types of hitters — that
     distinction doesn't exist anywhere else on the site. Same endpoint
-    already returns these columns; the site just wasn't asking for them."""
+    already returns these columns; the site just wasn't asking for them.
+
+    Like baserunning-run-value above, this Savant endpoint IGNORES the
+    year param and always returns the CURRENT season — verified directly:
+    requesting year=2016 came back with the response's own `year` column
+    stamped 2026, and Mike Trout's gb_rate was byte-identical whether you
+    asked for 2016 or 2026. A season-backfill run once trusted the season
+    argument blindly and silently wrote today's numbers into stats.db
+    under eleven different historical season labels — caught and reverted
+    before it shipped. Same guard as baserunning_value: only fetch when
+    actually asking about the current season; anything else gets an empty
+    frame rather than wrong-but-plausible-looking data."""
+    if season != CURRENT_SEASON:
+        return pd.DataFrame(columns=["mlbID", "season"])
     print(f"Fetching {season} Statcast batted-ball profile...")
     try:
         resp = requests.get(
