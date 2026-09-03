@@ -64,7 +64,7 @@ def _wrc_decline_piece():
         style.style_stats_table(
             display,
             lower_better=["wRC+ Change", "Pull-GB% Chg", "Oppo-GB% Chg"],
-            higher_better=["Pull-Air% Chg"],
+            higher_better=["Pull-Air% Chg", "Straight-LD% Chg"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={c: "{:+.1f}" for c in
