@@ -241,10 +241,19 @@ with bb_tab:
         ("LD", ["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]),
     ]
     _bb_cols = [c for _, cols in _bb_groups for c in cols if c in table_rows.columns]
-    if not _bb_cols:
-        st.caption("Batted-ball direction data isn't in the database yet for this season — it fills in on the next data refresh.")
+    # A merge against a season with zero batted_ball rows (any season but
+    # the current one — see fetch_batted_ball_profile's docstring, Savant
+    # has no real historical query for this at all) still leaves these
+    # columns PRESENT on `table_rows`, just entirely NaN — pandas doesn't
+    # drop a column for having no non-null values. So `_bb_cols` alone
+    # can't tell "no data for this season" from "data present"; check
+    # whether dropna actually kept any rows too, or this silently renders
+    # a blank table instead of the explanatory caption.
+    _bb_rows = table_rows.dropna(subset=_bb_cols, how="all") if _bb_cols else table_rows.iloc[0:0]
+    if _bb_rows.empty:
+        st.caption("Batted-ball direction data isn't available for this season — Statcast batted-ball direction "
+                    "and this site's line-drive estimate only cover the current season.")
     else:
-        _bb_rows = table_rows.dropna(subset=_bb_cols, how="all")
         display = teams.add_team_abbr(_bb_rows)[["Name", "Age", "Tm", "PA"] + _bb_cols].copy()
         display[_bb_cols] = display[_bb_cols] * 100  # stored as fractions, not percentages
         display = display.rename(columns={
