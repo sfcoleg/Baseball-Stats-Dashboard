@@ -141,21 +141,42 @@ def compute_ld_rates(classified: pd.DataFrame) -> pd.DataFrame:
     return rates.reset_index().rename(columns={"batter": "mlbID"})
 
 
+_LD_COLS = ["pull_ld_rate", "straight_ld_rate", "oppo_ld_rate"]
+
+
 def store(season, ld_rates: pd.DataFrame) -> None:
     """Merge pull_ld_rate/straight_ld_rate/oppo_ld_rate into the existing
     batted_ball row for `season`. Must carry every existing column, not
     just the 3 new ones — _store_season_table's ALTER-not-DROP path only
     fires when the incoming frame is a pure superset of what's already
     there; a frame with just the 3 new columns would look like existing
-    columns are being REMOVED and take the destructive drop path instead."""
+    columns are being REMOVED and take the destructive drop path instead.
+
+    Once ANY season has ever stored these 3 columns, the whole table's
+    schema carries them — so `existing` here already has them too (NULL,
+    if this particular season hasn't been through store() yet). Merging a
+    second copy in from `ld_rates` collided on those names and pandas
+    silently suffixed them to _x/_y instead of erroring cleanly, which
+    _store_season_table then read as "the real column got renamed" and
+    rebuilt the ENTIRE table around the malformed _x/_y names — wiping
+    every other season. Caught only because the DB was re-verified before
+    the next git push, not because anything raised loudly. Drop the
+    existing NULL placeholders before merging so this can't recur: the
+    freshly computed values are always what should win."""
     import sqlite3
     with sqlite3.connect(DB_PATH) as conn:
         existing = pd.read_sql("SELECT * FROM batted_ball WHERE season = ?", conn, params=(season,))
+        existing = existing.drop(columns=[c for c in _LD_COLS if c in existing.columns])
         merged = existing.merge(ld_rates, on="mlbID", how="left")
+        assert not any(c.endswith(("_x", "_y")) for c in merged.columns), \
+            f"unexpected column collision after merge: {list(merged.columns)}"
         _store_season_table(conn, "batted_ball", merged, season)
         conn.commit()
-    print(f"  stored pull_ld_rate/straight_ld_rate/oppo_ld_rate for {len(ld_rates)} batters, season {season}",
-          flush=True)
+        stored = conn.execute(
+            "SELECT COUNT(*) FROM batted_ball WHERE season = ? AND pull_ld_rate IS NOT NULL", (season,)
+        ).fetchone()[0]
+    print(f"  stored pull_ld_rate/straight_ld_rate/oppo_ld_rate for {stored} batters, season {season} "
+          f"(computed for {len(ld_rates)})", flush=True)
 
 
 if __name__ == "__main__":
