@@ -1044,29 +1044,39 @@ def fetch_batted_ball_profile(season=CURRENT_SEASON):
     distinction doesn't exist anywhere else on the site. Same endpoint
     already returns these columns; the site just wasn't asking for them.
 
-    Like baserunning-run-value above, this Savant endpoint IGNORES the
-    year param and always returns the CURRENT season — verified directly:
-    requesting year=2016 came back with the response's own `year` column
-    stamped 2026, and Mike Trout's gb_rate was byte-identical whether you
-    asked for 2016 or 2026. A season-backfill run once trusted the season
-    argument blindly and silently wrote today's numbers into stats.db
-    under eleven different historical season labels — caught and reverted
-    before it shipped. Same guard as baserunning_value: only fetch when
-    actually asking about the current season; anything else gets an empty
-    frame rather than wrong-but-plausible-looking data."""
-    if season != CURRENT_SEASON:
-        return pd.DataFrame(columns=["mlbID", "season"])
+    CORRECTION: an earlier version of this docstring claimed this endpoint
+    ignores the year param entirely — WRONG, from testing with the wrong
+    param name. The plain `year=` query param is genuinely a no-op (it
+    silently returns the current season regardless), but the site's own
+    form submits `season[]=` (array-style), which DOES work — confirmed
+    against the live site's own UI: selecting 2025 there returns 316 real
+    qualified players with real 2025 numbers (e.g. Mike Trout's real 2025
+    gb_rate, 34.15%, distinct from his 2026 number), not a repeat of
+    current-season data. A backfill once ran against `year=`, silently
+    wrote today's numbers under historical season labels, and was reverted
+    before shipping — the bug was in the param name, not in Savant lacking
+    historical data. `_verify_year` below re-checks the response's own
+    `year` column against what was actually requested, every call, so this
+    class of silent mislabeling can't recur even if Savant's undocumented
+    param behavior changes again."""
     print(f"Fetching {season} Statcast batted-ball profile...")
     try:
         resp = requests.get(
             "https://baseballsavant.mlb.com/leaderboard/batted-ball",
-            params={"type": "batter", "year": season, "csv": "true"},
+            params={
+                "type": "batter", "season[]": str(season), "splitYear": 1,
+                "min": "q", "minSplit": 1, "gameType[]": "R", "csv": "true",
+            },
             timeout=30,
         )
         resp.raise_for_status()
         df = pd.read_csv(io.StringIO(resp.text))
     except Exception as e:
         print(f"  skipped batted-ball profile ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    if not df.empty and "year" in df.columns and not (df["year"] == season).all():
+        bad = sorted(df.loc[df["year"] != season, "year"].unique().tolist())
+        print(f"  batted-ball profile: requested {season} but response's own year column says {bad} — skipping, not trusting it")
         return pd.DataFrame(columns=["mlbID", "season"])
     df = df.rename(columns={"id": "mlbID"})
     df["season"] = season
