@@ -2115,9 +2115,16 @@ _CONTACT_WEIGHTS = {
     "shadow_out_contact": 0.15,  # fighting off the borderline ball
     "swing_length": 0.13,        # INVERTED below
     "chase_contact": 0.12,       # bat-to-ball even on bad pitches
-    "heart_contact": 0.10,       # baseline; nearly everyone hits these
+    "heart_contact": 0.05,       # baseline; nearly everyone hits these
+    "hp_to_1b": 0.05,            # INVERTED below — see note
 }
-_CONTACT_INVERTED = {"swing_length"}
+# hp_to_1b (home-to-first time) is here at a deliberately small weight
+# because contact and speed interact: a ground ball to short is an out for
+# a slow runner and an infield single for a fast one, so speed is part of
+# whether contact becomes production. Kept to 5% — taken from heart_contact,
+# the least discriminating component — so this stays a bat-to-ball score
+# rather than drifting into a speed score.
+_CONTACT_INVERTED = {"swing_length", "hp_to_1b"}  # lower time / shorter swing = better
 CONTACT_MIN_SWINGS = 200
 
 
