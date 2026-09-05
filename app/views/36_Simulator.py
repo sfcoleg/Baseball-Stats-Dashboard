@@ -22,7 +22,9 @@ import streamlit as st
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import db
 import prefs
+import sim_engine
 import style
+import teams
 
 st.set_page_config(page_title="Sim | Diamond Metrics", layout="wide")
 st.title("Player Simulator")
@@ -405,7 +407,95 @@ with style.section("Your Hitter", "batting"):
         + "</div>",
         unsafe_allow_html=True,
     )
-    st.caption(
-        "Next: this profile gets matched against every qualified hitter to predict a stat line "
-        "and surface his closest real-life comps."
+
+    ctx1, ctx2, ctx3, ctx4 = st.columns(4)
+    hand = ctx1.radio("Bats", ["R", "L"], horizontal=True, key="sim_hand",
+                      help="Pull is left field for a righty and right field for a lefty, so the "
+                           "same profile produces different outcomes.")
+    speed_pct = ctx2.slider("Speed", 0, 100, 50, key="sim_speed",
+                            help="Percentile. Drives infield hits on grounders.") / 100
+    babip_pct = ctx3.slider("BABIP skill", 0, 100, 50, key="sim_babip",
+                            help="How well he finds grass on balls in play, beyond what his "
+                                 "profile and power already explain. Does not touch home runs.") / 100
+    n_pa = ctx4.number_input("Plate appearances", 200, 750, 600, 50, key="sim_pa")
+
+proj = sim_engine.project(
+    {k: v for k, v in bb_values.items()},
+    eye=score_values.get("Eye", 50), contact=score_values.get("Contact", 50),
+    power=score_values.get("Power", 50), hand=hand, speed_pct=speed_pct,
+    babip_pct=babip_pct, n_pa=int(n_pa), n_sims=1000, seed=7,
+)
+
+with style.section("Projected Line", "batting"):
+    if not proj:
+        st.caption("Model artifact not built yet — run ingest/train_sim_model.py.")
+    else:
+        st.caption(
+            f"Median of {proj['sims']:,} simulated {proj['pa']}-PA seasons, with the 10th-90th "
+            "percentile beneath each — the range is the point. A hitter of fixed true talent still "
+            "swings this much across a season on luck alone."
+        )
+        cells = []
+        for stat in ("AVG", "OBP", "SLG", "OPS", "HR", "BB%", "K%", "BABIP"):
+            b = proj[stat]
+            fmt = "{:.3f}" if stat in ("AVG", "OBP", "SLG", "OPS", "BABIP") else "{:.0f}"
+            if stat.endswith("%"):
+                fmt = "{:.1f}"
+            cells.append(
+                f"<div style='flex:1;min-width:104px;background:var(--dm-card);"
+                f"border:1px solid var(--dm-line);border-radius:10px;padding:12px 14px'>"
+                f"<div style='font-size:0.68rem;letter-spacing:1.2px;text-transform:uppercase;"
+                f"color:var(--dm-dim)'>{stat}</div>"
+                f"<div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:800;"
+                f"font-size:1.7rem;line-height:1.15;color:var(--dm-text)'>"
+                f"{fmt.format(b['p50']).lstrip('0') if stat in ('AVG','OBP','SLG','BABIP') else fmt.format(b['p50'])}</div>"
+                f"<div style='font-size:0.7rem;color:var(--dm-dim)'>"
+                f"{fmt.format(b['p10']).lstrip('0') if stat in ('AVG','OBP','SLG','BABIP') else fmt.format(b['p10'])}"
+                f" – "
+                f"{fmt.format(b['p90']).lstrip('0') if stat in ('AVG','OBP','SLG','BABIP') else fmt.format(b['p90'])}"
+                f"</div></div>"
+            )
+        st.markdown("<div style='display:flex;gap:10px;flex-wrap:wrap'>" + "".join(cells) + "</div>",
+                    unsafe_allow_html=True)
+
+# --- comps ------------------------------------------------------------------
+with style.section("Closest Real Hitters", "batting"):
+    comp_pool = pool.copy()
+    disc_scores = comp_pool.copy()
+    comp_pool = comp_pool.assign(
+        Eye=db.discipline_eye_score(disc_scores),
+        Contact=db.contact_score(disc_scores),
+        Power=db.power_score(disc_scores),
     )
+    names = db.load_batting(season, mtime)[["mlbID", "Name", "Tm", "Lev", "PA"]]
+    comp_pool = comp_pool.merge(names, on="mlbID", how="left", suffixes=("", "_n"))
+    comp_pool = comp_pool[comp_pool["PA"] >= db.QUALIFIED_MIN_PA]
+
+    comps, nearest = sim_engine.nearest_comps(
+        bb_values, score_values.get("Eye", 50), score_values.get("Contact", 50),
+        score_values.get("Power", 50), comp_pool, n=5,
+    )
+    # Past roughly 3 standard deviations of combined difference, nothing in
+    # the league really looks like this hitter and the projection above is
+    # extrapolation rather than something grounded in comparable players.
+    if nearest == nearest and nearest > 3.0:
+        st.warning(
+            f"No real hitter closely resembles this profile (nearest is {nearest:.1f} away). "
+            "The projection is extrapolating past anything in the league — treat it as a "
+            "what-if, not a forecast."
+        )
+    if comps.empty:
+        st.caption("No comparable hitters available for this season.")
+    else:
+        show = teams.add_team_abbr(comps)[["Name", "Tm", "Eye", "Contact", "Power", "distance"]]
+        show = show.rename(columns={"distance": "Distance"})
+        st.dataframe(
+            style.style_stats_table(
+                show, higher_better=["Eye", "Contact", "Power"], lower_better=["Distance"],
+                team_col="Tm", team_color_fn=teams.color_for_abbr,
+                precision={"Eye": "{:.0f}", "Contact": "{:.0f}", "Power": "{:.0f}",
+                           "Distance": "{:.2f}"},
+            ),
+            use_container_width=True, hide_index=True,
+        )
+        st.caption("Ranked by distance across the six batted-ball rates and all three scores.")
