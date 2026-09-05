@@ -246,6 +246,15 @@ def _autofill():
             st.session_state[f"detail_{score_name}"] = True
 
 
+def _reset_controls():
+    """Clear every control back to its default. Runs as a callback so it
+    may touch sim_player, which is a live widget key."""
+    for k in list(st.session_state):
+        if k.startswith(("bb_", "comp_", "detail_", "score_")):
+            del st.session_state[k]
+    st.session_state["sim_player"] = "—"
+
+
 _names = db.load_batting(season, mtime)[["mlbID", "Name", "PA"]]
 _names = _names[_names["mlbID"].isin(pool["mlbID"])].dropna(subset=["Name"])
 _names = _names[_names["PA"] >= db.QUALIFIED_MIN_PA]
@@ -264,12 +273,14 @@ with style.section("Start From a Real Player", "batting"):
             on_change=_autofill, label_visibility="collapsed",
         )
     with clear_col:
-        if st.button("Reset", use_container_width=True):
-            for k in list(st.session_state):
-                if k.startswith(("bb_", "comp_", "detail_", "score_")):
-                    del st.session_state[k]
-            st.session_state["sim_player"] = "—"
-            st.rerun()
+        # on_click, not an `if st.button(...)` body, for the same reason
+        # _autofill is a callback: this clears sim_player, and Streamlit
+        # refuses to modify a widget's session_state key once that widget
+        # has been created in the current run — the selectbox above already
+        # has been. Doing it inline raised StreamlitAPIException every time
+        # Reset was pressed. A callback runs before the rerun builds any
+        # widgets, so the assignment is legal there.
+        st.button("Reset", on_click=_reset_controls, use_container_width=True)
 
 
 # --- batted-ball profile ----------------------------------------------------
