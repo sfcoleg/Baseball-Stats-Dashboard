@@ -57,7 +57,7 @@ def _component_pool(season: int, db_mtime_val: float) -> pd.DataFrame:
         out = out.merge(bt[keep_bt], on="mlbID", how="left")
     if not disc.empty:
         out = out.merge(disc.drop(columns="season", errors="ignore"), on="mlbID", how="left")
-    return out[out["PA"] >= db.QUALIFIED_MIN_PA] if "PA" in out.columns else out
+    return out
 
 
 pool = _component_pool(season, mtime)
@@ -100,9 +100,26 @@ SCORES = {
 }
 
 
-def _stats_for(col):
-    """mean / sd / display range for one component, from the real pool."""
-    s = pool[col].dropna() if col in pool.columns else pd.Series(dtype=float)
+def _score_pool(score_name: str) -> pd.DataFrame:
+    """The population a score is scaled against — which is NOT the same for
+    all three, and has to match db.py exactly or a custom hitter lands on a
+    different scale than every real player on the site. Getting this wrong
+    put the Sim 1-3 points off db.py's own numbers for the same player,
+    worst on Power, whose db.py default is PA >= 100 rather than 200."""
+    if score_name == "Eye" and "total_pitches" in pool.columns:
+        return pool[pool["total_pitches"] >= db.EYE_MIN_PITCHES]
+    if score_name == "Contact" and "two_strike_swings" in pool.columns:
+        return pool[pool["two_strike_swings"] >= db.CONTACT_MIN_SWINGS]
+    if score_name == "Power" and "PA" in pool.columns:
+        return pool[pool["PA"] >= 100]
+    return pool
+
+
+def _stats_for(col, score_name="Eye"):
+    """mean / sd / display range for one component, from that score's own
+    reference population."""
+    ref_pool = _score_pool(score_name)
+    s = ref_pool[col].dropna() if col in ref_pool.columns else pd.Series(dtype=float)
     if s.empty or not s.std():
         return None
     scale = 100.0 if _COMPONENT_META.get(col, (None, None, None, False))[3] else 1.0
@@ -111,6 +128,12 @@ def _stats_for(col):
         "sd": float(s.std()) * scale,
         "lo": float(s.quantile(0.05)) * scale,
         "hi": float(s.quantile(0.95)) * scale,
+        # Autofill writes a real player's actual value into these sliders,
+        # and Streamlit raises if a value sits outside a slider's range —
+        # so the track has to contain the whole league, not just the middle
+        # of it. Arraez's contact rates are far beyond +2.5sd.
+        "min": float(s.min()) * scale,
+        "max": float(s.max()) * scale,
     }
 
 
@@ -157,6 +180,86 @@ def _score_chip(name: str, score: int) -> str:
         f"<div style='font-size:0.75rem;color:var(--dm-dim)'>{score - 50:+d} vs league average</div>"
         f"</div>"
     )
+
+
+# --- load a real player ------------------------------------------------------
+_BB_COLUMNS = {
+    "pull_air": "pull_air_rate", "straight_air": "straight_air_rate",
+    "oppo_air": "oppo_air_rate", "pull_gb": "pull_gb_rate",
+    "straight_gb": "straight_gb_rate", "oppo_gb": "oppo_gb_rate",
+}
+
+
+def _autofill():
+    """Copy a real hitter's own numbers into every control.
+
+    Runs as an on_change CALLBACK, which matters: Streamlit will not let
+    you assign to a widget's session_state key after that widget has been
+    created in the same run. A callback fires before the rerun builds the
+    widgets, so the sliders come up already holding the new values.
+
+    Each score is also flipped into detailed mode, since the point of
+    loading a player is to see the real stats underneath his score — and
+    the score recomputed from them should land on the same number db.py
+    gives that player, which is a live check that both paths agree.
+    """
+    label = st.session_state.get("sim_player")
+    mlb_id = player_ids.get(label)
+    if mlb_id is None:
+        return
+    rows = pool[pool["mlbID"] == mlb_id]
+    if rows.empty:
+        return
+    row = rows.iloc[0]
+
+    for key, col in _BB_COLUMNS.items():
+        if col in row.index and pd.notna(row[col]):
+            st.session_state[f"bb_{key}"] = round(float(row[col]) * 100, 1)
+
+    for score_name, (weights, _inv, _blurb) in SCORES.items():
+        filled = False
+        for col in weights:
+            ref = _stats_for(col, score_name)
+            if not ref or col not in row.index or pd.isna(row[col]):
+                continue
+            _lbl, suffix, dec, is_frac = _COMPONENT_META.get(col, (col, "", 1, False))
+            value = float(row[col]) * (100.0 if is_frac else 1.0)
+            lo_b = round(min(ref["mean"] - 2.5 * ref["sd"], ref["min"]), dec)
+            hi_b = round(max(ref["mean"] + 2.5 * ref["sd"], ref["max"]), dec)
+            if suffix == "%":
+                lo_b, hi_b = max(0.0, lo_b), min(100.0, hi_b)
+            st.session_state[f"comp_{score_name}_{col}"] = round(
+                min(max(value, lo_b), hi_b), dec
+            )
+            filled = True
+        if filled:
+            st.session_state[f"detail_{score_name}"] = True
+
+
+_names = db.load_batting(season, mtime)[["mlbID", "Name", "PA"]]
+_names = _names[_names["mlbID"].isin(pool["mlbID"])].dropna(subset=["Name"])
+_names = _names[_names["PA"] >= db.QUALIFIED_MIN_PA]
+_names = _names.sort_values("PA", ascending=False)
+player_ids = dict(zip(_names["Name"], _names["mlbID"]))
+
+with style.section("Start From a Real Player", "batting"):
+    st.caption(
+        f"Optional. Pick a {season} hitter and every control below fills with his actual numbers — "
+        "then change whatever you want from there."
+    )
+    pick_col, clear_col = st.columns([4, 1])
+    with pick_col:
+        st.selectbox(
+            "Player", ["—"] + list(player_ids), key="sim_player",
+            on_change=_autofill, label_visibility="collapsed",
+        )
+    with clear_col:
+        if st.button("Reset", use_container_width=True):
+            for k in list(st.session_state):
+                if k.startswith(("bb_", "comp_", "detail_", "score_")):
+                    del st.session_state[k]
+            st.session_state["sim_player"] = "—"
+            st.rerun()
 
 
 # --- batted-ball profile ----------------------------------------------------
@@ -230,7 +333,7 @@ score_values = {}
 for name, (weights, inverted, blurb) in SCORES.items():
     with style.section(name, "batting"):
         st.caption(blurb)
-        refs = {c: r for c, r in ((c, _stats_for(c)) for c in weights) if r}
+        refs = {c: r for c, r in ((c, _stats_for(c, name)) for c in weights) if r}
         detailed = st.toggle(
             "Set by individual stats", key=f"detail_{name}",
             help="Off: one slider for the score. On: set the real stats it's built from, "
@@ -252,8 +355,8 @@ for name, (weights, inverted, blurb) in SCORES.items():
                 # the mean runs past both for the tighter components — the
                 # earlier version offered a 105.3% Waste Take slider.
                 is_pct = _COMPONENT_META.get(col, (None, "", 1, False))[1] == "%"
-                lo_b = round(ref["mean"] - 2.5 * ref["sd"], dec)
-                hi_b = round(ref["mean"] + 2.5 * ref["sd"], dec)
+                lo_b = round(min(ref["mean"] - 2.5 * ref["sd"], ref["min"]), dec)
+                hi_b = round(max(ref["mean"] + 2.5 * ref["sd"], ref["max"]), dec)
                 if is_pct:
                     lo_b, hi_b = max(0.0, lo_b), min(100.0, hi_b)
                 with cols[i % len(cols)]:
