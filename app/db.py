@@ -221,7 +221,7 @@ BATTING_COLS = [
     "xISO_pctile", "xISO", "xOBP_pctile", "xOBP",
     "xwOBA", "xBA", "xSLG",
     "xBA_diff", "xSLG_diff", "xwOBA_diff", "OPS_plus", "wRC_plus", "WAR",
-    "sprint_speed", "hp_to_1b", "baserunning_runs", "season",
+    "sprint_speed", "hp_to_1b", "baserunning_runs", "sweet_spot_percent", "season",
 ]
 PITCHING_COLS = [
     "Name", "Age", "Lev", "Tm", "G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP",

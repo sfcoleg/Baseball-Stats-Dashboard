@@ -736,6 +736,7 @@ PAGES = [
     st.Page("views/31_Schedule.py", title="Schedule"),
     st.Page("views/9_Standings.py", title="Standings"),
     st.Page("views/17_Playoffs.py", title="Playoffs"),
+    st.Page("views/36_Simulator.py", title="Sim"),
     st.Page("views/34_Other.py", title="Other"),
     # Everything below is reached through the Other hub page above, not its
     # own sidebar slot — still registered here (so their URLs/page_links
@@ -828,7 +829,7 @@ _MLB_NAV_HIDDEN = (
     "Player", "Game Center", "Glossary", "Settings",
     "League Trends", "Streaks", "Postseason", "Ballparks", "Umpires",
     "Injury Report", "Transactions", "Awards Race", "Minor Leagues",
-    "Box Score Search", "Free Agency",
+    "Box Score Search", "Free Agency", "Research",
 )
 # Daily Digest stays registered (so /nhl-digest resolves for previews) but off
 # the nav until the season starts — every section is empty over the summer.
