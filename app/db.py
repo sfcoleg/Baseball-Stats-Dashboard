@@ -2037,6 +2037,196 @@ def hitting_value_score(batting: pd.DataFrame, min_pa: int = 100) -> pd.Series:
     return (50 + 15 * composite_z).round().clip(1, 100)
 
 
+# Weights for the Eye score below. Every input is stored higher-is-better
+# (see ingest/plate_discipline.py), so no signs are flipped here.
+#
+# These are NOT the weights this started with. The first pass led with
+# Shadow-in Swing% at 37%, on the theory that swinging at borderline
+# STRIKES is the hardest correct decision and should dominate. Validating
+# against hitters whose eye is not in question killed that outright: Soto
+# came out 74th of 330 and Judge 242nd, and the score correlated 0.197
+# with OBP — essentially nothing.
+#
+# The flaw was conflating two different things. Chasing a ball out of the
+# zone is a RECOGNITION failure. Taking a borderline strike is an APPROACH
+# decision — elite hitters take corner strikes on purpose, hunting a pitch
+# they can actually drive, and punishing that was punishing good process.
+# Leading with the out-of-zone components instead moved Soto to 11th and
+# lifted the OBP correlation to 0.401.
+#
+# In-zone still carries 20% on purpose. Dropping it entirely scored
+# marginally better but collapses this into a dressed-up chase rate; the
+# whole point is that a hitter who takes everything, strikes included,
+# does not have a good eye — he is just passive.
+_EYE_WEIGHTS = {
+    "chase_take": 0.40,        # laying off clear balls — the core skill
+    "shadow_out_take": 0.30,   # laying off the near-miss
+    "shadow_in_swing": 0.12,   # not being passive on borderline strikes
+    "waste_take": 0.10,        # obvious call, low variance
+    "heart_swing": 0.08,       # not letting meatballs go by
+}
+EYE_MIN_PITCHES = 500
+
+# Raw Power weights. Deliberately ALL physical-capacity inputs — no ISO,
+# no barrel%, nothing outcome-derived. This score is meant to be an INPUT
+# to the player simulator, which predicts outcomes (AVG/SLG/ISO) from a
+# skill profile; folding ISO in would mean predicting the answer from the
+# answer. Barrel% is excluded for a subtler version of the same problem:
+# a barrel is exit velo AND launch angle, and launch angle is what the
+# simulator's batted-ball sliders already control, so it would be counted
+# twice.
+#
+# max_exit_velo is real peak capacity but it is a SINGLE batted ball out
+# of ~400 — one mishit off the end of the bat moves it — so it earns a
+# seat at only 15% while the stable measures carry the score.
+_POWER_WEIGHTS = {
+    "hard_hit_pct": 0.30,       # most stable, frequency of quality contact
+    "avg_exit_velo": 0.22,      # captures the full distribution, not a threshold
+    "avg_bat_speed": 0.22,      # the physical driver
+    "sweet_spot_percent": 0.15,  # angle quality — see below
+    "max_exit_velo": 0.11,      # peak, but noisy
+}
+# sweet_spot_percent (8-32 degrees) is here rather than in the Contact
+# score on purpose. Power is really answering "when you hit it, how much
+# damage", and that is two things: how hard AND at what angle — a 108mph
+# ground ball is a hard out, the same ball at 20 degrees is a double.
+# Putting it in Contact would have actively hurt that score at the job it
+# was designed for, which is predicting strikeout rate: Schwarber has
+# elite launch angles and strikes out a third of the time.
+#
+# It does soften the pure-capacity rule that kept barrel% out, since angle
+# overlaps a little with what the simulator's Air/Ground slider controls.
+# Mild rather than fatal — two hitters with identical Air% can have very
+# different sweet-spot rates — but the seam is real and worth knowing.
+
+
+# Contact weights. Frequency only — deliberately NO launch-angle or
+# quality-of-contact input. The job of this score is to predict strikeout
+# rate WITHOUT being strikeout rate, and quality works against that:
+# Schwarber has elite launch angles and strikes out a third of the time,
+# so folding angle in here would blunt the one thing this is for. Angle
+# quality lives in power_score instead, where damage is the question.
+#
+# swing_length is inverted (shorter swing, quicker to the ball, more
+# contact) — the only component here that is not already higher-is-better.
+_CONTACT_WEIGHTS = {
+    "two_strike_contact": 0.30,  # the direct mechanism of not striking out
+    "shadow_in_contact": 0.20,   # hardest in-zone contact
+    "shadow_out_contact": 0.15,  # fighting off the borderline ball
+    "swing_length": 0.13,        # INVERTED below
+    "chase_contact": 0.12,       # bat-to-ball even on bad pitches
+    "heart_contact": 0.10,       # baseline; nearly everyone hits these
+}
+_CONTACT_INVERTED = {"swing_length"}
+CONTACT_MIN_SWINGS = 200
+
+
+def contact_score(df: pd.DataFrame, min_swings: int = CONTACT_MIN_SWINGS) -> pd.Series:
+    """Contact — our own 1-100 read on bat-to-ball skill, from contact
+    rate by attack zone plus two-strike contact and swing length.
+
+    `df` needs the per-zone contact columns from ingest/plate_discipline.py
+    and, optionally, swing_length from bat_tracking.
+
+    Built to PREDICT strikeout rate without containing it: every input is
+    a swing-level contact rate or a swing-mechanics measure, never K% or
+    any outcome stat. Missing components (swing_length only covers batters
+    with 50+ tracked swings) are handled the same way power_score handles
+    them — remaining weights renormalise so scores stay comparable."""
+    present = [c for c in _CONTACT_WEIGHTS if c in df.columns]
+    if not present:
+        return pd.Series(pd.NA, index=df.index, dtype="Float64")
+
+    pool = df[df["two_strike_swings"] >= min_swings] if "two_strike_swings" in df.columns else df
+    if len(pool) < 2:
+        pool = df
+
+    weighted_z = pd.Series(0.0, index=df.index)
+    weight_used = pd.Series(0.0, index=df.index)
+    for col in present:
+        std = pool[col].std()
+        if not std or pd.isna(std):
+            continue
+        z = (df[col] - pool[col].mean()) / std
+        if col in _CONTACT_INVERTED:
+            z = -z
+        have = z.notna()
+        weighted_z = weighted_z.add((_CONTACT_WEIGHTS[col] * z).where(have, 0.0), fill_value=0.0)
+        weight_used = weight_used.add(
+            pd.Series(_CONTACT_WEIGHTS[col], index=df.index).where(have, 0.0), fill_value=0.0
+        )
+
+    composite_z = (weighted_z / weight_used.replace(0.0, pd.NA)).astype("Float64")
+    return (50 + 15 * composite_z).round().clip(1, 100)
+
+
+def power_score(batting: pd.DataFrame, min_pa: int = 100) -> pd.Series:
+    """Power — our own 1-100 read on physical power capacity, from
+    hard-hit rate, average and max exit velocity, and bat speed (see
+    _POWER_WEIGHTS for why those four and nothing else).
+
+    `batting` must carry hard_hit_pct / avg_exit_velo / max_exit_velo, and
+    avg_bat_speed if bat-tracking data has been merged in.
+
+    Bat speed only exists for batters with 50+ tracked swings — about 200
+    of ~330 qualified hitters — so a player missing it is NOT dropped.
+    The weights of whichever components that player actually has are
+    renormalised to sum to 1, which keeps every score on one comparable
+    scale instead of quietly scoring 40% of the league out of 0.75."""
+    present = [c for c in _POWER_WEIGHTS if c in batting.columns]
+    if not present:
+        return pd.Series(pd.NA, index=batting.index, dtype="Float64")
+
+    qualified = batting[batting["PA"] >= min_pa] if "PA" in batting.columns else batting
+
+    weighted_z = pd.Series(0.0, index=batting.index)
+    weight_used = pd.Series(0.0, index=batting.index)
+    for col in present:
+        std = qualified[col].std()
+        if not std or pd.isna(std):
+            continue
+        z = (batting[col] - qualified[col].mean()) / std
+        have = z.notna()
+        weighted_z = weighted_z.add((_POWER_WEIGHTS[col] * z).where(have, 0.0), fill_value=0.0)
+        weight_used = weight_used.add(pd.Series(_POWER_WEIGHTS[col], index=batting.index).where(have, 0.0),
+                                      fill_value=0.0)
+
+    composite_z = (weighted_z / weight_used.replace(0.0, pd.NA)).astype("Float64")
+    return (50 + 15 * composite_z).round().clip(1, 100)
+
+
+def discipline_eye_score(discipline: pd.DataFrame, min_pitches: int = EYE_MIN_PITCHES) -> pd.Series:
+    """Eye score — our own 1-100 read on plate discipline, from swing
+    decisions by Statcast attack zone (see ingest/plate_discipline.py for
+    the zones, the Shadow in/out split, and the count weighting).
+
+    Scaled against the actual mean/std of `discipline`'s own qualified
+    rows (total_pitches >= min_pitches), the same way hitting_value_score
+    handles its pool — no fixed constants to drift out of sync with the
+    league. Returns a 1-100 Series aligned to `discipline`'s index.
+
+    Correlates ~0.40 with OBP and ~0.65 with BB%: related to walk rate, as
+    it should be, but not a restatement of it. A hitter can score well here
+    while walking rarely if he simply does not chase (Jeff McNeil), which
+    is the point — this measures the decisions, not the outcomes."""
+    cols = [c for c in _EYE_WEIGHTS if c in discipline.columns]
+    if not cols or "total_pitches" not in discipline.columns:
+        return pd.Series(pd.NA, index=discipline.index, dtype="Float64")
+
+    qualified = discipline[discipline["total_pitches"] >= min_pitches]
+    if len(qualified) < 2:
+        return pd.Series(pd.NA, index=discipline.index, dtype="Float64")
+
+    def z(col):
+        std = qualified[col].std()
+        if not std or pd.isna(std):
+            return pd.Series(0.0, index=discipline.index)
+        return (discipline[col] - qualified[col].mean()) / std
+
+    composite_z = sum(_EYE_WEIGHTS[c] * z(c) for c in cols)
+    return (50 + 15 * composite_z).round().clip(1, 100)
+
+
 
 def _readable_event(events) -> str:
     return events.replace("_", " ").title() if isinstance(events, str) and events else "In Play"
@@ -4341,6 +4531,11 @@ def _load_optional_table(table: str, season: int, db_mtime_val: float) -> pd.Dat
 @st.cache_data(show_spinner=False, max_entries=4)
 def load_batted_ball(season: int, db_mtime_val: float) -> pd.DataFrame:
     return _load_optional_table("batted_ball", season, db_mtime_val)
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_plate_discipline(season: int, db_mtime_val: float) -> pd.DataFrame:
+    return _load_optional_table("plate_discipline", season, db_mtime_val)
 
 
 @st.cache_data(show_spinner=False, max_entries=4)

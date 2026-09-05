@@ -38,6 +38,24 @@ if not _bb.empty:
         _bb.drop(columns="season", errors="ignore"), on="mlbID", how="left",
     )
 
+# Eye score (see db.discipline_eye_score) — computed on the FULL season's
+# discipline table before any filtering below, for the same reason HVS is:
+# the score is scaled against the league, so it must not shift depending
+# on which subset of rows the page happens to be filtered down to.
+_pd = db.load_plate_discipline(season, db.db_mtime())
+if not _pd.empty and "total_pitches" in _pd.columns:
+    _pd = _pd.assign(Eye=db.discipline_eye_score(_pd))
+    _pd_cols = {
+        "mlbID": "mlbID", "Eye": "Eye", "chase_take": "Chase Take%",
+        "shadow_out_take": "Shadow-out Take%", "shadow_in_swing": "Shadow-in Swing%",
+    }
+    _keep = [c for c in _pd_cols if c in _pd.columns]
+    _slice = _pd[_keep].rename(columns=_pd_cols)
+    for pct in ("Chase Take%", "Shadow-out Take%", "Shadow-in Swing%"):
+        if pct in _slice.columns:
+            _slice[pct] = _slice[pct] * 100  # stored as fractions
+    batting = batting.merge(_slice, on="mlbID", how="left")
+
 col1, col2, col3 = st.columns(3)
 with col1:
     team_options = ["All"] + sorted(batting["Tm"].dropna().unique().tolist())
@@ -276,18 +294,32 @@ with bb_tab:
         )
 
 with discipline_tab:
-    display = teams.add_team_abbr(table_rows)[
-        ["Name", "Age", "Tm", "PA", "chase_pct", "bat_speed", "xISO", "xOBP"]
-    ].rename(columns={"chase_pct": "Chase%", "bat_speed": "Bat Speed"})
+    _eye_cols = ["Eye", "Chase Take%", "Shadow-out Take%", "Shadow-in Swing%"]
+    have_eye = "Eye" in table_rows.columns and table_rows["Eye"].notna().any()
+    base_cols = ["Name", "Age", "Tm", "PA"] + (_eye_cols if have_eye else []) + [
+        "chase_pct", "bat_speed", "xISO", "xOBP"
+    ]
+    display = teams.add_team_abbr(table_rows)[base_cols].rename(
+        columns={"chase_pct": "Chase%", "bat_speed": "Bat Speed"}
+    )
+    if have_eye:
+        st.caption(
+            "**Eye** is our own 1-100 plate-discipline score, built from swing decisions by Statcast "
+            "attack zone — including a Shadow split (borderline strikes vs. borderline balls) that "
+            "Statcast's own leaderboard doesn't publish, and weighted by count so protecting with two "
+            "strikes isn't judged like chasing on 3-0. Not an official stat."
+        )
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["Bat Speed", "xISO", "xOBP"],
+            higher_better=[c for c in ("Bat Speed", "xISO", "xOBP", *_eye_cols) if c in display.columns],
             lower_better=["Chase%"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
                 "Chase%": "{:.1f}", "Bat Speed": "{:.1f}", "xISO": "{:.3f}", "xOBP": "{:.3f}",
+                "Eye": "{:.0f}", "Chase Take%": "{:.1f}", "Shadow-out Take%": "{:.1f}",
+                "Shadow-in Swing%": "{:.1f}",
             },
         ),
         column_config=style.pin_first_column(display),

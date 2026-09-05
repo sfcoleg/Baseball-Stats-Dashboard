@@ -740,8 +740,10 @@ def fetch_batting(season=CURRENT_SEASON):
     # confirmed real values (e.g. Judge .409 xISO, Arraez .076) against the
     # est_iso/est_obp names, which return empty.
     contact_raw = fetch_savant_custom_leaderboard(
-        season, "batter", ["whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp"]
-    )[["player_id", "whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp"]]
+        season, "batter",
+        ["whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp", "sweet_spot_percent"]
+    )[["player_id", "whiff_percent", "oz_swing_percent", "avg_swing_speed", "xiso", "xobp",
+       "sweet_spot_percent"]]
     contact_raw["contact_pct"] = 100 - contact_raw["whiff_percent"]
     contact_raw = contact_raw.drop(columns="whiff_percent").rename(columns={
         "oz_swing_percent": "chase_pct",
@@ -1089,18 +1091,32 @@ def fetch_batted_ball_profile(season=CURRENT_SEASON):
 def fetch_bat_tracking(season=CURRENT_SEASON):
     """Bat speed / swing length / swing-quality stats from Statcast's bat
     tracking system, which only started recording in the 2023 season —
-    empty response for anything earlier is expected, not an error."""
+    empty response for anything earlier is expected, not an error.
+
+    Uses `season[]=`, NOT `year=`: this endpoint silently ignores `year`
+    and hands back the current season no matter what you ask for. It had
+    been asking with `year=`, which is how stats.db ended up with 2008 and
+    2009 bat-tracking rows — seasons that predate the tracking system by
+    fifteen years — holding identical numbers to 2026 (league-average bat
+    speed 72.21 in all three). Same bug, same fix, and same guard as
+    fetch_batted_ball_profile: verify the response's own year column
+    before trusting a single row of it."""
     print(f"Fetching {season} Statcast bat tracking...")
     try:
         resp = requests.get(
             "https://baseballsavant.mlb.com/leaderboard/bat-tracking",
-            params={"type": "batter", "year": season, "min": 50, "csv": "true"},
+            params={"type": "batter", "season[]": str(season), "min": 50, "csv": "true"},
             timeout=30,
         )
         resp.raise_for_status()
         df = pd.read_csv(io.StringIO(resp.text))
     except Exception as e:
         print(f"  skipped bat tracking ({e})")
+        return pd.DataFrame(columns=["mlbID", "season"])
+    year_col = next((c for c in ("year", "api_year") if c in df.columns), None)
+    if year_col and not df.empty and not (df[year_col] == season).all():
+        bad = sorted(df.loc[df[year_col] != season, year_col].unique().tolist())
+        print(f"  bat tracking: asked for {season}, response says {bad} — skipping, not trusting it")
         return pd.DataFrame(columns=["mlbID", "season"])
     if df.empty:
         return pd.DataFrame(columns=["mlbID", "season"])
