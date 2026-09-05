@@ -224,9 +224,15 @@ def _autofill():
         return
     row = rows.iloc[0]
 
+    filled_bb = False
     for key, col in _BB_COLUMNS.items():
         if col in row.index and pd.notna(row[col]):
             st.session_state[f"bb_{key}"] = round(float(row[col]) * 100, 1)
+            filled_bb = True
+    # Loading a real player is a request to see HIS numbers, so show the
+    # sliders rather than leaving a preset selected that no longer matches.
+    if filled_bb:
+        st.session_state["bb_custom"] = True
 
     for score_name, (weights, _inv, _blurb) in SCORES.items():
         filled = False
@@ -298,15 +304,116 @@ _BB_SLIDERS = [
     ("oppo_gb", "Oppo GB", 7.0, "#EBD09A"),
 ]
 
+@st.cache_data(show_spinner=False, max_entries=4)
+def _archetypes(season: int, db_mtime_val: float) -> dict:
+    """Preset profiles, averaged from the real hitters who most embody each
+    type rather than invented. Six sliders is a lot to ask of someone who
+    just wants to build a slugger, so this is the default way in.
+
+    Deliberately excludes a couple of types that came out of the data
+    nearly identical to Power Hitter — a "fly ball" and an "extreme pull"
+    preset both landed within a point or two of it, and three
+    indistinguishable options is worse than one clear one."""
+    bat = db.load_batting(season, db_mtime_val)
+    bb = db.load_batted_ball(season, db_mtime_val)
+    cols = [f"{b}_rate" for b in sim_engine.BUCKETS]
+    if bb.empty or not all(c in bb.columns for c in cols):
+        return {}
+    keep = [c for c in ("mlbID", "Name", "PA", "ISO", "hp_to_1b") if c in bat.columns]
+    d = bat[keep].merge(bb[["mlbID"] + cols], on="mlbID").dropna(subset=cols)
+    d = d[d["PA"] >= 300]
+    d_all = d
+    if len(d) < 40:
+        return {}
+    d = d.assign(
+        air=d[["pull_air_rate", "straight_air_rate", "oppo_air_rate"]].sum(axis=1),
+        gb=d[["pull_gb_rate", "straight_gb_rate", "oppo_gb_rate"]].sum(axis=1),
+        oppo=d[["oppo_air_rate", "oppo_gb_rate"]].sum(axis=1),
+        pull=d[["pull_air_rate", "pull_gb_rate"]].sum(axis=1),
+    )
+
+    # Archetypes carry SCORES as well as a spray pattern, because the name
+    # promises a whole hitter. Profile alone was actively misleading: with
+    # every score left at 50, "Slap Hitter" projected .230 — worse than
+    # Balanced — since an oppo/ground spray only pays off when paired with
+    # the elite contact and speed that define the type. Arraez is a slap
+    # hitter because of Contact 85 and his legs, not his spray chart alone.
+    score_src = pool.copy()
+    score_src = score_src.assign(
+        Eye=db.discipline_eye_score(score_src),
+        Contact=db.contact_score(score_src),
+        Power=db.power_score(score_src),
+    )[["mlbID", "Eye", "Contact", "Power"]]
+
+    def prof(sel):
+        if sel.empty:
+            return None
+        vals = (sel[cols].mean() * 100).round(1)
+        example = sel.nlargest(1, "PA")["Name"].iloc[0] if len(sel) else ""
+        joined = sel[["mlbID"]].merge(score_src, on="mlbID", how="left")
+        scores = {}
+        for name in ("Eye", "Contact", "Power"):
+            m = joined[name].dropna()
+            scores[name] = int(round(float(m.mean()))) if not m.empty else 50
+        speed = 0.5
+        if "hp_to_1b" in sel.columns:
+            fast = sel["hp_to_1b"].dropna()
+            if not fast.empty and "hp_to_1b" in d_all.columns:
+                speed = float(1.0 - d_all["hp_to_1b"].rank(pct=True)[sel.index].dropna().mean())
+        return {"profile": {c.replace("_rate", ""): float(v) for c, v in vals.items()},
+                "scores": scores, "speed": max(0.0, min(1.0, speed)), "example": example}
+
+    # Each type is selected by the trait that actually DEFINES it, not by a
+    # spray pattern that merely correlates with it. Picking the slap group
+    # as "most oppo, lowest ISO" found the right spray chart but only
+    # Contact 65, so the preset projected worse than Balanced — the exact
+    # confusion these presets exist to prevent. Selecting on Contact
+    # directly finds the hitters the name actually means.
+    scored = d.merge(score_src, on="mlbID", how="left")
+    picks = {
+        "Balanced": d,
+        "Power Hitter": scored.nlargest(30, "Power"),
+        "Slap Hitter": scored.nlargest(45, "Contact").nsmallest(22, "Power"),
+        "Gap / Line Drive": d.nlargest(25, "straight_air_rate"),
+        "Ground Ball": d.nlargest(25, "gb"),
+        "Extreme Pull": d.nlargest(25, "pull"),
+    }
+    return {k: v for k, v in ((k, prof(sel)) for k, sel in picks.items()) if v}
+
+
 with style.section("Batted Ball Profile", "batting"):
     st.caption(
         "Where the ball goes when he puts it in play. Air is fly balls, line drives and popups "
         "together — these six are every batted ball he hits."
     )
-    bb_values = {}
-    air_col, gb_col = st.columns(2)
-    for container, group, heading in ((air_col, _BB_SLIDERS[:3], "In the Air"),
-                                      (gb_col, _BB_SLIDERS[3:], "On the Ground")):
+    arch = _archetypes(season, mtime)
+    custom = st.toggle(
+        "Set the six rates myself", key="bb_custom",
+        help="Off: pick a hitter type. On: control each batted-ball rate directly.",
+    )
+
+    if not custom and arch:
+        pick = st.selectbox("Hitter type", list(arch), key="bb_archetype")
+        chosen = arch[pick]
+        bb_values = dict(chosen["profile"])
+        archetype_scores = chosen.get("scores") or {}
+        archetype_speed = chosen.get("speed", 0.5)
+        sc = archetype_scores
+        st.caption(
+            f"Averaged from the 2026 hitters who most fit this type — {chosen['example']} is one of "
+            f"them. Sets the scores too (Eye {sc.get('Eye', 50)}, Contact {sc.get('Contact', 50)}, "
+            f"Power {sc.get('Power', 50)}); change any of them below."
+        )
+    else:
+        bb_values = {}
+        archetype_scores, archetype_speed = {}, None
+        if not arch and not custom:
+            st.caption("Not enough data for hitter-type presets this season — using the sliders.")
+
+    air_col, gb_col = st.columns(2) if (custom or not arch) else (None, None)
+    for container, group, heading in (() if air_col is None else (
+            (air_col, _BB_SLIDERS[:3], "In the Air"),
+            (gb_col, _BB_SLIDERS[3:], "On the Ground"))):
         with container:
             st.markdown(
                 f"<div style='font-size:0.72rem;letter-spacing:1.3px;text-transform:uppercase;"
@@ -359,6 +466,12 @@ with style.section("Batted Ball Profile", "batting"):
     )
 
 # --- the three skill scores -------------------------------------------------
+# Streamlit keeps a widget's value against its key, so a score slider would
+# ignore a newly chosen archetype's default. Folding the archetype into the
+# key makes each preset its own widget, which is what lets switching presets
+# actually move the sliders.
+pick_key = st.session_state.get("bb_archetype", "custom") if not st.session_state.get("bb_custom") else "custom"
+
 score_values = {}
 for name, (weights, inverted, blurb) in SCORES.items():
     with style.section(name, "batting"):
@@ -371,7 +484,9 @@ for name, (weights, inverted, blurb) in SCORES.items():
         )
 
         if not detailed or not refs:
-            score_values[name] = st.slider(name, 1, 100, 50, key=f"score_{name}",
+            default = int(archetype_scores.get(name, 50)) if archetype_scores else 50
+            score_values[name] = st.slider(name, 1, 100, default,
+                                           key=f"score_{name}_{pick_key}",
                                            label_visibility="collapsed")
             if not refs:
                 st.caption("Component data isn't in the database for this season — score slider only.")
@@ -412,7 +527,8 @@ with style.section("Your Hitter", "batting"):
     hand = ctx1.radio("Bats", ["R", "L"], horizontal=True, key="sim_hand",
                       help="Pull is left field for a righty and right field for a lefty, so the "
                            "same profile produces different outcomes.")
-    speed_pct = ctx2.slider("Speed", 0, 100, 50, key="sim_speed",
+    _speed_default = int(round((archetype_speed if archetype_speed is not None else 0.5) * 100))
+    speed_pct = ctx2.slider("Speed", 0, 100, _speed_default, key=f"sim_speed_{pick_key}",
                             help="Percentile. Drives infield hits on grounders.") / 100
     babip_pct = ctx3.slider("BABIP skill", 0, 100, 50, key="sim_babip",
                             help="How well he finds grass on balls in play, beyond what his "
