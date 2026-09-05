@@ -57,6 +57,16 @@ def _component_pool(season: int, db_mtime_val: float) -> pd.DataFrame:
         out = out.merge(bt[keep_bt], on="mlbID", how="left")
     if not disc.empty:
         out = out.merge(disc.drop(columns="season", errors="ignore"), on="mlbID", how="left")
+    # The six batted-ball rates live in their own table and were missing
+    # here, so "load a real player" silently left the profile sliders at
+    # their defaults — which happen to total 95%, the number that showed up
+    # on screen.
+    bb = db.load_batted_ball(season, db_mtime_val)
+    if not bb.empty:
+        bb_cols = [c for c in ("mlbID", "pull_air_rate", "straight_air_rate", "oppo_air_rate",
+                               "pull_gb_rate", "straight_gb_rate", "oppo_gb_rate")
+                   if c in bb.columns]
+        out = out.merge(bb[bb_cols], on="mlbID", how="left")
     return out
 
 
@@ -263,13 +273,16 @@ with style.section("Start From a Real Player", "batting"):
 
 
 # --- batted-ball profile ----------------------------------------------------
+# Defaults are the league average of each rate, so a fresh page starts on a
+# real, balanced hitter. The previous hand-picked numbers totalled 95%,
+# which read as a bug the moment anyone looked at the total.
 _BB_SLIDERS = [
-    ("pull_air", "Pull Air", 18.0, "#2E86DE"),
-    ("straight_air", "Straight Air", 20.0, "#6FAFE8"),
-    ("oppo_air", "Oppo Air", 17.0, "#A8CDF0"),
-    ("pull_gb", "Pull GB", 20.0, "#B7791F"),
-    ("straight_gb", "Straight GB", 15.0, "#D6A44C"),
-    ("oppo_gb", "Oppo GB", 5.0, "#EBD09A"),
+    ("pull_air", "Pull Air", 18.5, "#2E86DE"),
+    ("straight_air", "Straight Air", 20.3, "#6FAFE8"),
+    ("oppo_air", "Oppo Air", 17.6, "#A8CDF0"),
+    ("pull_gb", "Pull GB", 20.6, "#B7791F"),
+    ("straight_gb", "Straight GB", 16.0, "#D6A44C"),
+    ("oppo_gb", "Oppo GB", 7.0, "#EBD09A"),
 ]
 
 with style.section("Batted Ball Profile", "batting"):
@@ -288,7 +301,7 @@ with style.section("Batted Ball Profile", "batting"):
                 unsafe_allow_html=True,
             )
             for key, label, default, _ in group:
-                bb_values[key] = st.slider(label, 0.0, 60.0, default, 0.5, key=f"bb_{key}",
+                bb_values[key] = st.slider(label, 0.0, 60.0, default, 0.1, key=f"bb_{key}",
                                            format="%.1f%%")
 
     total = sum(bb_values.values())
@@ -305,9 +318,13 @@ with style.section("Batted Ball Profile", "batting"):
         slices += (f"<div title='unassigned' style='width:{gap:.2f}%;"
                    f"background:repeating-linear-gradient(45deg,var(--dm-field),"
                    f"var(--dm-field) 6px,transparent 6px,transparent 12px);'></div>")
-    note = ("balanced" if abs(total - 100) < 0.05
+    # Six sliders each rounded to 0.1 can be off by up to 0.3 in total, so a
+    # real player who genuinely sums to 100 lands on 99.9 or 100.1. Anything
+    # inside that is rounding, not an unbalanced profile.
+    _ROUNDING_SLACK = 0.35
+    note = ("balanced" if abs(total - 100) <= _ROUNDING_SLACK
             else f"{total - 100:+.1f}% off — {'over' if total > 100 else 'unassigned'}")
-    if abs(total - 100.0) < 0.05:
+    if abs(total - 100.0) <= _ROUNDING_SLACK:
         st.success(f"Batted-ball profile totals {total:.1f}%")
     elif total > 100:
         st.warning(f"Totals {total:.1f}% — that's {total - 100:.1f}% more than a hitter actually has.")
