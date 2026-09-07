@@ -58,6 +58,24 @@ def fetch_standings(season: str) -> pd.DataFrame:
     return df
 
 
+def fetch_player_stats(season: str) -> pd.DataFrame:
+    """Season-long player stats, confirmed directly against live 2025-26
+    data before writing this: 582 players, PTS/REB/AST/etc. as SEASON
+    TOTALS (Dončić's 2143 points, not 33.5) — per-game rates are computed
+    here rather than assumed, since a raw total is not what a leaderboard
+    should sort or display by."""
+    from nba_api.stats.endpoints import leaguedashplayerstats
+    df = leaguedashplayerstats.LeagueDashPlayerStats(season=season).get_data_frames()[0]
+    if df.empty:
+        return df
+    per_game = ["PTS", "REB", "AST", "STL", "BLK", "TOV", "MIN"]
+    for col in per_game:
+        if col in df.columns:
+            df[f"{col}_PG"] = df[col] / df["GP"].replace(0, pd.NA)
+    df["season"] = season
+    return df
+
+
 def fetch_scoreboard(date_str: str) -> pd.DataFrame:
     """Today's games. Genuinely empty outside the season (verified: the
     September offseason returns zero rows, not an error) — return an
@@ -100,12 +118,31 @@ if __name__ == "__main__":
     today = pacific_today().isoformat()
     games = fetch_scoreboard(today)
     print(f"today's games ({today}): {len(games)}", flush=True)
+    time.sleep(1)
+
+    # The new season exists but is empty until tip-off (verified: 2026-27
+    # standings are real rows, all 0-0). A player-stats page needs actual
+    # games played, so pull the CURRENT season and, when that comes back
+    # empty, fall back one year — the same gap NFL's default_season()
+    # already handles, applied here at ingest time instead of query time
+    # since NBA has no history table yet to fall back within.
+    player_stats = fetch_player_stats(season)
+    stats_season = season
+    if player_stats.empty:
+        prior_start = int(season[:4]) - 1
+        stats_season = f"{prior_start}-{str(prior_start + 1)[-2:]}"
+        print(f"  {season} has no player games yet — falling back to {stats_season}", flush=True)
+        time.sleep(1)
+        player_stats = fetch_player_stats(stats_season)
+    print(f"player stats ({stats_season}): {len(player_stats)} players", flush=True)
 
     with sqlite3.connect(DB_PATH) as conn:
         _store(conn, "teams", teams)
         if not standings.empty:
             _store(conn, "standings", standings)
         _store(conn, "todays_games", games)
+        if not player_stats.empty:
+            _store(conn, "player_stats", player_stats)
         conn.commit()
     print(f"wrote {DB_PATH}", flush=True)
     print("DONE", flush=True)

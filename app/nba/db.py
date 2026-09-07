@@ -80,6 +80,31 @@ def load_todays_games(db_mtime_val: float) -> pd.DataFrame:
     return _read("SELECT * FROM todays_games")
 
 
+MIN_GAMES = 20  # rough qualifying floor for a per-game leaderboard
+
+
+@st.cache_data(show_spinner=False, max_entries=4)
+def load_player_stats(db_mtime_val: float) -> pd.DataFrame:
+    """Whatever season is in the table — ingest already resolved which one
+    that is (current if it has games, else the prior completed season), so
+    this is a straight read, no fallback logic duplicated here."""
+    return _read("SELECT * FROM player_stats")
+
+
+@st.cache_data(show_spinner=False, max_entries=2)
+def player_stats_season(db_mtime_val: float) -> str | None:
+    df = load_player_stats(db_mtime_val)
+    if df.empty or "season" not in df.columns:
+        return None
+    return str(df["season"].iloc[0])
+
+
+def qualified_players(df: pd.DataFrame, min_games: int = MIN_GAMES) -> pd.DataFrame:
+    if df.empty or "GP" not in df.columns:
+        return df
+    return df[df["GP"] >= min_games]
+
+
 def team_abbr_map(db_mtime_val: float) -> dict[int, str]:
     teams = load_teams(db_mtime_val)
     if teams.empty:
