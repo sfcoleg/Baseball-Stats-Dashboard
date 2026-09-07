@@ -453,10 +453,40 @@ def nhl_logo(size=64):
     """)
 
 
+def nba_logo(size=64):
+    """The NBA mark: diamond_logo()'s gem at centre court.
+
+    Square, unlike the 2:1 gridiron/rink marks — a court reads naturally in
+    that shape. One fixed level of detail rather than staged by size like
+    the other two, which each earned their staging through several rounds
+    of at-size iteration; this is the skeleton-scope version and can grow
+    the same way later if it needs to."""
+    return _tidy_svg(f"""
+    <svg width="{size}" height="{size}" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="4" width="92" height="92" rx="3" fill="#C87F3B" />
+        <rect x="4" y="4" width="92" height="92" rx="3" fill="none" stroke="#FFFFFF" stroke-width="2" />
+        <line x1="50" y1="4" x2="50" y2="96" stroke="#FFFFFF" stroke-width="1.6" />
+        <circle cx="50" cy="50" r="14" fill="none" stroke="#FFFFFF" stroke-width="1.6" />
+        <path d="M 4 30 A 20 20 0 0 1 4 70" fill="none" stroke="#FFFFFF" stroke-width="1.4" />
+        <path d="M 96 30 A 20 20 0 0 0 96 70" fill="none" stroke="#FFFFFF" stroke-width="1.4" />
+        <rect x="4" y="34" width="16" height="32" fill="none" stroke="#FFFFFF" stroke-width="1.4" />
+        <rect x="80" y="34" width="16" height="32" fill="none" stroke="#FFFFFF" stroke-width="1.4" />
+        <g transform="translate(35 35) scale(0.3)">
+            <polygon points="30,20 70,20 85,35 15,35" fill="#BFE0FF" />
+            <polygon points="15,35 50,90 30,20" fill="{DIAMOND_COLOR}" />
+            <polygon points="85,35 50,90 70,20" fill="#7DB8F5" />
+            <polygon points="15,35 85,35 50,90" fill="{ACCENT}" />
+            <polygon points="30,20 70,20 85,35 50,90 15,35" fill="none"
+                stroke="#FFFFFF" stroke-width="8" stroke-linejoin="round" />
+        </g>
+    </svg>
+    """)
+
+
 # Which mark each sport's header wears. Every league has its own now; the
 # plain gem remains the fallback, which is what the cross-sport landing page
 # ("home") wears since it belongs to no single league.
-SPORT_LOGOS = {"mlb": ballpark_logo, "nfl": nfl_logo, "nhl": nhl_logo}
+SPORT_LOGOS = {"mlb": ballpark_logo, "nfl": nfl_logo, "nhl": nhl_logo, "nba": nba_logo}
 
 
 def sport_logo(sport: str, size=64):

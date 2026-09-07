@@ -6,7 +6,7 @@ import db
 from nhl import db as ndb
 from nhl import teams as nteams
 
-SPORT_LABELS = {"mlb": "MLB", "nhl": "NHL", "nfl": "NFL"}
+SPORT_LABELS = {"mlb": "MLB", "nhl": "NHL", "nfl": "NFL", "nba": "NBA"}
 _LABEL_TO_SPORT = {v: k for k, v in SPORT_LABELS.items()}
 
 
@@ -78,6 +78,11 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
     target = target if target is not None else st.sidebar
     if active_sport == "nfl":
         _render_nfl_search(target, key_suffix)
+        return
+    if active_sport == "nba":
+        # No player pages yet at skeleton scope (standings + today's games
+        # only) — nothing to search into, so this stays quiet rather than
+        # showing a search box that leads nowhere.
         return
     if active_sport != "mlb":
         _render_nhl_search(target, key_suffix)

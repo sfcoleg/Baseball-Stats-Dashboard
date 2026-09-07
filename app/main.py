@@ -802,25 +802,34 @@ NFL_PAGES = [
     st.Page("nfl/pages/player.py", title="NFL Player", url_path="nfl-player"),  # search/deep-link only
 ]
 
+# NBA pages, same url_path convention as the other two — skeleton scope:
+# home (today's games) and standings only, matching where NFL/NHL started.
+NBA_PAGES = [
+    st.Page("nba/pages/home.py", title="NBA Home", url_path="nba"),
+    st.Page("nba/pages/standings.py", title="NBA Standings", url_path="nba-standings"),
+]
+
 # Same convention as the other sports: the profile page is registered so its
 # URL resolves, but kept off the tab strip — it is reached by searching or by
 # clicking a name.
 _NFL_NAV_HIDDEN = {"NFL Player"}
 
-# Every page from all three sports is registered (so every URL resolves), but
-# only the active sport's links get rendered below. Order matters here: "nfl"
-# and "nhl" are both three letters starting with "n", so the check has to be
-# on the exact prefix rather than anything looser.
-pg = st.navigation([LANDING_PAGE] + PAGES + NHL_PAGES + NFL_PAGES, position="hidden")
+# Every page from all four sports is registered (so every URL resolves), but
+# only the active sport's links get rendered below. Order matters here: nfl,
+# nhl and nba all start with "n", so the check is the exact prefix
+# ("nba"/"nba-") rather than anything looser like startswith("n").
+pg = st.navigation([LANDING_PAGE] + PAGES + NHL_PAGES + NFL_PAGES + NBA_PAGES, position="hidden")
 _url_path = pg.url_path or ""
 if _url_path in ("", "home"):
     # The landing page belongs to no league — the tab strip gives way to the
-    # three sport entries instead.
+    # four sport entries instead.
     active_sport = "home"
 elif _url_path == "nfl" or _url_path.startswith("nfl-"):
     active_sport = "nfl"
 elif _url_path == "nhl" or _url_path.startswith("nhl-"):
     active_sport = "nhl"
+elif _url_path == "nba" or _url_path.startswith("nba-"):
+    active_sport = "nba"
 else:
     active_sport = "mlb"
 
@@ -856,6 +865,8 @@ elif active_sport == "mlb":
     _nav_pages = [pg_ for pg_ in PAGES if pg_.title not in _MLB_NAV_HIDDEN]
 elif active_sport == "nfl":
     _nav_pages = [pg_ for pg_ in NFL_PAGES if pg_.title not in _NFL_NAV_HIDDEN]
+elif active_sport == "nba":
+    _nav_pages = NBA_PAGES
 else:
     _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 
@@ -969,7 +980,7 @@ sidebar.render_search(active_sport, target=_search_box, key_suffix="_top")
 
 # --- mobile: the sidebar exactly as it was before the top bar existed --------
 sidebar.render_sport_switcher(
-    active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0], "nfl": NFL_PAGES[0]}
+    active_sport, {"mlb": PAGES[0], "nhl": NHL_PAGES[0], "nfl": NFL_PAGES[0], "nba": NBA_PAGES[0]}
 )
 sidebar.render_search(active_sport)
 if active_sport == "home":
