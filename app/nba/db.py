@@ -105,6 +105,11 @@ def qualified_players(df: pd.DataFrame, min_games: int = MIN_GAMES) -> pd.DataFr
     return df[df["GP"] >= min_games]
 
 
+@st.cache_data(show_spinner=False, max_entries=2)
+def load_roster(team_id: int, db_mtime_val: float) -> pd.DataFrame:
+    return _read("SELECT * FROM roster WHERE TeamID = ?", (int(team_id),))
+
+
 def team_abbr_map(db_mtime_val: float) -> dict[int, str]:
     teams = load_teams(db_mtime_val)
     if teams.empty:

@@ -807,6 +807,7 @@ NFL_PAGES = [
 NBA_PAGES = [
     st.Page("nba/pages/home.py", title="NBA Home", url_path="nba"),
     st.Page("nba/pages/players.py", title="NBA Player Stats", url_path="nba-players"),
+    st.Page("nba/pages/team.py", title="NBA Team", url_path="nba-team"),
     st.Page("nba/pages/standings.py", title="NBA Standings", url_path="nba-standings"),
 ]
 

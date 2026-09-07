@@ -76,6 +76,35 @@ def fetch_player_stats(season: str) -> pd.DataFrame:
     return df
 
 
+def fetch_roster(team_id: int, season: str) -> pd.DataFrame:
+    """One team's roster, confirmed directly against Boston's real 2025-26
+    roster before writing this: PLAYER/NUM/POSITION/HEIGHT/WEIGHT/AGE/EXP
+    all come back as expected, no assumed columns."""
+    from nba_api.stats.endpoints import commonteamroster
+    df = commonteamroster.CommonTeamRoster(team_id=team_id, season=season).get_data_frames()[0]
+    if df.empty:
+        return df
+    return df[["TeamID", "PLAYER", "PLAYER_ID", "NUM", "POSITION", "HEIGHT", "WEIGHT", "AGE", "EXP"]]
+
+
+def fetch_all_rosters(teams: pd.DataFrame, season: str) -> pd.DataFrame:
+    """Every team's roster for `season`, one call per team (nba_api has no
+    league-wide roster endpoint) — 30 requests, spaced out the same way the
+    other ingests here space out theirs, since this is the same
+    stats.nba.com host as everything above."""
+    frames = []
+    for i, team_id in enumerate(teams["team_id"]):
+        try:
+            df = fetch_roster(int(team_id), season)
+            if not df.empty:
+                frames.append(df)
+        except Exception as e:
+            print(f"  roster fetch failed for team {team_id} ({e})", flush=True)
+        if i < len(teams) - 1:
+            time.sleep(0.6)
+    return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
+
+
 def fetch_scoreboard(date_str: str) -> pd.DataFrame:
     """Today's games. Genuinely empty outside the season (verified: the
     September offseason returns zero rows, not an error) — return an
@@ -136,6 +165,19 @@ if __name__ == "__main__":
         player_stats = fetch_player_stats(stats_season)
     print(f"player stats ({stats_season}): {len(player_stats)} players", flush=True)
 
+    # Rosters use the CURRENT season, not stats_season — a roster is "who
+    # plays here now", and that's real even in the preseason. Confirmed
+    # directly: Boston's 2026-27 roster already reflects a real trade
+    # (Mitchell Robinson now on the team, Vučević gone) that hadn't
+    # happened yet in the 2025-26 stats data. Team page joins this against
+    # player_stats, so anyone new shows real bio info with stats blank
+    # rather than last year's numbers under the wrong team.
+    print(f"=== fetching rosters for {season} ===", flush=True)
+    rosters = fetch_all_rosters(teams, season)
+    rosters["season"] = season if not rosters.empty else None
+    print(f"rosters: {len(rosters)} players across {rosters['TeamID'].nunique() if not rosters.empty else 0} teams",
+          flush=True)
+
     with sqlite3.connect(DB_PATH) as conn:
         _store(conn, "teams", teams)
         if not standings.empty:
@@ -143,6 +185,8 @@ if __name__ == "__main__":
         _store(conn, "todays_games", games)
         if not player_stats.empty:
             _store(conn, "player_stats", player_stats)
+        if not rosters.empty:
+            _store(conn, "roster", rosters)
         conn.commit()
     print(f"wrote {DB_PATH}", flush=True)
     print("DONE", flush=True)
