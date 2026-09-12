@@ -329,7 +329,12 @@ if _weekly_frames:
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
         font_color=_text_color,
         legend=dict(title_text="", font=dict(color=_text_color)),
-        xaxis=dict(color=_text_color), yaxis=dict(color=_text_color),
+        # The template sets xaxis/yaxis tickfont.color explicitly (to the
+        # racy CHART_DIM global), which is more specific than the axis-level
+        # `color` above and wins for the visible tick labels — has to be
+        # overridden here too, not just at the axis level.
+        xaxis=dict(color=_text_color, tickfont=dict(color=_text_color)),
+        yaxis=dict(color=_text_color, tickfont=dict(color=_text_color)),
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
