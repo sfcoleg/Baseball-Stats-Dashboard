@@ -4,6 +4,7 @@ Mirrors app/nhl/db.py in shape: cache on the database's mtime so a refresh
 invalidates everything at once, and return plain DataFrames the pages can
 style with the shared helpers in app/style.py."""
 import sqlite3
+import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -12,6 +13,17 @@ import pandas as pd
 import streamlit as st
 
 NFL_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nfl.db"
+
+
+def _normalize_name(text: str) -> str:
+    """Lowercase and strip accents so a plain-ASCII search like "ramirez"
+    finds "Ramírez" — same technique as app/db.py's normalize_text(),
+    duplicated rather than imported to keep this module independent of
+    the MLB side, matching how team colors etc. are kept local per sport."""
+    if not isinstance(text, str):
+        return ""
+    stripped = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in stripped if not unicodedata.combining(c)).lower()
 
 GAME_TYPE_LABELS = {
     "REG": "Regular season", "WC": "Wild Card", "DIV": "Divisional",
@@ -207,16 +219,22 @@ def search_players(query: str, db_mtime_val: float) -> pd.DataFrame:
 
     Returns one row per player rather than one per season — the same player
     appearing eleven times would push everyone else off a short results
-    list."""
+    list.
+
+    Matched accent-insensitively (typing "romo" style plain-ASCII input
+    finds an accented name too) — SQL LIKE can't do that itself, so the
+    name filter happens in pandas against a normalized column, after the
+    GROUP BY has already collapsed each player to one row."""
     if not query.strip():
         return pd.DataFrame()
     df = _read(
         "SELECT player_id, player_display_name, position, team, MAX(season) AS season "
-        "FROM player_season_stats WHERE player_display_name LIKE ? COLLATE NOCASE "
-        "GROUP BY player_id ORDER BY season DESC, player_display_name",
-        (f"%{query.strip()}%",),
+        "FROM player_season_stats GROUP BY player_id ORDER BY season DESC, player_display_name",
     )
-    return df
+    if df.empty:
+        return df
+    query_norm = _normalize_name(query.strip())
+    return df[df["player_display_name"].map(_normalize_name).str.contains(query_norm, na=False, regex=False)]
 
 
 def qualified(players: pd.DataFrame, kind: str) -> pd.DataFrame:

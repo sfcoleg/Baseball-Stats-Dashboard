@@ -6,6 +6,7 @@ DataFrames, and the pages style them with the shared helpers in
 app/style.py. Skeleton scope — teams, standings, today's games — matching
 where NFL/NHL started rather than their current full build."""
 import sqlite3
+import unicodedata
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -14,6 +15,17 @@ import pandas as pd
 import streamlit as st
 
 NBA_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nba.db"
+
+
+def _normalize_name(text: str) -> str:
+    """Lowercase and strip accents so a plain-ASCII search like "doncic"
+    finds "Dončić" — same technique as app/db.py's normalize_text(),
+    duplicated rather than imported to keep this module independent of
+    the MLB side, matching how team colors etc. are kept local per sport."""
+    if not isinstance(text, str):
+        return ""
+    stripped = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in stripped if not unicodedata.combining(c)).lower()
 
 
 def nba_db_mtime() -> float:
@@ -120,14 +132,20 @@ def team_abbr_map(db_mtime_val: float) -> dict[int, str]:
 def search_players(query: str, db_mtime_val: float) -> pd.DataFrame:
     """Name search over the ingested player_stats table — one row per
     player, same shape as nfl.db.search_players, so sidebar.py's search
-    pattern drops in unchanged."""
+    pattern drops in unchanged.
+
+    Matched accent-insensitively (typing "doncic" finds "Dončić") — SQL
+    LIKE can't do that itself, so this reads the whole table (582 players,
+    trivial) and filters in pandas against a normalized name column rather
+    than filtering in the query."""
     if not query.strip():
         return pd.DataFrame()
-    return _read(
-        "SELECT PLAYER_ID, PLAYER_NAME, TEAM_ABBREVIATION FROM player_stats "
-        "WHERE PLAYER_NAME LIKE ? COLLATE NOCASE ORDER BY PLAYER_NAME",
-        (f"%{query.strip()}%",),
-    )
+    df = _read("SELECT PLAYER_ID, PLAYER_NAME, TEAM_ABBREVIATION FROM player_stats")
+    if df.empty:
+        return df
+    query_norm = _normalize_name(query.strip())
+    matches = df[df["PLAYER_NAME"].map(_normalize_name).str.contains(query_norm, na=False, regex=False)]
+    return matches.sort_values("PLAYER_NAME")
 
 
 @st.cache_data(show_spinner=False, max_entries=32)

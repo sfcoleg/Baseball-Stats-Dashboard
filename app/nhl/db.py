@@ -6,6 +6,7 @@ Deliberately separate from the MLB db module: different database file,
 different tables, independent refresh."""
 import json
 import sqlite3
+import unicodedata
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -17,6 +18,17 @@ import streamlit as st
 NHL_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nhl.db"
 ELO_MODEL_PATH = Path(__file__).resolve().parent / "elo_model.json"
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
+
+
+def _normalize_name(text: str) -> str:
+    """Lowercase and strip accents so a plain-ASCII search like "pastrnak"
+    finds "Pastrňák" — same technique as app/db.py's normalize_text(),
+    duplicated rather than imported to keep this module independent of
+    the MLB side, matching how team colors etc. are kept local per sport."""
+    if not isinstance(text, str):
+        return ""
+    stripped = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in stripped if not unicodedata.combining(c)).lower()
 
 
 def nhl_db_mtime() -> float:
@@ -343,58 +355,66 @@ def load_birthplaces(season: int, db_mtime_val: float) -> pd.DataFrame:
 
 
 def search_players(query: str, season: int, db_mtime_val: float) -> pd.DataFrame:
-    """Skaters and goalies whose name contains `query` (case-insensitive),
-    for the Compare page's player pickers. Returns
-    playerId/Name/Tm/role/positionCode — role is 'Skater' or 'Goalie'."""
+    """Skaters and goalies whose name contains `query`, accent-insensitively
+    (typing "pastrnak" finds "Pastrňák") — for the Compare page's player
+    pickers. Returns playerId/Name/Tm/role/positionCode — role is 'Skater'
+    or 'Goalie'.
+
+    SQL LIKE can't match across accents, so this reads the season's full
+    roster (a few hundred rows, trivial) and filters in pandas against a
+    normalized name column instead of filtering in the query."""
     if not NHL_DB_PATH.exists() or not query.strip():
         return pd.DataFrame()
-    like = f"%{query.strip()}%"
     with sqlite3.connect(NHL_DB_PATH) as conn:
         try:
             skaters = pd.read_sql(
                 "SELECT playerId, skaterFullName AS Name, teamAbbrevs AS Tm, positionCode "
-                "FROM skaters WHERE season = ? AND skaterFullName LIKE ? COLLATE NOCASE",
-                conn, params=(season, like),
+                "FROM skaters WHERE season = ?",
+                conn, params=(season,),
             )
             skaters["role"] = "Skater"
         except pd.errors.DatabaseError:
             skaters = pd.DataFrame()
         try:
             goalies = pd.read_sql(
-                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm FROM goalies "
-                "WHERE season = ? AND goalieFullName LIKE ? COLLATE NOCASE",
-                conn, params=(season, like),
+                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm FROM goalies WHERE season = ?",
+                conn, params=(season,),
             )
             goalies["role"] = "Goalie"
             goalies["positionCode"] = "G"
         except pd.errors.DatabaseError:
             goalies = pd.DataFrame()
-    return pd.concat([skaters, goalies], ignore_index=True)
+    combined = pd.concat([skaters, goalies], ignore_index=True)
+    if combined.empty:
+        return combined
+    query_norm = _normalize_name(query.strip())
+    return combined[combined["Name"].map(_normalize_name).str.contains(query_norm, na=False, regex=False)]
 
 
 def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     """Search skaters and goalies by name across every cached season (not
-    just the current one) — used by the persistent sidebar search, so a
-    player who's since retired or changed teams is still findable. One row
-    per player: their most recent season and that season's team."""
+    just the current one), accent-insensitively (typing "pastrnak" finds
+    "Pastrňák") — used by the persistent sidebar search, so a player
+    who's since retired or changed teams is still findable. One row per
+    player: their most recent season and that season's team.
+
+    SQL LIKE can't match across accents, so the name filter happens in
+    pandas against a normalized column, after reading the full table."""
     if not NHL_DB_PATH.exists() or not query.strip():
         return pd.DataFrame(columns=["playerId", "Name", "Tm", "role", "season"])
-    like = f"%{query.strip()}%"
     with sqlite3.connect(NHL_DB_PATH) as conn:
         try:
             skaters = pd.read_sql(
-                "SELECT playerId, skaterFullName AS Name, teamAbbrevs AS Tm, season FROM skaters "
-                "WHERE skaterFullName LIKE ? COLLATE NOCASE",
-                conn, params=(like,),
+                "SELECT playerId, skaterFullName AS Name, teamAbbrevs AS Tm, season FROM skaters",
+                conn,
             )
             skaters["role"] = "Skater"
         except pd.errors.DatabaseError:
             skaters = pd.DataFrame()
         try:
             goalies = pd.read_sql(
-                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm, season FROM goalies "
-                "WHERE goalieFullName LIKE ? COLLATE NOCASE",
-                conn, params=(like,),
+                "SELECT playerId, goalieFullName AS Name, teamAbbrevs AS Tm, season FROM goalies",
+                conn,
             )
             goalies["role"] = "Goalie"
         except pd.errors.DatabaseError:
@@ -402,9 +422,13 @@ def search_players_all_seasons(query: str, db_mtime_val: float) -> pd.DataFrame:
     combined = pd.concat([skaters, goalies], ignore_index=True)
     if combined.empty:
         return pd.DataFrame(columns=["playerId", "Name", "Tm", "role", "season"])
+    query_norm = _normalize_name(query.strip())
+    matches = combined[combined["Name"].map(_normalize_name).str.contains(query_norm, na=False, regex=False)]
+    if matches.empty:
+        return pd.DataFrame(columns=["playerId", "Name", "Tm", "role", "season"])
     # A skater/goalie has at most one row per season per table — keep the
     # most recent season's row per player (their current team of record).
-    picked = combined.sort_values("season", ascending=False).drop_duplicates(subset="playerId", keep="first")
+    picked = matches.sort_values("season", ascending=False).drop_duplicates(subset="playerId", keep="first")
     return picked.sort_values("Name").reset_index(drop=True)
 
 
