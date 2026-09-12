@@ -928,7 +928,7 @@ with _bar:
         # Titles are prefixed ("NHL Standings") so they stay unambiguous in
         # the registry; the tab strip is already inside one sport, so it drops
         # the prefix.
-        st.page_link(pg_, label=pg_.title.replace("NHL ", "").replace("NFL ", ""))
+        st.page_link(pg_, label=pg_.title.replace("NHL ", "").replace("NFL ", "").replace("NBA ", ""))
     if active_sport == "home":
         # No tabs and no Settings link on the landing page — the container
         # stays registered (CSS keys on it) but renders nothing.
@@ -994,9 +994,9 @@ sidebar.render_sport_switcher(
 )
 sidebar.render_search(active_sport)
 if active_sport == "home":
-    # On the landing page the sidebar offers the three leagues rather than
+    # On the landing page the sidebar offers all four leagues rather than
     # one league's pages — otherwise it would silently show NHL's.
-    for _p, _label in ((PAGES[0], "MLB"), (NHL_PAGES[0], "NHL"), (NFL_PAGES[0], "NFL")):
+    for _p, _label in ((PAGES[0], "MLB"), (NHL_PAGES[0], "NHL"), (NFL_PAGES[0], "NFL"), (NBA_PAGES[0], "NBA")):
         st.sidebar.page_link(_p, label=_label)
 elif active_sport == "mlb":
     for p_ in PAGES:
@@ -1006,6 +1006,10 @@ elif active_sport == "nfl":
     for p_ in NFL_PAGES:
         if p_.title not in _NFL_NAV_HIDDEN:
             st.sidebar.page_link(p_, label=p_.title.replace("NFL ", ""))
+elif active_sport == "nba":
+    for p_ in NBA_PAGES:
+        if p_.title not in _NBA_NAV_HIDDEN:
+            st.sidebar.page_link(p_, label=p_.title.replace("NBA ", ""))
 else:
     for p_ in NHL_PAGES:
         if p_.title not in _NHL_NAV_HIDDEN:
