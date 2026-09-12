@@ -51,6 +51,11 @@ try:
     from nfl import teams as fteams
 except Exception:
     fdb = fteams = None
+try:
+    from nba import db as adb
+    from nba import teams as ateams
+except Exception:
+    adb = ateams = None
 
 
 def _mlb_logo(abbr: str) -> str | None:
@@ -489,6 +494,34 @@ def _nfl_games():
     return rows, None
 
 
+def _nba_games():
+    if adb is None:
+        return [], None
+    try:
+        mtime = adb.nba_db_mtime()
+        games = adb.load_todays_games(mtime)
+    except Exception:
+        return [], None
+    if games.empty:
+        return [], "No games today."
+    rows = []
+    for _, g in games.iterrows():
+        # gameStatus: 1 scheduled, 2 live, 3 final — the standard NBA
+        # stats-API status code, sturdier than pattern-matching the
+        # display text (which is a tip-off time like "7:00 pm ET" while
+        # scheduled, a clock like "Q3 5:32" while live, or "Final").
+        status_code = g.get("game_status")
+        rows.append({
+            "away": g["away_abbr"], "home": g["home_abbr"],
+            "away_logo": ateams.logo_url(g["away_abbr"]), "home_logo": ateams.logo_url(g["home_abbr"]),
+            "away_score": g.get("away_score") if status_code != 1 else None,
+            "home_score": g.get("home_score") if status_code != 1 else None,
+            "detail": str(g.get("game_status_text") or ""), "live": status_code == 2,
+            "color": ateams.color_for_abbr(g["home_abbr"]),
+        })
+    return rows, None
+
+
 def _games_html(rows):
     """One card per game in the Today's-Games idiom: a rail in the home
     team's colour, logos, the winner promoted, a LIVE chip while play is
@@ -552,8 +585,9 @@ def _games_html(rows):
 style.colored_header("Today", "headliners")
 _sections = [("MLB", _mlb_games(), "Home.py"),
              ("NHL", _nhl_games(), "nhl/pages/home.py"),
-             ("NFL", _nfl_games(), "nfl/pages/home.py")]
-_cols = st.columns(3)
+             ("NFL", _nfl_games(), "nfl/pages/home.py"),
+             ("NBA", _nba_games(), "nba/pages/home.py")]
+_cols = st.columns(4)
 for _col, (_label, (_rows, _note), _target) in zip(_cols, _sections):
     with _col:
         _label_html = (
@@ -583,7 +617,7 @@ for _col, (_label, (_rows, _note), _target) in zip(_cols, _sections):
             )
         st.page_link(_target, label=f"Go to {_label} →")
 
-st.caption("MLB and NHL scores update live. NFL results appear after games finish.")
+st.caption("MLB, NHL, and NBA scores update live. NFL results appear after games finish.")
 
 # --- League leaders: a face per sport ---------------------------------------
 def _leader_cards():

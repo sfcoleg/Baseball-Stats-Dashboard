@@ -115,3 +115,46 @@ def team_abbr_map(db_mtime_val: float) -> dict[int, str]:
     if teams.empty:
         return {}
     return dict(zip(teams["team_id"], teams["abbreviation"]))
+
+
+def search_players(query: str, db_mtime_val: float) -> pd.DataFrame:
+    """Name search over the ingested player_stats table — one row per
+    player, same shape as nfl.db.search_players, so sidebar.py's search
+    pattern drops in unchanged."""
+    if not query.strip():
+        return pd.DataFrame()
+    return _read(
+        "SELECT PLAYER_ID, PLAYER_NAME, TEAM_ABBREVIATION FROM player_stats "
+        "WHERE PLAYER_NAME LIKE ? COLLATE NOCASE ORDER BY PLAYER_NAME",
+        (f"%{query.strip()}%",),
+    )
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def load_player_season(player_id: int, db_mtime_val: float) -> dict | None:
+    df = _read("SELECT * FROM player_stats WHERE PLAYER_ID = ?", (int(player_id),))
+    return df.iloc[0].to_dict() if not df.empty else None
+
+
+@st.cache_data(show_spinner=False, max_entries=32)
+def load_player_bio(player_id: int, db_mtime_val: float) -> dict | None:
+    """Roster row for whichever team currently has this player — rosters
+    are keyed by TeamID, not PLAYER_ID alone, but a player is only ever on
+    one team's current roster at a time so a plain match is unambiguous."""
+    df = _read("SELECT * FROM roster WHERE PLAYER_ID = ?", (int(player_id),))
+    return df.iloc[0].to_dict() if not df.empty else None
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=64)
+def load_player_gamelog(player_id: int, season: str) -> pd.DataFrame:
+    """Recent games for one player, fetched live from stats.nba.com rather
+    than ingested daily for every player — game logs are only ever looked
+    at for the handful of players someone actually opens. 30-minute TTL:
+    long enough that browsing around doesn't refire it, short enough that
+    last night's game shows up without a manual refresh."""
+    try:
+        from nba_api.stats.endpoints import playergamelog
+        df = playergamelog.PlayerGameLog(player_id=int(player_id), season=season).get_data_frames()[0]
+    except Exception:
+        return pd.DataFrame()
+    return df

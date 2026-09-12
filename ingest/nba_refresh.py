@@ -105,23 +105,51 @@ def fetch_all_rosters(teams: pd.DataFrame, season: str) -> pd.DataFrame:
     return pd.concat(frames, ignore_index=True) if frames else pd.DataFrame()
 
 
+SCOREBOARD_COLS = [
+    "game_id", "game_status", "game_status_text", "game_et",
+    "home_team_id", "home_abbr", "home_score", "home_wins", "home_losses",
+    "away_team_id", "away_abbr", "away_score", "away_wins", "away_losses",
+]
+
+
 def fetch_scoreboard(date_str: str) -> pd.DataFrame:
-    """Today's games. Genuinely empty outside the season (verified: the
-    September offseason returns zero rows, not an error) — return an
-    empty, correctly-shaped frame rather than letting that surprise a
-    caller expecting a schedule."""
-    from nba_api.stats.endpoints import scoreboardv2
-    cols = ["GAME_ID", "GAME_DATE_EST", "HOME_TEAM_ID", "VISITOR_TEAM_ID",
-            "GAME_STATUS_TEXT", "ARENA_NAME"]
+    """Today's games with real scores. Genuinely empty outside the season
+    (verified: the September offseason returns zero rows, not an error) —
+    return an empty, correctly-shaped frame rather than letting that
+    surprise a caller expecting a schedule.
+
+    ScoreboardV3, not V2, per nba_api's own deprecation warning on V2: its
+    line score data is known-broken for 2025-26 games between Oct 22 and
+    Dec 25, 2025 (https://github.com/swar/nba_api/issues/596). V3 also
+    nests home/away as named objects (homeTeam/awayTeam) with a direct
+    `score` field, rather than V2's flat per-quarter columns that need
+    summing and a fragile guess at which row is home vs away — read via get_dict()
+    since get_data_frames() flattens that structure away. A `timeout` is
+    passed explicitly: without one, this call has hung indefinitely on
+    this host at least once with zero network activity, for reasons never
+    pinned down — better to fail fast and treat it as no games than hang
+    the whole daily refresh."""
+    from nba_api.stats.endpoints import scoreboardv3
     try:
-        sb = scoreboardv2.ScoreboardV2(game_date=date_str)
-        df = sb.get_data_frames()[0]
+        sb = scoreboardv3.ScoreboardV3(game_date=date_str, timeout=20)
+        games = sb.get_dict()["scoreboard"]["games"]
     except Exception as e:
         print(f"  scoreboard fetch failed ({e}) — treating as no games", flush=True)
-        return pd.DataFrame(columns=cols)
-    if df.empty:
-        return pd.DataFrame(columns=cols)
-    return df[[c for c in cols if c in df.columns]]
+        return pd.DataFrame(columns=SCOREBOARD_COLS)
+    if not games:
+        return pd.DataFrame(columns=SCOREBOARD_COLS)
+    rows = []
+    for g in games:
+        home, away = g.get("homeTeam") or {}, g.get("awayTeam") or {}
+        rows.append({
+            "game_id": g.get("gameId"), "game_status": g.get("gameStatus"),
+            "game_status_text": g.get("gameStatusText"), "game_et": g.get("gameEt"),
+            "home_team_id": home.get("teamId"), "home_abbr": home.get("teamTricode"),
+            "home_score": home.get("score"), "home_wins": home.get("wins"), "home_losses": home.get("losses"),
+            "away_team_id": away.get("teamId"), "away_abbr": away.get("teamTricode"),
+            "away_score": away.get("score"), "away_wins": away.get("wins"), "away_losses": away.get("losses"),
+        })
+    return pd.DataFrame(rows, columns=SCOREBOARD_COLS)
 
 
 def _store(conn: sqlite3.Connection, table: str, df: pd.DataFrame) -> None:

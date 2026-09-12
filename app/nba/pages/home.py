@@ -16,19 +16,26 @@ st.title("NBA")
 
 mtime = ndb.nba_db_mtime()
 games = ndb.load_todays_games(mtime)
-abbr_map = ndb.team_abbr_map(mtime)
 
 if games.empty:
     st.caption(f"No games today. {ndb.current_season_label()} season status: check Standings.")
 else:
     for _, g in games.iterrows():
-        away = abbr_map.get(g.get("VISITOR_TEAM_ID"), "?")
-        home = abbr_map.get(g.get("HOME_TEAM_ID"), "?")
+        away, home = g.get("away_abbr") or "?", g.get("home_abbr") or "?"
+        # gameStatus: 1 scheduled (no score yet), 2 live, 3 final.
+        status_code = g.get("game_status")
+        a_score = g.get("away_score") if status_code != 1 else None
+        h_score = g.get("home_score") if status_code != 1 else None
         with st.container(border=True):
             c1, c2, c3 = st.columns([2, 1, 2])
-            c1.markdown(f"**{nteams.nickname_for_abbr(away)}** ({away})")
+            a_line = f"**{nteams.nickname_for_abbr(away)}** ({away})"
+            h_line = f"**{nteams.nickname_for_abbr(home)}** ({home})"
+            if a_score is not None:
+                a_line += f" — {int(a_score)}"
+            if h_score is not None:
+                h_line += f" — {int(h_score)}"
+            c1.markdown(a_line)
+            live_chip = " 🔴" if status_code == 2 else ""
             c2.markdown(f"<div style='text-align:center;color:var(--dm-dim)'>"
-                       f"{g.get('GAME_STATUS_TEXT', '')}</div>", unsafe_allow_html=True)
-            c3.markdown(f"**{nteams.nickname_for_abbr(home)}** ({home})")
-            if g.get("ARENA_NAME"):
-                st.caption(g["ARENA_NAME"])
+                       f"{g.get('game_status_text', '')}{live_chip}</div>", unsafe_allow_html=True)
+            c3.markdown(h_line)

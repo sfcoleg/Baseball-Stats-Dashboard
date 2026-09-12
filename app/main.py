@@ -810,12 +810,15 @@ NBA_PAGES = [
     st.Page("nba/pages/players.py", title="NBA Player Stats", url_path="nba-players"),
     st.Page("nba/pages/team.py", title="NBA Team", url_path="nba-team"),
     st.Page("nba/pages/standings.py", title="NBA Standings", url_path="nba-standings"),
+    st.Page("nba/pages/compare.py", title="NBA Compare", url_path="nba-compare"),
+    st.Page("nba/pages/player.py", title="NBA Player", url_path="nba-player"),
 ]
 
 # Same convention as the other sports: the profile page is registered so its
 # URL resolves, but kept off the tab strip — it is reached by searching or by
 # clicking a name.
 _NFL_NAV_HIDDEN = {"NFL Player"}
+_NBA_NAV_HIDDEN = {"NBA Player"}
 
 # Every page from all four sports is registered (so every URL resolves), but
 # only the active sport's links get rendered below. Order matters here: nfl,
@@ -869,7 +872,7 @@ elif active_sport == "mlb":
 elif active_sport == "nfl":
     _nav_pages = [pg_ for pg_ in NFL_PAGES if pg_.title not in _NFL_NAV_HIDDEN]
 elif active_sport == "nba":
-    _nav_pages = NBA_PAGES
+    _nav_pages = [pg_ for pg_ in NBA_PAGES if pg_.title not in _NBA_NAV_HIDDEN]
 else:
     _nav_pages = [pg_ for pg_ in NHL_PAGES if pg_.title not in _NHL_NAV_HIDDEN]
 

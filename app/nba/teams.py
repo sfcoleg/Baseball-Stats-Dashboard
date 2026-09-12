@@ -44,6 +44,14 @@ def color_for_abbr(abbr: str) -> str:
     return TEAM_COLORS.get(abbr, "#666666")
 
 
+def logo_url(abbr: str) -> str | None:
+    """NBA's own CDN, keyed by team_id rather than abbreviation — confirmed
+    directly (cdn.nba.com/logos/nba/<team_id>/global/L/logo.svg returns
+    200), same shape as NHL's assets.nhle.com pattern in nhl/teams.py."""
+    team_id = _table().get(abbr, {}).get("team_id")
+    return f"https://cdn.nba.com/logos/nba/{team_id}/global/L/logo.svg" if team_id else None
+
+
 def name_for_abbr(abbr: str) -> str:
     return _table().get(abbr, {}).get("full_name") or abbr
 

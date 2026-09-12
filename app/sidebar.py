@@ -80,9 +80,7 @@ def render_search(active_sport: str = "mlb", target=None, key_suffix: str = "") 
         _render_nfl_search(target, key_suffix)
         return
     if active_sport == "nba":
-        # No player pages yet at skeleton scope (standings + today's games
-        # only) — nothing to search into, so this stays quiet rather than
-        # showing a search box that leads nowhere.
+        _render_nba_search(target, key_suffix)
         return
     if active_sport != "mlb":
         _render_nhl_search(target, key_suffix)
@@ -136,6 +134,32 @@ def _render_nfl_search(target=None, key_suffix: str = "") -> None:
         if target.button(label, key=f"sidebar_result_nfl{key_suffix}_{row['player_id']}", use_container_width=True):
             st.session_state["nfl_selected_player"] = str(row["player_id"])
             st.switch_page("nfl/pages/player.py")
+
+    if len(matches) > 8:
+        target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
+
+
+def _render_nba_search(target=None, key_suffix: str = "") -> None:
+    target = target if target is not None else st.sidebar
+    query = target.text_input(
+        "Search players", key=f"sidebar_search_query_nba{key_suffix}",
+        placeholder="e.g. Dončić, Wembanyama", label_visibility="collapsed",
+    )
+
+    from nba import db as adb
+    if not adb.NBA_DB_PATH.exists() or not query.strip():
+        return
+
+    matches = adb.search_players(query, adb.nba_db_mtime())
+    if matches.empty:
+        target.caption("No matches.")
+        return
+
+    for _, row in matches.head(8).iterrows():
+        label = f"{row['PLAYER_NAME']} ({row['TEAM_ABBREVIATION']})"
+        if target.button(label, key=f"sidebar_result_nba{key_suffix}_{row['PLAYER_ID']}", use_container_width=True):
+            st.session_state["nba_selected_player"] = int(row["PLAYER_ID"])
+            st.switch_page("nba/pages/player.py")
 
     if len(matches) > 8:
         target.caption(f"+{len(matches) - 8} more — refine your search to narrow it down.")
