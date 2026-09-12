@@ -2444,3 +2444,15 @@ def apply_theme(theme_type: str) -> None:
     _pio.templates["diamond"] = chart_template(theme_type)
     _base = "plotly_dark" if theme_type == "dark" else "plotly_white"
     _pio.templates.default = f"{_base}+diamond"
+
+
+def session_chart_text_color() -> str:
+    """The current session's real chart text color, resolved fresh.
+
+    A chart that sets `font_color=CHART_TEXT` is reading a module global
+    that apply_theme() can overwrite mid-render from a DIFFERENT visitor's
+    session on Streamlit Community Cloud (see _session_theme's docstring) —
+    that race is what put light-mode text in white. Charts whose legend or
+    axis labels need to be legible on their own (not just matching the
+    template's usual look) should call this instead of CHART_TEXT."""
+    return "#EFF3F9" if _session_theme() == "dark" else "#0C1725"

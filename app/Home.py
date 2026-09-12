@@ -318,10 +318,18 @@ if _weekly_frames:
         color_discrete_map=color_map, markers=True,
         category_orders={"Name": top10_hr["Name"].tolist()},
     )
+    # Resolved fresh per-render rather than read off style.CHART_TEXT —
+    # that module global is shared across every concurrent visitor's
+    # session on Streamlit Community Cloud and can get overwritten
+    # mid-render by someone else's theme, which is exactly what put white
+    # text on this chart in light mode.
+    _text_color = style.session_chart_text_color()
     fig.update_layout(
-        height=420, margin=dict(l=0, r=0, t=10, b=0),
+        height=620, margin=dict(l=0, r=0, t=10, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color=style.CHART_TEXT, legend_title_text="",
+        font_color=_text_color,
+        legend=dict(title_text="", font=dict(color=_text_color)),
+        xaxis=dict(color=_text_color), yaxis=dict(color=_text_color),
     )
     st.plotly_chart(fig, use_container_width=True)
 else:
