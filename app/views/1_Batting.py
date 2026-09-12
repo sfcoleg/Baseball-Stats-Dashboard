@@ -49,7 +49,7 @@ if not _bt.empty:
 # Power needs bat tracking merged in first (avg_bat_speed is one of its
 # five inputs), which is why this sits after that merge rather than beside
 # the other scores below.
-batting["Power"] = db.power_score(batting)
+batting["Power Score"] = db.power_score(batting)
 
 _pd = db.load_plate_discipline(season, db.db_mtime())
 if not _pd.empty and "total_pitches" in _pd.columns:
@@ -60,7 +60,7 @@ if not _pd.empty and "total_pitches" in _pd.columns:
         _pd = _pd.merge(batting[["mlbID", "swing_length"]], on="mlbID", how="left")
     _pd = _pd.assign(Eye=db.discipline_eye_score(_pd), Contact=db.contact_score(_pd))
     _pd_cols = {
-        "mlbID": "mlbID", "Eye": "Eye", "Contact": "Contact",
+        "mlbID": "mlbID", "Eye": "Eye Score", "Contact": "Contact Score",
         "chase_take": "Chase Take%",
         "shadow_out_take": "Shadow-out Take%", "shadow_in_swing": "Shadow-in Swing%",
         "two_strike_contact": "2-Strike Contact%",
@@ -214,7 +214,7 @@ with advanced_tab:
     )
 
 with statcast_tab:
-    _sc_extra = [c for c in ("Power", "sweet_spot_percent") if c in table_rows.columns]
+    _sc_extra = [c for c in ("Power Score", "sweet_spot_percent") if c in table_rows.columns]
     display = teams.add_team_abbr(table_rows)[
         ["Name", "Age", "Tm"] + _sc_extra +
         ["avg_exit_velo", "max_exit_velo", "hard_hit_pct", "barrel_pct",
@@ -230,12 +230,12 @@ with statcast_tab:
     st.dataframe(
         style.style_stats_table(
             display,
-            higher_better=["Power", "Sweet-Spot%", "Avg EV", "Max EV", "Hard-Hit%", "Barrel%",
+            higher_better=["Power Score", "Sweet-Spot%", "Avg EV", "Max EV", "Hard-Hit%", "Barrel%",
                            "xBA", "xSLG", "wOBA diff"],
             team_col="Tm",
             team_color_fn=teams.color_for_abbr,
             precision={
-                "Power": "{:.0f}", "Sweet-Spot%": "{:.1f}",
+                "Power Score": "{:.0f}", "Sweet-Spot%": "{:.1f}",
                 "Avg EV": "{:.1f}", "Max EV": "{:.1f}", "Hard-Hit%": "{:.1f}", "Barrel%": "{:.1f}",
                 "xBA": "{:.3f}", "xSLG": "{:.3f}", "wOBA diff": "{:+.3f}",
             },
@@ -315,9 +315,9 @@ with bb_tab:
         )
 
 with discipline_tab:
-    _eye_cols = [c for c in ("Eye", "Contact", "Chase Take%", "Shadow-out Take%",
+    _eye_cols = [c for c in ("Eye Score", "Contact Score", "Chase Take%", "Shadow-out Take%",
                              "Shadow-in Swing%", "2-Strike Contact%") if c in table_rows.columns]
-    have_eye = bool(_eye_cols) and table_rows["Eye"].notna().any()
+    have_eye = bool(_eye_cols) and table_rows["Eye Score"].notna().any()
     base_cols = ["Name", "Age", "Tm", "PA"] + (_eye_cols if have_eye else []) + [
         "chase_pct", "bat_speed", "xISO", "xOBP"
     ]
@@ -340,7 +340,7 @@ with discipline_tab:
             team_color_fn=teams.color_for_abbr,
             precision={
                 "Chase%": "{:.1f}", "Bat Speed": "{:.1f}", "xISO": "{:.3f}", "xOBP": "{:.3f}",
-                "Eye": "{:.0f}", "Contact": "{:.0f}", "Chase Take%": "{:.1f}",
+                "Eye Score": "{:.0f}", "Contact Score": "{:.0f}", "Chase Take%": "{:.1f}",
                 "Shadow-out Take%": "{:.1f}", "Shadow-in Swing%": "{:.1f}",
                 "2-Strike Contact%": "{:.1f}",
             },

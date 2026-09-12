@@ -1,6 +1,7 @@
 import sys
 from pathlib import Path
 
+import pandas as pd
 import plotly.express as px
 import streamlit as st
 
@@ -279,26 +280,52 @@ if season == today_pacific().year:
     st.divider()
 
 style.colored_header("Top 10 Home Run Leaders", "chart")
-top10_hr = batting.sort_values("HR", ascending=False).head(10).iloc[::-1]
-# Blues' scale minimum is near-white — with no explicit range_color, Plotly
-# auto-scales to the data's actual min/max, so a tight top-10 HR cluster
-# washes out to white by the bottom of the chart. Padding the low end below
-# the data's minimum keeps every bar a visible shade of blue.
-hr_min, hr_max = top10_hr["HR"].min(), top10_hr["HR"].max()
-color_floor = hr_min - (hr_max - hr_min) * 0.6 - 1
-fig = px.bar(
-    top10_hr, x="HR", y="Name", orientation="h",
-    color="HR", color_continuous_scale=style.BLUE_SCALE,
-    range_color=[color_floor, hr_max],
-    text="HR",
-)
-fig.update_layout(
-    showlegend=False, coloraxis_showscale=False,
-    height=400, margin=dict(l=0, r=0, t=10, b=0),
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-    font_color=style.CHART_TEXT,
-)
-st.plotly_chart(fig, use_container_width=True)
+top10_hr = teams.add_team_abbr(batting.sort_values("HR", ascending=False).head(10))
+
+# One line per player: their own home run log, resampled to a running
+# weekly total. Reused from db.player_home_runs (already handles hr_log's
+# two date formats) rather than re-deriving week buckets from scratch.
+_weekly_frames = []
+for _, _row in top10_hr.iterrows():
+    _hrs = db.player_home_runs(_row["mlbID"], season, mtime)
+    if _hrs.empty:
+        continue
+    _cum = _hrs.set_index("game_date").resample("W").size().cumsum()
+    _weekly_frames.append(pd.DataFrame({
+        "Week": _cum.index, "Cumulative HR": _cum.to_numpy(),
+        "Name": _row["Name"], "Tm": _row["Tm"],
+    }))
+
+if _weekly_frames:
+    hr_by_week = pd.concat(_weekly_frames, ignore_index=True)
+    # A common weekly axis so every player's line spans the full season —
+    # otherwise a player whose last HR was weeks ago just stops instead of
+    # holding flat, and one whose first HR came late starts partway across
+    # the chart instead of at zero.
+    all_weeks = pd.date_range(hr_by_week["Week"].min(), hr_by_week["Week"].max(), freq="W")
+    hr_by_week = pd.concat([
+        pd.DataFrame({
+            "Week": all_weeks,
+            "Cumulative HR": g.set_index("Week")["Cumulative HR"].reindex(all_weeks).ffill().fillna(0),
+            "Name": name, "Tm": g["Tm"].iloc[0],
+        })
+        for name, g in hr_by_week.groupby("Name", sort=False)
+    ], ignore_index=True)
+
+    color_map = {row["Name"]: teams.color_for_abbr(row["Tm"]) for _, row in top10_hr.iterrows()}
+    fig = px.line(
+        hr_by_week, x="Week", y="Cumulative HR", color="Name",
+        color_discrete_map=color_map, markers=True,
+        category_orders={"Name": top10_hr["Name"].tolist()},
+    )
+    fig.update_layout(
+        height=420, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font_color=style.CHART_TEXT, legend_title_text="",
+    )
+    st.plotly_chart(fig, use_container_width=True)
+else:
+    st.caption("No home run log data available for this season yet.")
 
 st.divider()
 

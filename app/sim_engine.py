@@ -123,7 +123,8 @@ def project(profile: dict, eye: float, contact: float, power: float,
     bb_c, k_c = pa_fit.get("bb_pct"), pa_fit.get("k_pct")
     if not bb_c or not k_c:
         return None
-    bb_rate = (bb_c["intercept"] + bb_c["eye"] * eye + bb_c["contact"] * contact) / 100.0
+    bb_rate = (bb_c["intercept"] + bb_c["eye"] * eye + bb_c["contact"] * contact
+               + bb_c.get("power", 0.0) * power) / 100.0
     k_rate = (k_c["intercept"] + k_c["eye"] * eye + k_c["contact"] * contact) / 100.0
     # A projection is not licence to produce an impossible plate appearance.
     bb_rate = float(min(max(bb_rate, 0.001), 0.35))

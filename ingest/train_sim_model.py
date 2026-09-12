@@ -177,12 +177,15 @@ def build(season: int, df: pd.DataFrame) -> dict:
 def fit_pa_model(season: int) -> dict:
     """Step 1 of a plate appearance: walk, strikeout, or ball in play.
 
-    BB% and K% each regress on BOTH Eye and Contact, not one apiece,
-    because the two interact — Schwarber walks a lot AND strikes out a
-    lot, which a single-variable mapping cannot represent. Ordinary least
-    squares on the season's qualified hitters; small, transparent, and
-    the R2 is reported so an unconvincing fit is visible rather than
-    buried.
+    BB% and K% each regress on Eye and Contact, not one apiece, because
+    the two interact — Schwarber walks a lot AND strikes out a lot, which
+    a single-variable mapping cannot represent. BB% also gets Power as a
+    third regressor: pitchers pitch around power hitters, which Eye/
+    Contact alone can't capture. Tested directly on 2026 data before
+    adding it — Power lifted BB%'s R2 from 0.474 to 0.516, while K%'s
+    barely moved (+0.001), so K% stays 2-var. Ordinary least squares on
+    the season's qualified hitters; small, transparent, and the R2 is
+    reported so an unconvincing fit is visible rather than buried.
     """
     import sqlite3
     import numpy as np
@@ -212,22 +215,23 @@ def fit_pa_model(season: int) -> dict:
     bat["Power"] = appdb.power_score(bat)
 
     df = bat.merge(disc[["mlbID", "Eye", "Contact"]], on="mlbID", how="inner")
-    df = df[(df["PA"] >= appdb.QUALIFIED_MIN_PA)].dropna(subset=["Eye", "Contact", "BB_PCT", "K_PCT"])
+    df = df[(df["PA"] >= appdb.QUALIFIED_MIN_PA)].dropna(subset=["Eye", "Contact", "Power", "BB_PCT", "K_PCT"])
 
-    def ols(target):
-        X = np.column_stack([np.ones(len(df)), df["Eye"].to_numpy(float),
-                             df["Contact"].to_numpy(float)])
+    def ols(target, use_power):
+        cols = ["Eye", "Contact"] + (["Power"] if use_power else [])
+        X = np.column_stack([np.ones(len(df))] + [df[c].to_numpy(float) for c in cols])
         y = df[target].to_numpy(float)
         coef, *_ = np.linalg.lstsq(X, y, rcond=None)
         pred = X @ coef
         ss_res = float(((y - pred) ** 2).sum())
         ss_tot = float(((y - y.mean()) ** 2).sum())
-        return {"intercept": float(coef[0]), "eye": float(coef[1]),
-                "contact": float(coef[2]),
-                "r2": 1 - ss_res / ss_tot if ss_tot else 0.0,
-                "resid_sd": float(np.sqrt(ss_res / max(len(df) - 3, 1)))}
+        out = {"intercept": float(coef[0])}
+        out.update({c.lower(): float(v) for c, v in zip(cols, coef[1:])})
+        out["r2"] = 1 - ss_res / ss_tot if ss_tot else 0.0
+        out["resid_sd"] = float(np.sqrt(ss_res / max(len(df) - len(cols) - 1, 1)))
+        return out
 
-    return {"n": int(len(df)), "bb_pct": ols("BB_PCT"), "k_pct": ols("K_PCT")}
+    return {"n": int(len(df)), "bb_pct": ols("BB_PCT", use_power=True), "k_pct": ols("K_PCT", use_power=False)}
 
 
 if __name__ == "__main__":
@@ -256,7 +260,8 @@ if __name__ == "__main__":
     print(f"  n={pa_model['n']} qualified hitters", flush=True)
     for key in ("bb_pct", "k_pct"):
         m = pa_model[key]
-        print(f"  {key}: {m['intercept']:+.2f} {m['eye']:+.3f}*Eye {m['contact']:+.3f}*Contact"
+        power_term = f" {m['power']:+.3f}*Power" if "power" in m else ""
+        print(f"  {key}: {m['intercept']:+.2f} {m['eye']:+.3f}*Eye {m['contact']:+.3f}*Contact{power_term}"
               f"   R2={m['r2']:.3f}  resid sd={m['resid_sd']:.2f}", flush=True)
 
     artifact = {"season": season, "buckets": model, "pa": pa_model,
