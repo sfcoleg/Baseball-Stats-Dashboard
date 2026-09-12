@@ -158,6 +158,10 @@ _MLB_MARK = ("https://www.mlbstatic.com/team-logos/league-on-light/1.svg" if _th
 # unlike the other two this one mark serves both themes.
 _NFL_MARK = "https://raw.githubusercontent.com/nflverse/nflverse-pbp/master/NFL.png"
 
+# Same single-mark-for-both-themes case as NFL — confirmed against the
+# live CDN (200) rather than assumed.
+_NBA_MARK = "https://cdn.nba.com/logos/leagues/logo-nba.svg"
+
 _CARD_SHADOW = (
     # Light mode: a faint grey hairline as well as the shadow. The cards are
     # near-white on a grey page, so the shadow alone left the edge to be
@@ -943,18 +947,18 @@ with _bar:
 # load and drop out of Streamlit's router.
 _sport_box = st.container(key="dm_sport")
 with _sport_box:
-    # With three sports the switch shows the other TWO, so it stays one click
-    # to anywhere rather than cycling. Labels are bare text and the league
-    # mark is painted by CSS below: st.page_link takes only a string label
-    # (or a single emoji as `icon`), so a real logo cannot be passed through
-    # it — and the routing has to stay an st.page_link, since a plain anchor
-    # full-page loads and drops out of Streamlit's router.
+    # Labels are bare text and the league mark is painted by CSS below:
+    # st.page_link takes only a string label (or a single emoji as `icon`),
+    # so a real logo cannot be passed through it — and the routing has to
+    # stay an st.page_link, since a plain anchor full-page loads and drops
+    # out of Streamlit's router.
     _SPORTS = {
         "mlb": (PAGES[0], "MLB", _MLB_MARK),
         "nhl": (NHL_PAGES[0], "NHL", _NHL_MARK),
         "nfl": (NFL_PAGES[0], "NFL", _NFL_MARK),
+        "nba": (NBA_PAGES[0], "NBA", _NBA_MARK),
     }
-    # All three are always shown now, rather than "the other two". With a
+    # All four are always shown, rather than "the others". With a
     # landing page that belongs to no league, "the others" was undefined
     # there — and a selector that shows every option makes the current one
     # legible as a choice rather than an absence.
