@@ -513,6 +513,41 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# --- motion: a separate block on purpose, not folded into the rule set
+# above. That block is unusually precisely tuned (see its own comments on
+# exact pixel gaps) — keeping every animation/transition rule here means
+# touching motion later never risks nudging that spacing work by accident.
+st.markdown(
+    "<style>"
+    # Page content fades and settles in on every rerun (season switch, a
+    # tab click, a filter changing) rather than popping in instantly.
+    "@keyframes dm-fade-in{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}"
+    "[data-testid='stMain']{animation:dm-fade-in 0.35s ease-out;}"
+    # Cards (bordered containers, game cards, headliner/milestone cards)
+    # lift slightly on hover — the cue that they're worth lingering on,
+    # not just static blocks of stats.
+    "[data-testid='stMain'] [data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock'],"
+    ".dm-game, .dm-nav-other-menu a"
+    "{transition:transform 0.18s ease, box-shadow 0.18s ease;}"
+    "[data-testid='stMain'] [data-testid='stLayoutWrapper'] > [data-testid='stVerticalBlock']:hover,"
+    ".dm-game:hover"
+    "{transform:translateY(-2px);box-shadow:0 6px 16px rgba(12,23,37,0.16);}"
+    # The top nav's page links and the sport switcher get a quick
+    # underline sweep instead of an instant color snap.
+    "[data-testid='stMain'] a, .st-key-dm_nav a, .st-key-dm_sport a"
+    "{transition:color 0.15s ease, opacity 0.15s ease;}"
+    # Buttons and the segmented sport control press down slightly rather
+    # than only changing color, so a click reads as a physical action.
+    "[data-testid='stMain'] button{transition:transform 0.12s ease, box-shadow 0.12s ease;}"
+    "[data-testid='stMain'] button:active{transform:scale(0.97);}"
+    # Streamlit's own spinner/skeleton already animates; this just keeps
+    # a data-table's rows from popping in row-by-row on a slow render —
+    # fading the whole grid in once is calmer than a visible cascade.
+    "[data-testid='stDataFrame']{animation:dm-fade-in 0.3s ease-out;}"
+    "</style>",
+    unsafe_allow_html=True,
+)
+
 HEADER_HEIGHT = "2.5rem"
 st.markdown(
     "<style>"

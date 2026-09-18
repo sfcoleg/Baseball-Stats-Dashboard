@@ -2404,6 +2404,13 @@ def chart_template(theme_type: str = "light"):
                                  tickfont=dict(color=CHART_DIM)),
             ),
             legend=dict(font=dict(color=CHART_DIM)),
+            # Smooth movement when a chart's own data changes in place
+            # (a season switch, a filter) rather than snapping — Plotly
+            # only animates this way on an in-place update, not a full
+            # remount, so it's a bonus on charts Streamlit happens to
+            # patch rather than something every chart is guaranteed to
+            # show; harmless either way since a remount just ignores it.
+            transition=dict(duration=450, easing="cubic-in-out"),
         ),
         data=dict(
             scatter=[_go.Scatter(marker=dict(line=dict(width=0.7, color=edge)))],
