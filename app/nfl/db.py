@@ -10,9 +10,16 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
+import requests
 import streamlit as st
 
 NFL_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nfl.db"
+
+# nflverse's current-club abbreviations occasionally differ from ESPN's, for
+# teams that relocated or rebranded: ESPN still answers "WSH"/"LAR", while
+# nflverse (and this site's own team table) uses "WAS"/"LA" for the same
+# clubs. Only entries that actually differ need to be here.
+_ESPN_ABBR = {"WSH": "WAS", "LAR": "LA"}
 
 
 def _normalize_name(text: str) -> str:
@@ -126,6 +133,54 @@ def current_week(games: pd.DataFrame) -> int | None:
     if not pending.empty:
         return int(pending["week"].min())
     return int(games["week"].max())
+
+
+@st.cache_data(show_spinner=False, ttl=20, max_entries=4)
+def load_live_scores(season: int, week: int) -> dict:
+    """Live score + clock for one regular-season week, keyed by
+    (away_abbr, home_abbr) — nflverse's own schedule (built once a day by
+    nfl_refresh.py, batch data with no in-game state) never sees a score
+    until well after the final whistle, so Sunday's slate would otherwise
+    sit at "—" all afternoon. ESPN's public scoreboard is unauthenticated
+    and free, the same kind of read MLB/NHL already do for their own live
+    strips. Empty on any fetch problem — the page just falls back to
+    whatever nflverse already has."""
+    try:
+        resp = requests.get(
+            "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard",
+            params={"seasontype": 2, "week": int(week), "year": int(season)},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        events = resp.json().get("events", [])
+    except Exception:
+        return {}
+
+    scores = {}
+    for ev in events:
+        comps = (ev.get("competitions") or [{}])[0]
+        competitors = comps.get("competitors") or []
+        if len(competitors) != 2:
+            continue
+        by_side = {c.get("homeAway"): c for c in competitors}
+        away, home = by_side.get("away"), by_side.get("home")
+        if not away or not home:
+            continue
+        away_abbr = _ESPN_ABBR.get(away["team"]["abbreviation"], away["team"]["abbreviation"])
+        home_abbr = _ESPN_ABBR.get(home["team"]["abbreviation"], home["team"]["abbreviation"])
+        status = comps.get("status") or {}
+        state = (status.get("type") or {}).get("state")  # "pre" | "in" | "post"
+        period = status.get("period")
+        clock = status.get("displayClock")
+        scores[(away_abbr, home_abbr)] = {
+            "state": state,
+            "away_score": int(away["score"]) if away.get("score") not in (None, "") else None,
+            "home_score": int(home["score"]) if home.get("score") not in (None, "") else None,
+            "period": period,
+            "clock": clock,
+            "detail": (status.get("type") or {}).get("shortDetail"),
+        }
+    return scores
 
 
 def team_schedule(games: pd.DataFrame, abbr: str) -> pd.DataFrame:

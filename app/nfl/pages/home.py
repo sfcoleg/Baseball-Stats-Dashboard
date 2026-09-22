@@ -41,28 +41,27 @@ if _last is not None:
 week = fdb.current_week(games)
 if week is not None:
     this_week = games[games["week"] == week]
-    label = fdb.GAME_TYPE_LABELS.get(this_week.iloc[0]["game_type"], "") if not this_week.empty else ""
+    game_type = this_week.iloc[0]["game_type"] if not this_week.empty else "REG"
+    label = fdb.GAME_TYPE_LABELS.get(game_type, "")
     style.colored_header(f"Week {week}" + (f" · {label}" if label and label != "Regular season" else ""), "headliners")
-    rows = []
-    for _, g in this_week.iterrows():
-        away, home = g["away_team"], g["home_team"]
-        if g["played"]:
-            score = f"{int(g['away_score'])} – {int(g['home_score'])}"
-            winner = away if g["away_score"] > g["home_score"] else (home if g["home_score"] > g["away_score"] else "tie")
-            status = "Final"
-        else:
-            score, winner, status = "—", "", str(g.get("gametime") or "")
-        rows.append({
-            "Away": away, "Home": home, "Score": score, "Status": status,
-            "Day": str(g.get("weekday") or ""), "Date": str(g.get("gameday") or ""),
-            "_winner": winner,
-        })
-    if rows:
-        table = pd.DataFrame(rows).drop(columns=["_winner"])
-        st.dataframe(
-            style.style_stats_table(table, team_col="Away", team_color_fn=fteams.color_for_abbr),
-            use_container_width=True, hide_index=True,
+    st.markdown(fstyle.WEEK_GAMES_CSS, unsafe_allow_html=True)
+
+    # A fragment so live scores can auto-refresh through the afternoon
+    # without losing the season/selectbox state above — same idiom as the
+    # MLB Today's Games page. Only regular-season weeks get the live fetch:
+    # ESPN's `week` numbering for the playoffs doesn't line up with
+    # nflverse's, so a postseason week would match the wrong games.
+    @st.fragment(run_every="30s")
+    def _week_grid():
+        fdb.load_live_scores.clear()
+        live_by_matchup = fdb.load_live_scores(season, week) if game_type == "REG" else {}
+        cards = "".join(
+            fstyle.week_game_card(g, live_by_matchup.get((g["away_team"], g["home_team"])), fteams)
+            for _, g in this_week.iterrows()
         )
+        st.markdown(f"<div class='wk-grid'>{cards}</div>", unsafe_allow_html=True)
+
+    _week_grid()
 
 # --- Standings snapshot -----------------------------------------------------
 if not standings.empty:
