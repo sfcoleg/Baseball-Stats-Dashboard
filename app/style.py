@@ -1463,6 +1463,54 @@ def _dm_diverging_cmap(theme_type: str, reverse: bool = False):
     return LinearSegmentedColormap.from_list("dm_diverge", colors)
 
 
+def _zebra_base(styler, df):
+    """A BASE colour + text on every cell, before anything else layers on
+    top — the fix for a specific bug: st.dataframe renders to a <canvas>,
+    so no CSS (including our own --dm-* variables) can reach it. Whatever
+    the Styler doesn't set explicitly falls back to STREAMLIT's own theme,
+    and Streamlit's theme follows the visitor's OS colour scheme rather
+    than this app's own in-app Light/Dark setting — on a dark-OS machine
+    with the app set to Light that left every unstyled dataframe (or every
+    plain cell in a styled one — Name, Age, any column with no gradient)
+    rendering with STREAMLIT's dark palette: near-white text on a
+    near-black grid, sitting right next to the rest of the page's own
+    light-mode chrome. Anything layered on afterwards (a gradient, a team
+    badge) still wins on its own cells since it's applied later.
+
+    Row-parity striping instead of a flat base — on tables running
+    50-800+ rows (Batting/Pitching leaderboards) a plain grid makes it
+    easy to lose your place scanning across 15 columns."""
+    theme_type = _session_theme()
+    base_bg = "#1E2735" if theme_type == "dark" else "#FBFCFE"
+    stripe_bg = "#26314A" if theme_type == "dark" else "#F2F7FD"
+    base_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
+    row_pos = {label: i for i, label in enumerate(df.index)}
+
+    def _zebra_row(row):
+        bg = stripe_bg if row_pos.get(row.name, 0) % 2 else base_bg
+        return [f"background-color: {bg}; color: {base_text}"] * len(row)
+
+    return styler.apply(_zebra_row, axis=1)
+
+
+def plain_table(df, precision=None):
+    """Return a pandas Styler for st.dataframe with just the theme-aware
+    base/zebra styling from style_stats_table (see _zebra_base) — no
+    gradient, no team badge. Use this instead of passing a raw DataFrame
+    straight to st.dataframe(): a raw, unstyled DataFrame is exactly the
+    "dark table on a light page" bug _zebra_base exists to fix, since
+    Streamlit only themes cells the Styler didn't touch using ITS OWN
+    OS-driven theme, not this app's Light/Dark setting."""
+    styler = df.style
+    float_cols = df.select_dtypes(include="float").columns
+    fmt = {c: "{:.3f}" for c in float_cols}
+    if precision:
+        fmt.update({c: f for c, f in precision.items() if c in df.columns})
+    if fmt:
+        styler = styler.format(fmt, na_rep="—")
+    return _zebra_base(styler, df)
+
+
 def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
                        team_color_fn=None, team_abbr_fn=None, precision=None):
     """Return a pandas Styler for st.dataframe with:
@@ -1493,29 +1541,7 @@ def style_stats_table(df, higher_better=None, lower_better=None, team_col=None,
     # global.
     theme_type = _session_theme()
     grad_low, grad_high = _resolve_table_gradient(theme_type)
-    # A BASE colour on every cell, before anything else layers on top.
-    # st.dataframe renders to a <canvas>, so no CSS can reach it — whatever
-    # the Styler doesn't set explicitly falls back to STREAMLIT's own theme,
-    # and Streamlit's theme follows the OS rather than our Light/Dark
-    # setting. On a dark-OS machine with the app set to Light that left
-    # plain cells (Name, Age, any column with no gradient) as near-white
-    # text on a white grid — invisible. The gradient and the team badge
-    # below deliberately overwrite this for their own cells.
-    base_bg = "#1E2735" if theme_type == "dark" else "#FBFCFE"
-    stripe_bg = "#26314A" if theme_type == "dark" else "#F2F7FD"
-    base_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
-
-    # Row-parity striping instead of a flat base — on tables running 50-800+
-    # rows (Batting/Pitching leaderboards) a plain grid makes it easy to lose
-    # your place scanning across 15 columns. Applied as the base layer so the
-    # gradient/team-badge overlays below still win on their own cells.
-    row_pos = {label: i for i, label in enumerate(df.index)}
-
-    def _zebra_row(row):
-        bg = stripe_bg if row_pos.get(row.name, 0) % 2 else base_bg
-        return [f"background-color: {bg}; color: {base_text}"] * len(row)
-
-    styler = styler.apply(_zebra_row, axis=1)
+    styler = _zebra_base(styler, df)
 
     # background_gradient renders a NaN cell solid BLACK (matplotlib's
     # default "bad" color) with near-white text on top — worse than any
@@ -1634,7 +1660,7 @@ def baseball_diamond(starters: dict, team_color: str) -> str:
             photo_html = (
                 f"<div style='width:56px;height:56px;border-radius:50%;background:var(--dm-line);"
                 f"border:2px solid {team_color};display:flex;align-items:center;justify-content:center;"
-                f"font-size:0.7rem;color:#FAFAFA;margin:0 auto'>?</div>"
+                f"font-size:0.7rem;color:var(--dm-text);margin:0 auto'>?</div>"
             )
         note_html = (
             f"<div style='font-size:0.6rem;color:var(--dm-amber);text-shadow:{text_glow}'>{note}</div>"
@@ -1730,13 +1756,13 @@ def radar_chart(categories, values_a, values_b, name_a, name_b, color_a=ACCENT, 
     fig.update_layout(
         polar=dict(
             radialaxis=dict(visible=True, range=[0, 100], color=CHART_TEXT, gridcolor=_hex_to_rgba(CHART_GRID, 0.6)),
-            angularaxis=dict(color="#FAFAFA"),
+            angularaxis=dict(color=CHART_TEXT),
             bgcolor="rgba(0,0,0,0)",
         ),
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=-0.15),
         paper_bgcolor="rgba(0,0,0,0)",
-        font_color="#FAFAFA",
+        font_color=CHART_TEXT,
         height=420,
         margin=dict(l=50, r=50, t=30, b=30),
     )
@@ -1826,11 +1852,11 @@ def ump_zone_plot(pitches: list[dict]) -> "go.Figure":
     fig = go.Figure()
     fig.add_shape(
         type="rect", x0=-0.708, x1=0.708, y0=_UMP_REF_BOT, y1=_UMP_REF_TOP,
-        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(250,250,250,0.04)",
+        line=dict(color=CHART_TEXT, width=2), fillcolor=_hex_to_rgba(CHART_TEXT, 0.04),
     )
     fig.add_shape(
         type="rect", x0=-0.829, x1=0.829, y0=_UMP_REF_BOT - 0.121, y1=_UMP_REF_TOP + 0.121,
-        line=dict(color="rgba(250,250,250,0.35)", width=1, dash="dot"), fillcolor="rgba(0,0,0,0)",
+        line=dict(color=_hex_to_rgba(CHART_TEXT, 0.35), width=1, dash="dot"), fillcolor="rgba(0,0,0,0)",
     )
     fig.add_shape(
         type="path",
@@ -1859,7 +1885,7 @@ def ump_zone_plot(pitches: list[dict]) -> "go.Figure":
             mode="markers", name=label,
             marker=dict(
                 size=size, color=color, opacity=opacity, symbol=symbol,
-                line=dict(color="#FAFAFA", width=1.5 if not ok else 0),
+                line=dict(color=CHART_TEXT, width=1.5 if not ok else 0),
             ),
             hovertext=[
                 (f"Called {p['call']} — "
@@ -1873,7 +1899,7 @@ def ump_zone_plot(pitches: list[dict]) -> "go.Figure":
     fig.update_xaxes(range=[-2.0, 2.0], visible=False, fixedrange=True)
     fig.update_yaxes(range=[0.4, 4.5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         height=480, margin=dict(l=10, r=10, t=10, b=10),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
     )
@@ -1905,12 +1931,12 @@ def batter_zone_heatmap_chart(spray: pd.DataFrame) -> "go.Figure":
     ))
     fig.add_shape(
         type="rect", x0=-0.708, x1=0.708, y0=sz_bottom, y1=sz_top,
-        line=dict(color="#FAFAFA", width=2), fillcolor="rgba(0,0,0,0)",
+        line=dict(color=CHART_TEXT, width=2), fillcolor="rgba(0,0,0,0)",
     )
     fig.update_xaxes(range=[-2.5, 2.5], visible=False, fixedrange=True)
     fig.update_yaxes(range=[0, 5], visible=False, fixedrange=True, scaleanchor="x", scaleratio=1)
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         height=500, margin=dict(l=10, r=10, t=10, b=10),
     )
     return fig
@@ -2091,7 +2117,7 @@ def spray_chart_2d(batted_balls: pd.DataFrame, field_lines: list, colors: dict) 
     # (set by the caller, matching this ~800:490 ratio) fixes it instead.
     fig.update_layout(
         width=800, height=490, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         # No scaleanchor: forcing a strict 1:1 pixel scale fights the fixed
         # width/height above in a way that keeps blowing the range out to
         # several times its intended size (Plotly recomputing to satisfy
@@ -2196,7 +2222,7 @@ def trajectory_3d_chart(batted_balls: pd.DataFrame, field_lines: list, colors: d
 
     fig.update_layout(
         height=600, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         scene=dict(
             xaxis=dict(visible=False, range=[-max_x_abs * 1.05, max_x_abs * 1.05]),
             yaxis=dict(visible=False, range=[min_y - 10, max_y * 1.05]),

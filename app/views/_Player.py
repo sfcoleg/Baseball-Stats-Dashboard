@@ -658,7 +658,7 @@ if pitching is not None and is_pitcher_role:
                         fig.add_trace(go.Scatter(
                             x=[prow["horz_break"]], y=[prow["vert_break"]], mode="markers+text",
                             name=prow["pitch_name"], text=[prow["pitch_name"]], textposition="top center",
-                            textfont=dict(size=11, color="#FAFAFA"),
+                            textfont=dict(size=11, color=style.CHART_TEXT),
                             marker=dict(size=14, color=style.PITCH_COLORS.get(prow["pitch_name"], style.CHART_TEXT),
                                         line=dict(width=2, color=style.CHART_TEXT)),
                             showlegend=False,
@@ -789,7 +789,7 @@ if pitching is not None and is_pitcher_role:
                             cx, cy = centers[c]
                             annotations.append(dict(
                                 x=cx, y=cy + node_h / 2 + 0.025, xref="paper", yref="paper",
-                                text=f"{b}-{s}", showarrow=False, font=dict(color="#FAFAFA", size=12),
+                                text=f"{b}-{s}", showarrow=False, font=dict(color=style.CHART_TEXT, size=12),
                             ))
                             count_df = pitches[(pitches["balls"] == b) & (pitches["strikes"] == s)]
                             mix = count_df["pitch_name"].value_counts()

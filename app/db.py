@@ -1786,7 +1786,7 @@ _SPRAY_EVENT_LABELS = {
 }
 SPRAY_EVENT_COLORS = {
     "Single": "#7CFC9A", "Double": "#3B82F6", "Triple": "#C084FC", "Home Run": "#F5B942",
-    "Error": "#F87171", "Out": "#6B7280", "In Play": "#FAFAFA",
+    "Error": "#F87171", "Out": "#6B7280", "In Play": "#94A3B8",
 }
 
 

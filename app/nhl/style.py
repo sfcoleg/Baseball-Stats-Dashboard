@@ -212,7 +212,7 @@ def rink_layout(fig: "go.Figure", height: int = 460, **kwargs) -> "go.Figure":
     """Axes/aspect settings every rink chart shares."""
     fig.update_layout(
         height=height, margin=dict(l=10, r=10, t=kwargs.pop("top", 10), b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color="#FAFAFA",
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
         # constrain="domain" is what keeps this robust: with the default
         # (constrain="range"), plotly satisfies the 1:1 scaleanchor by
         # EXPANDING an axis range, and on Streamlit's first layout pass (when
