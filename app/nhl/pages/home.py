@@ -65,12 +65,21 @@ def _todays_games_strip():
             status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Final</span>"
         else:
             status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Scheduled</span>"
+        wp_html = ""
+        if not started:
+            p_home = ndb.game_win_prob(home["abbrev"], away["abbrev"])
+            if p_home is not None:
+                wp_html = nstyle.win_prob_bar_html(
+                    (1 - p_home) * 100, p_home * 100, away["abbrev"], home["abbrev"],
+                    nteams.color_for_abbr(away["abbrev"]), nteams.color_for_abbr(home["abbrev"]),
+                )
         card_html = (
             "<div style='flex:0 0 auto;width:160px;background-color:var(--dm-surface-mute);border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
             f"<div style='margin-bottom:4px'>{status_html}</div>"
             + _team_row(away.get("logo"), away["abbrev"], away_txt)
             + _team_row(home.get("logo"), home["abbrev"], home_txt)
+            + wp_html
             + "</div>"
         )
         cards.append((0 if is_live else 1, card_html))

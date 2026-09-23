@@ -11,6 +11,7 @@ import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 from nhl import db as ndb
+from nhl import style as nstyle
 from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Today's Games | Diamond Metrics", layout="wide")
@@ -87,7 +88,7 @@ def _render_games(date_str: str):
                 )
             acol, mid, hcol = st.columns([3, 2, 3])
 
-            def _team_col(team, color, prob):
+            def _team_col(team, color):
                 logo_html = (
                     f"<img src='{team.get('logo', '')}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if team.get("logo") else ""
@@ -102,15 +103,9 @@ def _render_games(date_str: str):
                 record = records.get(team["abbrev"])
                 if record:
                     st.caption(f"Record: {record}")
-                if prob is not None:
-                    st.markdown(
-                        f"<div style='font-size:1.3rem;font-weight:700'>{prob * 100:.0f}%</div>"
-                        f"<div style='color:var(--dm-dim)'>win probability</div>",
-                        unsafe_allow_html=True,
-                    )
 
             with acol:
-                _team_col(away, away_color, (1 - p_home) if p_home is not None else None)
+                _team_col(away, away_color)
 
             with mid:
                 if started:
@@ -131,6 +126,13 @@ def _render_games(date_str: str):
                 if venue:
                     st.markdown(f"<div style='text-align:center;color:var(--dm-dim);font-size:0.85rem'>{venue}</div>",
                                 unsafe_allow_html=True)
+                if not started and p_home is not None:
+                    st.plotly_chart(
+                        nstyle.win_prob_bar((1 - p_home) * 100, p_home * 100, away["abbrev"], home["abbrev"],
+                                            away_color, home_color),
+                        use_container_width=True, config={"displayModeBar": False},
+                        key=f"wp{game['id']}",
+                    )
                 if started:
                     if st.button("Game Center", key=f"gm{game['id']}", use_container_width=True):
                         st.session_state["nhl_selected_game"] = int(game["id"])
@@ -140,7 +142,7 @@ def _render_games(date_str: str):
                     st.switch_page("nhl/pages/team.py")
 
             with hcol:
-                _team_col(home, home_color, p_home)
+                _team_col(home, home_color)
 
 
 _render_games(date_str)

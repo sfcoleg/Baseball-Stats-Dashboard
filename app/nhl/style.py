@@ -245,6 +245,57 @@ def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
     return fig
 
 
+def win_prob_bar(away_pct: float, home_pct: float, away_abbr: str, home_abbr: str,
+                  away_color: str, home_color: str, height: int = 70) -> "go.Figure":
+    """A single horizontal stacked bar splitting pregame win probability
+    between the two teams — the graphical equivalent of the plain "73%"
+    text this replaces on Today's Games (a real Streamlit element, used
+    where each game already renders in its own st.container/st.columns).
+    For the Home page's slate strip, which builds one big HTML string
+    per card rather than individual widgets, use win_prob_bar_html()
+    below instead — a real st.plotly_chart can't be nested inside HTML
+    built by a single st.markdown() call. `away_pct`/`home_pct` are 0-100
+    and should sum to ~100 (from db.game_win_prob(), already normalized)."""
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=[away_pct], y=[""], orientation="h", name=away_abbr,
+        marker_color=away_color, text=f"{away_abbr} {away_pct:.0f}%",
+        textposition="inside", insidetextanchor="start", hoverinfo="skip",
+    ))
+    fig.add_trace(go.Bar(
+        x=[home_pct], y=[""], orientation="h", name=home_abbr,
+        marker_color=home_color, text=f"{home_abbr} {home_pct:.0f}%",
+        textposition="inside", insidetextanchor="end", hoverinfo="skip",
+    ))
+    fig.update_layout(
+        barmode="stack", showlegend=False, height=height,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(color="#FFFFFF", size=13),
+        xaxis=dict(visible=False, range=[0, 100]),
+        yaxis=dict(visible=False),
+    )
+    return fig
+
+
+def win_prob_bar_html(away_pct: float, home_pct: float, away_abbr: str, home_abbr: str,
+                       away_color: str, home_color: str) -> str:
+    """HTML/CSS equivalent of win_prob_bar() for embedding inside a larger
+    hand-built HTML card (see the Home page's slate strip) where a real
+    Plotly widget can't be nested. Same two-segment proportional bar,
+    just as a flex div instead of a figure."""
+    return (
+        "<div style='display:flex;width:100%;height:20px;border-radius:5px;overflow:hidden;margin-top:4px'>"
+        f"<div style='width:{away_pct:.1f}%;background:{away_color};display:flex;align-items:center;"
+        f"justify-content:center;color:#FFFFFF;font-size:0.62rem;font-weight:700;white-space:nowrap;overflow:hidden'>"
+        f"{away_abbr} {away_pct:.0f}%</div>"
+        f"<div style='width:{home_pct:.1f}%;background:{home_color};display:flex;align-items:center;"
+        f"justify-content:center;color:#FFFFFF;font-size:0.62rem;font-weight:700;white-space:nowrap;overflow:hidden'>"
+        f"{home_abbr} {home_pct:.0f}%</div>"
+        "</div>"
+    )
+
+
 def glossary_link():
     """Small, muted link to the NHL stat glossary — call near the top of a
     stat-heavy page, the hockey analog of the MLB side's
