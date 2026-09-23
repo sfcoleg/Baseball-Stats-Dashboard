@@ -102,10 +102,10 @@ for _, row in games.iterrows():
                         if not batters.empty:
                             st.caption(f"{abbr} Batting")
                             st.dataframe(
-                                batters[["Name", "Pos", "AB", "R", "H", "HR", "RBI", "BB", "SO"]],
+                                style.plain_table(batters[["Name", "Pos", "AB", "R", "H", "HR", "RBI", "BB", "SO"]]),
                                 hide_index=True, use_container_width=True,
                             )
                         pitchers = pd.DataFrame(player_box[side]["pitchers"])
                         if not pitchers.empty:
                             st.caption(f"{abbr} Pitching")
-                            st.dataframe(pitchers, hide_index=True, use_container_width=True)
+                            st.dataframe(style.plain_table(pitchers), hide_index=True, use_container_width=True)

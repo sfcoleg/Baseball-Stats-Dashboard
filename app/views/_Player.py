@@ -149,7 +149,7 @@ def _splits_table(splits: dict, columns: list):
     if not rows:
         st.caption("No split data available for this season.")
         return
-    st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+    st.dataframe(style.plain_table(pd.DataFrame(rows)), use_container_width=True, hide_index=True)
 
 
 def _stat_table(row, spec):
@@ -166,7 +166,7 @@ def _stat_table(row, spec):
         .rename({c: lbl for c, lbl in present})
         .to_frame().T
     )
-    st.dataframe(frame, use_container_width=True, hide_index=True)
+    st.dataframe(style.plain_table(frame), use_container_width=True, hide_index=True)
 
 
 all_batting = db.load_batting(season, mtime)
@@ -456,12 +456,14 @@ if batting is not None and is_batter_role:
         # percentages — scale to 0-100 here so "GB%" actually reads as
         # a percent instead of a bare 0.46.
         st.dataframe(
-            (bb_row[["gb_rate", "fb_rate", "ld_rate", "pu_rate", "pull_rate", "straight_rate", "oppo_rate"]] * 100)
-            .round(1)
-            .rename(columns={
-                "gb_rate": "GB%", "fb_rate": "FB%", "ld_rate": "LD%", "pu_rate": "PU%",
-                "pull_rate": "Pull%", "straight_rate": "Straight%", "oppo_rate": "Oppo%",
-            }),
+            style.plain_table(
+                (bb_row[["gb_rate", "fb_rate", "ld_rate", "pu_rate", "pull_rate", "straight_rate", "oppo_rate"]] * 100)
+                .round(1)
+                .rename(columns={
+                    "gb_rate": "GB%", "fb_rate": "FB%", "ld_rate": "LD%", "pu_rate": "PU%",
+                    "pull_rate": "Pull%", "straight_rate": "Straight%", "oppo_rate": "Oppo%",
+                })
+            ),
             use_container_width=True,
             hide_index=True,
         )
@@ -496,16 +498,18 @@ if batting is not None and is_batter_role:
                 "ground is weak contact. Line Drives is our own estimate from raw Statcast spray angle, "
                 "not an official Statcast number."
             )
-            st.dataframe(cross.round(1), use_container_width=True)
+            st.dataframe(style.plain_table(cross.round(1)), use_container_width=True)
     if not bt_row.empty:
         st.caption("Bat tracking — 2023+ only.")
         st.dataframe(
-            bt_row[["avg_bat_speed", "swing_length", "hard_swing_rate", "squared_up_per_swing", "blast_per_swing"]]
-            .rename(columns={
-                "avg_bat_speed": "Bat Speed (mph)", "swing_length": "Swing Length (ft)",
-                "hard_swing_rate": "Hard-Swing%", "squared_up_per_swing": "Squared-Up%",
-                "blast_per_swing": "Blast%",
-            }),
+            style.plain_table(
+                bt_row[["avg_bat_speed", "swing_length", "hard_swing_rate", "squared_up_per_swing", "blast_per_swing"]]
+                .rename(columns={
+                    "avg_bat_speed": "Bat Speed (mph)", "swing_length": "Swing Length (ft)",
+                    "hard_swing_rate": "Hard-Swing%", "squared_up_per_swing": "Squared-Up%",
+                    "blast_per_swing": "Blast%",
+                })
+            ),
             use_container_width=True,
             hide_index=True,
         )
@@ -513,8 +517,10 @@ if batting is not None and is_batter_role:
     std_tab, adv_tab, sc_tab, splits_tab = st.tabs(["Standard", "Advanced", "Statcast", "Splits"])
     with std_tab:
         st.dataframe(
-            batting[["G", "PA", "AB", "R", "H", "2B", "3B", "HR", "RBI", "BB", "SO", "SB", "CS"]]
-            .to_frame().T,
+            style.plain_table(
+                batting[["G", "PA", "AB", "R", "H", "2B", "3B", "HR", "RBI", "BB", "SO", "SB", "CS"]]
+                .to_frame().T
+            ),
             use_container_width=True,
             hide_index=True,
         )
@@ -573,8 +579,10 @@ if pitching is not None and is_pitcher_role:
     arsenal_tab = tabs[4] if is_pitcher else None
     with std_tab:
         st.dataframe(
-            pitching[["G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]]
-            .to_frame().T,
+            style.plain_table(
+                pitching[["G", "GS", "W", "L", "SV", "IP", "ERA", "WHIP", "SO", "BB", "HR"]]
+                .to_frame().T
+            ),
             use_container_width=True,
             hide_index=True,
         )
@@ -827,7 +835,9 @@ if not fielding.empty:
     style.colored_header("Fielding", "fielding", color)
     st.caption("Outs Above Average (OAA) by position — Statcast.")
     st.dataframe(
-        fielding[["Pos", "OAA", "FRP", "success_rate"]].rename(columns={"success_rate": "Success Rate"}),
+        style.plain_table(
+            fielding[["Pos", "OAA", "FRP", "success_rate"]].rename(columns={"success_rate": "Success Rate"})
+        ),
         use_container_width=True,
         hide_index=True,
     )
@@ -844,19 +854,23 @@ if not fielding.empty:
             with cols[0]:
                 if not framing.empty:
                     st.dataframe(
-                        framing[["framing_runs", "framing_pct"]].rename(
-                            # framing_pct is Savant's shadow-zone strike RATE (0-1),
-                            # not a percentile — previously mislabeled here.
-                            columns={"framing_runs": "Framing Runs", "framing_pct": "Strike Rate"}
+                        style.plain_table(
+                            framing[["framing_runs", "framing_pct"]].rename(
+                                # framing_pct is Savant's shadow-zone strike RATE (0-1),
+                                # not a percentile — previously mislabeled here.
+                                columns={"framing_runs": "Framing Runs", "framing_pct": "Strike Rate"}
+                            )
                         ),
                         use_container_width=True, hide_index=True,
                     )
             with cols[1]:
                 if not poptime.empty:
                     st.dataframe(
-                        poptime[["pop_2b", "pop_3b", "exchange_time"]].rename(
-                            columns={"pop_2b": "Pop Time 2B (s)", "pop_3b": "Pop Time 3B (s)",
-                                     "exchange_time": "Exchange (s)"}
+                        style.plain_table(
+                            poptime[["pop_2b", "pop_3b", "exchange_time"]].rename(
+                                columns={"pop_2b": "Pop Time 2B (s)", "pop_3b": "Pop Time 3B (s)",
+                                         "exchange_time": "Exchange (s)"}
+                            )
                         ),
                         use_container_width=True, hide_index=True,
                     )
@@ -866,8 +880,10 @@ if not fielding.empty:
         if not jump.empty:
             st.caption("Outfielder jump — reaction/burst/route distance vs. league average (feet), on 2-star-or-harder plays.")
             st.dataframe(
-                jump[["reaction", "burst", "routing"]].rename(
-                    columns={"reaction": "Reaction (ft)", "burst": "Burst (ft)", "routing": "Routing (ft)"}
+                style.plain_table(
+                    jump[["reaction", "burst", "routing"]].rename(
+                        columns={"reaction": "Reaction (ft)", "burst": "Burst (ft)", "routing": "Routing (ft)"}
+                    )
                 ),
                 use_container_width=True, hide_index=True,
             )

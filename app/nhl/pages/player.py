@@ -135,7 +135,7 @@ if seasons_on_file:
     ndb.STAT_LABELS.setdefault("GSAx", "GSAx")
     present = [c for c in cols if c in career_display.columns]
     st.dataframe(
-        career_display[present].rename(columns=ndb.STAT_LABELS),
+        style.plain_table(career_display[present].rename(columns=ndb.STAT_LABELS)),
         use_container_width=True, hide_index=True,
     )
 else:

@@ -100,7 +100,7 @@ def _wrc_decline_piece():
             "with fewer than 5 batted balls that season is blank — too small a sample to mean anything."
         )
         ops_df = pd.read_csv(ops_path)
-        st.dataframe(ops_df, use_container_width=True, hide_index=True, height=420)
+        st.dataframe(style.plain_table(ops_df), use_container_width=True, hide_index=True, height=420)
     else:
         st.caption("Contact-quality-by-bucket follow-up not generated yet.")
 

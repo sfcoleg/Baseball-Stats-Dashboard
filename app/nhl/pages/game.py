@@ -272,7 +272,7 @@ def _render():
             })
             total = pd.DataFrame({"Period": ["Total"], a_abbr: [table[a_abbr].sum()], h_abbr: [table[h_abbr].sum()]})
             st.markdown("**Shots on goal by period**")
-            st.dataframe(pd.concat([table, total], ignore_index=True), hide_index=True, use_container_width=False)
+            st.dataframe(style.plain_table(pd.concat([table, total], ignore_index=True)), hide_index=True, use_container_width=False)
 
     # --- Penalties ---------------------------------------------------------------------
     pens = [(per, p) for per in (summary.get("penalties") or []) for p in (per.get("penalties") or [])]
@@ -288,7 +288,7 @@ def _render():
                 "Penalty": (p.get("descKey") or "").replace("-", " ").title(),
                 "Min": p.get("duration", ""), "Drawn by": _name(p.get("drawnBy")),
             })
-        st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        st.dataframe(style.plain_table(pd.DataFrame(rows)), hide_index=True, use_container_width=True)
 
     # --- Box score ----------------------------------------------------------------------
     box = ndb.load_game_boxscore(game_id)
@@ -308,7 +308,7 @@ def _render():
                         "PIM": s.get("pim", 0), "TOI": s.get("toi", ""),
                         "FO%": round(s["faceoffWinningPctg"] * 100) if s.get("faceoffWinningPctg") else float("nan"),
                     } for s in skaters]).sort_values(["P", "G", "SOG"], ascending=False)
-                    st.dataframe(sk, hide_index=True, use_container_width=True, height=min(600, 38 * (len(sk) + 1)))
+                    st.dataframe(style.plain_table(sk), hide_index=True, use_container_width=True, height=min(600, 38 * (len(sk) + 1)))
                 goalies = team.get("goalies") or []
                 if goalies:
                     gl = pd.DataFrame([{
@@ -317,7 +317,7 @@ def _render():
                         "SV%": round(g["savePctg"] * 100, 1) if g.get("savePctg") is not None else None,
                         "TOI": g.get("toi", ""),
                     } for g in goalies])
-                    st.dataframe(gl, hide_index=True, use_container_width=True)
+                    st.dataframe(style.plain_table(gl), hide_index=True, use_container_width=True)
 
 
 _render()

@@ -150,7 +150,7 @@ if role_a == "Skater" or role_b == "Skater":
     fields = [("GP", "gamesPlayed"), ("G", "goals"), ("A", "assists"), ("P", "points"),
               ("+/-", "plusMinus"), ("xG", "ixG"), ("CF%", "satPercentage"), ("Hits", "hits"),
               ("Blocks", "blockedShots")]
-    st.dataframe(build_compare_table(row_a, row_b, fields, round_map={"xG": 1, "CF%": 1}),
+    st.dataframe(style.plain_table(build_compare_table(row_a, row_b, fields, round_map={"xG": 1, "CF%": 1})),
                  use_container_width=True)
 
 if role_a == "Goalie" or role_b == "Goalie":
@@ -161,7 +161,7 @@ if role_a == "Goalie" or role_b == "Goalie":
     fields = [("GP", "gamesPlayed"), ("W", "wins"), ("L", "losses"), ("OTL", "otLosses"),
               ("GAA", "goalsAgainstAverage"), ("SV%", "savePct"), ("SO", "shutouts"),
               ("Quality Start%", "qualityStartsPct")]
-    st.dataframe(build_compare_table(row_a, row_b, fields, round_map={"GAA": 2, "SV%": 1, "Quality Start%": 1}),
+    st.dataframe(style.plain_table(build_compare_table(row_a, row_b, fields, round_map={"GAA": 2, "SV%": 1, "Quality Start%": 1})),
                  use_container_width=True)
 
 # --- Shot-type duel (skaters only) --------------------------------------

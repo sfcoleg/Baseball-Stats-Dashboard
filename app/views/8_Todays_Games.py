@@ -293,7 +293,7 @@ else:
     acol1.metric("Correct", overall["correct"])
     acol2.metric("Total Picks", overall["total"])
     acol3.metric("Accuracy", f"{overall['pct']}%")
-    st.dataframe(by_day, hide_index=True, use_container_width=True)
+    st.dataframe(style.plain_table(by_day), hide_index=True, use_container_width=True)
 
 # Persists any pick made above into localStorage — unconditional/idempotent
 # per render, same pattern as following.save(), so it doesn't need to be

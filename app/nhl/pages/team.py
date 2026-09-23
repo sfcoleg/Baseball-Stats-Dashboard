@@ -147,7 +147,7 @@ else:
                 "Type": {1: "Preseason", 2: "", 3: "Playoffs"}.get(g.get("gameType"), ""),
             })
         if rows:
-            st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)))
+            st.dataframe(style.plain_table(pd.DataFrame(rows)), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)))
         else:
             st.caption("No games left on the schedule.")
     with res_tab:
@@ -169,7 +169,7 @@ else:
                     "Game Center": f"nhl-game?game={g['id']}",
                 })
             st.dataframe(
-                pd.DataFrame(rows), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)),
+                style.plain_table(pd.DataFrame(rows)), hide_index=True, use_container_width=True, height=min(520, 38 * (len(rows) + 1)),
                 column_config={"Game Center": st.column_config.LinkColumn("Game Center", display_text="Open")},
             )
 

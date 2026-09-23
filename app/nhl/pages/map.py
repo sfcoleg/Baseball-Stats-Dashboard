@@ -284,13 +284,13 @@ with c1:
     by_country = filtered["country"].value_counts().reset_index()
     by_country.columns = ["Country", "Players"]
     by_country["Share"] = (by_country["Players"] / len(filtered) * 100).round(1)
-    st.dataframe(by_country, use_container_width=True, hide_index=True, height=360)
+    st.dataframe(style.plain_table(by_country), use_container_width=True, hide_index=True, height=360)
 
 with c2:
     style.colored_header("Top Hometowns", "pitching")
     top_cities = cities.sort_values("n", ascending=False).head(15)[["city_label", "country", "n"]].rename(
         columns={"city_label": "Hometown", "country": "Country", "n": "Players"})
-    st.dataframe(top_cities, use_container_width=True, hide_index=True, height=360)
+    st.dataframe(style.plain_table(top_cities), use_container_width=True, hide_index=True, height=360)
 
 # --- Local products ---------------------------------------------------------
 style.colored_header("Local Products", "fielding")

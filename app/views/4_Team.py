@@ -99,7 +99,7 @@ if choice in _COMPOSITE_SCOPES:
         {"Pos": pos, "Name": player["name"], "Stat": player.get("note", "—")}
         for pos, player in starters.items()
     ]
-    st.dataframe(pd.DataFrame(roster_rows), use_container_width=True, hide_index=True)
+    st.dataframe(style.plain_table(pd.DataFrame(roster_rows)), use_container_width=True, hide_index=True)
     st.stop()
 
 _ALL_STAR_COLORS = {"AL": "#C8102E", "NL": "#003DA5"}
