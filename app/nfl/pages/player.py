@@ -4,11 +4,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nfl import db as fdb
+from nfl import style as fstyle
 from nfl import teams as fteams
 
 st.set_page_config(page_title="NFL Player | Diamond Metrics", layout="wide")
@@ -138,6 +140,33 @@ if weekly_seasons:
             "Weekly detail is kept for the most recent seasons only — season totals above cover the rest."
         )
     else:
+        # Primary stat per week, as a quick-glance bar chart above the table —
+        # same priority order the table below already uses to pick which
+        # side of the ball is this player's main one (Passing > Rushing >
+        # Receiving).
+        _primary_stat = next(
+            (col for section, col in (("Passing", "passing_yards"), ("Rushing", "rushing_yards"),
+                                       ("Receiving", "receiving_yards"))
+             if section in sections and col in log.columns),
+            None,
+        )
+        if _primary_stat is not None:
+            stat_label = {"passing_yards": "Passing Yards", "rushing_yards": "Rushing Yards",
+                          "receiving_yards": "Receiving Yards"}[_primary_stat]
+            chart_df = log[["week", _primary_stat]].copy()
+            chart_df["week"] = chart_df["week"].astype(int)
+            fig = px.bar(
+                chart_df, x="week", y=_primary_stat,
+                labels={"week": "Week", _primary_stat: stat_label},
+            )
+            fig.update_traces(marker_color=color)
+            fig.update_layout(
+                height=320, margin=dict(l=0, r=0, t=10, b=0), bargap=0.25,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+                xaxis=dict(dtick=1),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
         cols = [("week", "Wk"), ("opponent_team", "Opp")]
         if "Passing" in sections:
             cols += [("attempts", "Att"), ("passing_yards", "Pass Yds"), ("passing_tds", "Pass TD"),

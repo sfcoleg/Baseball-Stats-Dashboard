@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -92,6 +93,51 @@ st.markdown(
     "<div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));gap:12px'>" + cards + "</div>",
     unsafe_allow_html=True,
 )
+
+st.divider()
+
+# --- Top 10 points leaders chart -------------------------------------------
+style.colored_header("Top 10 Points Leaders", "chart")
+top10_pts = pool.sort_values("PTS_PG", ascending=False).head(10).iloc[::-1]
+p_min, p_max = top10_pts["PTS_PG"].min(), top10_pts["PTS_PG"].max()
+color_floor = p_min - (p_max - p_min) * 0.6 - 1
+fig = px.bar(
+    top10_pts, x="PTS_PG", y="PLAYER_NAME", orientation="h",
+    color="PTS_PG", color_continuous_scale=nstyle.BLUE_SCALE, range_color=[color_floor, p_max], text="PTS_PG",
+    labels={"PTS_PG": "PPG", "PLAYER_NAME": ""},
+)
+fig.update_traces(texttemplate="%{text:.1f}")
+fig.update_layout(
+    showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=0, t=10, b=0),
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+)
+st.plotly_chart(fig, use_container_width=True)
+
+st.divider()
+
+# --- Team snapshot ----------------------------------------------------
+style.colored_header("Team Snapshot", "chart")
+team_pool = pool.dropna(subset=["TEAM_ABBREVIATION"])
+team_pts = team_pool.groupby("TEAM_ABBREVIATION", observed=True)["PTS_PG"].mean().round(1).reset_index().sort_values("PTS_PG", ascending=False)
+team_fg = team_pool.groupby("TEAM_ABBREVIATION", observed=True)["FG_PCT"].mean().round(3).reset_index().sort_values("FG_PCT", ascending=False)
+
+tcol1, tcol2 = st.columns(2)
+with tcol1:
+    st.caption(f"Average player PPG by team (min {ndb.MIN_GAMES} GP)")
+    fig = px.bar(team_pts, x="TEAM_ABBREVIATION", y="PTS_PG", color="TEAM_ABBREVIATION",
+                 color_discrete_map={t: nteams.color_for_abbr(t) for t in team_pts["TEAM_ABBREVIATION"]},
+                 labels={"PTS_PG": "PPG"})
+    fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+    st.plotly_chart(fig, use_container_width=True)
+with tcol2:
+    st.caption(f"Average player FG% by team (min {ndb.MIN_GAMES} GP)")
+    fig = px.bar(team_fg, x="TEAM_ABBREVIATION", y="FG_PCT", color="TEAM_ABBREVIATION",
+                 color_discrete_map={t: nteams.color_for_abbr(t) for t in team_fg["TEAM_ABBREVIATION"]},
+                 labels={"FG_PCT": "FG%"})
+    fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+    st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
 

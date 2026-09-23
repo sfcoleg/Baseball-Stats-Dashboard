@@ -175,6 +175,23 @@ else:
 
 st.divider()
 
+# --- Shot chart (season shot-location backfill, if available) ----------
+style.colored_header("Shot Chart", "chart")
+shot_seasons = ndb.shot_seasons(mtime)
+if not shot_seasons:
+    st.caption("Shot location data not available for this season.")
+else:
+    shot_season = st.selectbox("Shot chart — season", shot_seasons, format_func=ndb.season_label, key="nhl_team_page_shot_season")
+    shots = ndb.load_shots(shot_season, mtime)
+    shots["Tm"] = shots["teamId"].map(nteams.abbr_for_id)
+    team_shots = shots[shots["Tm"] == abbr]
+    if team_shots.empty:
+        st.caption("Shot location data not available for this season.")
+    else:
+        st.plotly_chart(nstyle.shot_map_chart(team_shots, f"{abbr} Shots"), use_container_width=True)
+
+st.divider()
+
 # --- Roster (live) -------------------------------------------------------
 style.colored_header("Roster", "pitching")
 roster = ndb.load_roster(abbr)

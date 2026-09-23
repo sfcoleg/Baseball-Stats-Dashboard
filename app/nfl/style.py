@@ -8,6 +8,12 @@ import pandas as pd
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import style
+# Chart colours live in the MLB-side style module; re-exported here so NFL
+# pages can reach them through fstyle.* like the NHL side already does
+# through nstyle.*.
+from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
+                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
+                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R)
 
 # nflverse serves these from its own repo, the same place the team logos come
 # from, and all three are verified to resolve. There is no Super Bowl mark

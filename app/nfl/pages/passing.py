@@ -26,6 +26,11 @@ with std_tab:
         f"Ranked by total passing EPA. Minimum {fdb.MIN_ATTEMPTS} attempts.",
         lower_is_better=("INT", "Sacks"),
     )
+    boards.efficiency_scatter(
+        fdb.qualified(players, "passing"), "attempts", "passing_epa_per_att",
+        "Attempts", "EPA per Attempt",
+        "Volume vs. efficiency — upper-right is a lot of attempts at a high rate.",
+    )
 
 with adv_tab:
     style.colored_header("Tracking", "pitching")

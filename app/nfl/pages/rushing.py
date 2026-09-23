@@ -23,6 +23,11 @@ with std_tab:
         {"Y/C": "{:.1f}", "EPA": "{:.1f}", "EPA/Att": "{:.2f}"},
         f"Ranked by rushing yards. Minimum {fdb.MIN_CARRIES} carries.",
     )
+    boards.efficiency_scatter(
+        fdb.qualified(players, "rushing"), "carries", "rushing_epa_per_carry",
+        "Carries", "EPA per Carry",
+        "Volume vs. efficiency — upper-right is a lot of carries at a high rate.",
+    )
 
 with adv_tab:
     style.colored_header("Over Expected", "batting")

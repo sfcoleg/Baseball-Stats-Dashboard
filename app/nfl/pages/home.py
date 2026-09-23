@@ -4,6 +4,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -11,6 +12,42 @@ import style
 from nfl import db as fdb
 from nfl import style as fstyle
 from nfl import teams as fteams
+
+
+def _live_score_bar(g: dict, live: dict):
+    """A small horizontal stacked bar for one live game: away score vs home
+    score, each segment colored by that team's own color. This is a live
+    score visualization, not a prediction — there's no NFL win-probability
+    model on this site (unlike MLB's Log5-based one), so we don't fake one."""
+    away, home = g["away_team"], g["home_team"]
+    away_score = live.get("away_score") or 0
+    home_score = live.get("home_score") or 0
+    total = away_score + home_score
+    if total <= 0:
+        return  # nothing to show yet (0-0)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=["Score"], x=[away_score], name=away, orientation="h",
+        marker_color=fteams.color_for_abbr(away),
+        text=f"{away} {away_score}", textposition="inside", insidetextanchor="start",
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Bar(
+        y=["Score"], x=[home_score], name=home, orientation="h",
+        marker_color=fteams.color_for_abbr(home),
+        text=f"{home_score} {home}", textposition="inside", insidetextanchor="end",
+        hoverinfo="skip",
+    ))
+    fig.update_layout(
+        barmode="stack", showlegend=False, height=54,
+        margin=dict(l=0, r=0, t=0, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font_color=fstyle.CHART_TEXT,
+        xaxis=dict(visible=False, range=[0, total]),
+        yaxis=dict(visible=False),
+    )
+    st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False},
+                     key=f"live_bar_{away}_{home}")
 
 st.set_page_config(page_title="NFL | Diamond Metrics", layout="wide")
 st.title("NFL")
@@ -60,6 +97,22 @@ if week is not None:
             for _, g in this_week.iterrows()
         )
         st.markdown(f"<div class='wk-grid'>{cards}</div>", unsafe_allow_html=True)
+
+        # Live games get a small current-score bar right below the grid —
+        # a plain visual of the score margin, not a prediction (there's no
+        # win-probability model for NFL on this site). Lives inside the
+        # same 30s-refresh fragment as the grid so the bar tracks the score.
+        live_games = [
+            (g, live_by_matchup.get((g["away_team"], g["home_team"])))
+            for _, g in this_week.iterrows()
+            if (live_by_matchup.get((g["away_team"], g["home_team"])) or {}).get("state") == "in"
+        ]
+        if live_games:
+            st.caption("Live score margin")
+            lcols = st.columns(min(len(live_games), 3))
+            for i, (g, live) in enumerate(live_games):
+                with lcols[i % len(lcols)]:
+                    _live_score_bar(g, live)
 
     _week_grid()
 

@@ -4,11 +4,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nba import db as ndb
+from nba import style as nstyle
 from nba import teams as nteams
 
 st.set_page_config(page_title="NBA Player | Diamond Metrics", layout="wide")
@@ -95,6 +97,21 @@ else:
 if log.empty:
     st.caption("No game log available.")
 else:
+    # Points per game across recent games, most recent last — nba_api's
+    # game log comes back newest-first, so it's reversed for a left-to-
+    # right chronological read.
+    chart_log = log.iloc[::-1].reset_index(drop=True)
+    chart_log["Date"] = pd.to_datetime(chart_log["GAME_DATE"]).dt.strftime("%b %d")
+    fig = px.bar(
+        chart_log, x="Date", y="PTS", labels={"PTS": "Points"},
+    )
+    fig.update_traces(marker_color=color)
+    fig.update_layout(
+        height=320, margin=dict(l=0, r=0, t=10, b=0), xaxis_title=None,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
     display = pd.DataFrame({
         "Date": pd.to_datetime(log["GAME_DATE"]).dt.strftime("%b %d"),
         "Matchup": log["MATCHUP"], "W/L": log["WL"],
@@ -111,3 +128,18 @@ else:
         ),
         use_container_width=True, hide_index=True, height=560,
     )
+
+# --- Shot chart ----------------------------------------------------------
+# Fetched live, on demand, from nba_api's shot-chart endpoint — not a
+# historical backfill table, since this is only ever needed for the
+# handful of players someone actually opens here. The endpoint is a
+# third-party wrapper around an undocumented stats.nba.com API with no
+# SLA, so a failure/empty response is a normal outcome, not a bug — the
+# page just says so instead of crashing.
+if season_label:
+    style.colored_header("Shot Chart", "chart")
+    shots = ndb.load_shot_chart(player_id, season_label)
+    if shots.empty:
+        st.caption("Shot chart unavailable for this player/season.")
+    else:
+        st.plotly_chart(nstyle.shot_chart(shots, f"{name} — {season_label}"), use_container_width=True)

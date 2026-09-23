@@ -7,11 +7,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 import style
 from nfl import db as fdb
+from nfl import style as fstyle
 from nfl import teams as fteams
 
 TOP_N = 25
@@ -66,6 +68,33 @@ def leaderboard(players, kind, sort_col, columns, precision, note, lower_is_bett
         ),
         use_container_width=True, hide_index=True, height=520,
     )
+
+
+def efficiency_scatter(pool, x_col, y_col, x_label, y_label, note):
+    """Volume vs. efficiency for the qualified pool — one point per player,
+    colored by team, labeled on hover. Placed after the leaderboard table on
+    each position page (Passing/Rushing/Receiving) to show who is both a
+    high-volume AND high-efficiency player, versus a compiler racking up
+    volume at a below-average rate."""
+    if pool.empty or x_col not in pool.columns or y_col not in pool.columns:
+        return
+    plot_df = pool[["player_display_name", "team", x_col, y_col]].dropna()
+    if plot_df.empty:
+        return
+    st.caption(note)
+    fig = px.scatter(
+        plot_df, x=x_col, y=y_col, color="team",
+        color_discrete_map={t: fteams.color_for_abbr(t) for t in plot_df["team"].unique()},
+        hover_name="player_display_name",
+        hover_data={x_col: True, y_col: ":.3f", "team": True},
+        labels={x_col: x_label, y_col: y_label},
+    )
+    fig.update_traces(marker=dict(size=10, opacity=0.85, line=dict(width=1, color="rgba(255,255,255,0.4)")))
+    fig.update_layout(
+        showlegend=False, height=430, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+    )
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def tracking_board(frame, sort_col, columns, precision, note, ascending=False, minimum=None):

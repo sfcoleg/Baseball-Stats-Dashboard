@@ -8,11 +8,13 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.express as px
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
 import style
 from nfl import db as fdb
+from nfl import style as fstyle
 from nfl import teams as fteams
 
 st.set_page_config(page_title="NFL Defense | Diamond Metrics", layout="wide")
@@ -40,6 +42,29 @@ if defense.empty:
     st.stop()
 
 defense = defense.rename(columns={"player": "Player", "tm": "Tm", "pos": "Pos"})
+
+# --- Team pass rush style: pressure without blitzing vs. needing to blitz --
+protection = fdb.team_pass_protection(season, mtime)
+if not protection.empty:
+    style.colored_header("Pressure vs. Blitz Rate", "fielding")
+    st.caption(
+        "One point per team. Upper-left generates pressure without blitzing much — the "
+        "defense is winning with its front four alone. Lower-right needs to blitz to get "
+        "there."
+    )
+    fig = px.scatter(
+        protection, x="blitz_rate", y="pressure_rate",
+        color="team", color_discrete_map={t: fteams.color_for_abbr(t) for t in protection["team"]},
+        text="team", labels={"blitz_rate": "Blitz Rate %", "pressure_rate": "Pressure Rate %"},
+    )
+    fig.update_traces(marker=dict(size=12, opacity=0.85, line=dict(width=1, color="rgba(255,255,255,0.4)")),
+                       textposition="top center")
+    fig.update_layout(
+        showlegend=False, height=480, margin=dict(l=0, r=0, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+    )
+    st.plotly_chart(fig, use_container_width=True)
+
 positions = sorted(defense["Pos"].dropna().unique().tolist())
 picked = st.multiselect("Positions", positions, default=[], placeholder="All positions")
 pool = defense[defense["Pos"].isin(picked)] if picked else defense

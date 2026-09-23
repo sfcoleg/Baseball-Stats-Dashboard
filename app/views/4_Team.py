@@ -2,6 +2,7 @@ import sys
 from pathlib import Path
 
 import pandas as pd
+import plotly.graph_objects as go
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -255,6 +256,36 @@ if season == current_season:
             r3.metric("One-Run Games", _rec(margin == 1))
             r4.metric("Blowouts (5+)", _rec(margin >= 5))
             r5.metric("vs Division", _rec(played_games["opponent"].isin(division_teams)))
+
+        # Scoring trend — rolling average runs scored per game over the
+        # course of the season, vs. the flat season-long average, so a
+        # hot/cold offensive stretch is visible at a glance.
+        if len(played_games) >= 2:
+            style.colored_header("Scoring Trend", "chart")
+            trend = played_games.sort_values("game_time").reset_index(drop=True)
+            window = min(10, len(trend))
+            trend["rolling_runs"] = trend["runs_for"].rolling(window, min_periods=1).mean()
+            season_avg = trend["runs_for"].mean()
+
+            fig = go.Figure()
+            fig.add_trace(go.Scatter(
+                x=trend["date"], y=trend["rolling_runs"], mode="lines",
+                name=f"{window}-Game Rolling Avg", line=dict(color=teams.color_for_abbr(selected_abbr), width=3),
+            ))
+            fig.add_hline(
+                y=season_avg, line=dict(color=style.CHART_TEXT, width=1.5, dash="dash"),
+                annotation_text=f"Season Avg: {season_avg:.2f}", annotation_position="top left",
+                annotation_font_color=style.CHART_TEXT,
+            )
+            fig.update_layout(
+                height=360, margin=dict(t=30, b=30, l=40, r=20),
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                font_color=style.CHART_TEXT,
+                xaxis=dict(title=None, gridcolor="rgba(128,128,128,0.15)"),
+                yaxis=dict(title="Runs Scored", gridcolor="rgba(128,128,128,0.15)"),
+                showlegend=False,
+            )
+            st.plotly_chart(fig, use_container_width=True)
 
     full_schedule = db.team_schedule(selected_abbr, mtime)
     if not full_schedule.empty:

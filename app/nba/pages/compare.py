@@ -73,6 +73,25 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+# --- Skill radar -------------------------------------------------------
+# Percentile axes against the same qualified pool used everywhere else on
+# the NBA side (min MIN_GAMES GP), mirroring MLB's app/views/5_Compare.py
+# radar pattern. Turnovers are inverted (lower_is_better) rather than
+# skipped, so ball security still shows up on the shape.
+style.colored_header("Skill Profile", "batting")
+RADAR_FIELDS = [
+    ("Points", "PTS_PG", False), ("Rebounds", "REB_PG", False), ("Assists", "AST_PG", False),
+    ("Steals", "STL_PG", False), ("Blocks", "BLK_PG", False), ("Turnovers", "TOV_PG", True),
+]
+radar_values_a = [ndb.percentile_rank(pool[col], a[col], lower) or 0 for _, col, lower in RADAR_FIELDS]
+radar_values_b = [ndb.percentile_rank(pool[col], b[col], lower) or 0 for _, col, lower in RADAR_FIELDS]
+st.caption(f"Percentile rank (0-100) against qualified players (min {ndb.MIN_GAMES} GP) league-wide.")
+st.plotly_chart(
+    style.radar_chart([label for label, _, _ in RADAR_FIELDS], radar_values_a, radar_values_b,
+                      a["PLAYER_NAME"], b["PLAYER_NAME"], color_a, color_b),
+    use_container_width=True,
+)
+
 style.colored_header("Season Stats", "batting")
 body = []
 for label, key, higher_better, fmt in ROWS:

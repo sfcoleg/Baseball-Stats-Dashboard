@@ -23,6 +23,11 @@ with std_tab:
         {"Y/R": "{:.1f}", "EPA": "{:.1f}", "EPA/Tgt": "{:.2f}"},
         f"Ranked by receiving yards. Minimum {fdb.MIN_TARGETS} targets.",
     )
+    boards.efficiency_scatter(
+        fdb.qualified(players, "receiving"), "targets", "receiving_epa_per_target",
+        "Targets", "EPA per Target",
+        "Volume vs. efficiency — upper-right is a lot of targets at a high rate.",
+    )
 
 with adv_tab:
     style.colored_header("Separation & YAC", "headliners")

@@ -176,3 +176,44 @@ def load_player_gamelog(player_id: int, season: str) -> pd.DataFrame:
     except Exception:
         return pd.DataFrame()
     return df
+
+
+def percentile_rank(series: pd.Series, value, lower_is_better: bool = False) -> int | None:
+    """Percentile of `value` within `series` (0-100). For lower_is_better
+    stats (turnovers, ...) a lower value yields a higher percentile. Same
+    signature/behavior as app/db.py's and app/nhl/db.py's percentile_rank —
+    duplicated rather than imported to keep this module independent of the
+    other sports, matching how team colors etc. are kept local per sport."""
+    clean = series.dropna()
+    if value is None or pd.isna(value) or len(clean) == 0:
+        return None
+    if lower_is_better:
+        pct = (clean >= value).mean() * 100
+    else:
+        pct = (clean <= value).mean() * 100
+    return int(round(pct))
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=64)
+def load_shot_chart(player_id: int, season: str) -> pd.DataFrame:
+    """One player's shot locations for `season`, fetched live from
+    stats.nba.com's shot-chart endpoint on demand — not a historical
+    backfill/ingest table, since this is only ever looked at for the
+    handful of players someone actually opens on the Player page. Returns
+    LOC_X/LOC_Y/SHOT_MADE_FLAG columns (nba_api's own coordinate system:
+    hoop at (0, 0)). 30-minute TTL like load_player_gamelog above. The
+    live endpoint is occasionally flaky/rate-limited (stats.nba.com has no
+    SLA for third-party callers) — on any failure this returns an empty
+    DataFrame rather than raising, and the page shows "Shot chart
+    unavailable" instead of crashing."""
+    try:
+        from nba_api.stats.endpoints import shotchartdetail
+        df = shotchartdetail.ShotChartDetail(
+            team_id=0, player_id=int(player_id), season_nullable=season,
+            season_type_all_star="Regular Season", context_measure_simple="FGA",
+        ).get_data_frames()[0]
+    except Exception:
+        return pd.DataFrame()
+    if df.empty:
+        return df
+    return df[["LOC_X", "LOC_Y", "SHOT_MADE_FLAG"]]
