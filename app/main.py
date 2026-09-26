@@ -776,6 +776,7 @@ PAGES = [
     st.Page("views/9_Standings.py", title="Standings"),
     st.Page("views/17_Playoffs.py", title="Playoffs"),
     st.Page("views/36_Simulator.py", title="Sim"),
+    st.Page("views/39_Diamond_Assistant.py", title="Diamond Assistant"),
     st.Page("views/34_Other.py", title="Other"),
     # Everything below is reached through the Other hub page above, not its
     # own sidebar slot — still registered here (so their URLs/page_links
