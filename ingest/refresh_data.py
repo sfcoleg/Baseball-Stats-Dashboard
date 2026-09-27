@@ -1585,6 +1585,95 @@ def record_milestone_achievements(conn, career_totals):
     return len(new_rows)
 
 
+# Season counting-stat milestones the Home page's "Milestones" card watches
+# for — kept separate from CAREER_MILESTONES above (different thresholds,
+# resets every season) but same idea: a stat and the round numbers worth a
+# callout. IP is on the pitching side alongside SV/SO; batting only tracks
+# HR here — see db.get_milestones() (app/db.py) for what actually renders.
+SEASON_MILESTONES = {
+    "batting": {"HR": [30, 40, 50, 60, 70]},
+    "pitching": {"SV": [40, 50], "SO": [200], "IP": [200]},
+}
+
+
+def record_season_milestone_log(conn, season, recent_batting):
+    """Log the first day OUR DATA shows a player's season total crossing one
+    of SEASON_MILESTONES's thresholds — powers db.get_milestones()'s HR/SV/
+    SO/IP cards.
+
+    Why this exists rather than db.get_milestones() just comparing yesterday's
+    box score against the season table directly (which is what it used to
+    do): the season `batting`/`pitching` tables and the `recent_batting`/
+    `recent_pitching` "day" window are fetched from different
+    Baseball-Reference pages that don't always update in lockstep. When the
+    season aggregate lags a day or two behind the day-window split (observed
+    directly: Pete Alonso's day row showed a real Sep 25 game while the
+    season table still reflected totals through Sep 23), computing "before =
+    season_total - day_stat" retroactively "detects" a crossing that
+    actually happened several days earlier and reports it as having just
+    happened. Comparing today's season total against a PERSISTED record of
+    which thresholds we've already logged sidesteps the whole problem: it
+    doesn't matter which page lagged or by how much, a threshold is logged
+    exactly once, the first day our data shows it crossed — never re-logged
+    once seen, so a lagging table catching up later can't resurrect it.
+
+    Bootstrap case, same reasoning as record_milestone_achievements(): the
+    very first time this runs mid-season, every threshold already crossed
+    (some of them months ago) would otherwise all get stamped with today's
+    date. Backdated to 1900-01-01 on that one run only, so only genuinely
+    new crossings from here on get a real, current date.
+
+    `recent_batting` is passed in (not re-queried) so the achieved_date
+    matches EXACTLY what db.data_as_of() will later read back — both read
+    the day-window's own MAX(Date), the one thing in this whole picture
+    that IS reliably fresh."""
+    table_is_new = False
+    try:
+        existing = pd.read_sql(
+            "SELECT mlbID, Stat, Milestone, season FROM season_milestone_log", conn
+        )
+        existing_keys = set(zip(existing["mlbID"], existing["Stat"], existing["Milestone"], existing["season"]))
+    except pd.errors.DatabaseError:
+        existing_keys = set()
+        table_is_new = True
+
+    if table_is_new:
+        stamp = "1900-01-01"
+    else:
+        day_dates = recent_batting.loc[recent_batting["period"] == "day", "Date"] if not recent_batting.empty else []
+        raw = day_dates.iloc[0] if len(day_dates) else None
+        try:
+            stamp = datetime.strptime(str(raw).strip(), "%b %d, %Y").date().isoformat() if raw else _pacific_today().isoformat()
+        except ValueError:
+            stamp = _pacific_today().isoformat()
+
+    # Read off `conn` itself, not a second connection to the same file —
+    # this runs before the caller's conn.commit(), and a fresh connection
+    # wouldn't see batting/pitching's just-written, not-yet-committed rows.
+    new_rows = []
+    for table, stats in SEASON_MILESTONES.items():
+        stat_cols = ", ".join(f'"{c}"' for c in stats)
+        try:
+            df = pd.read_sql(f"SELECT mlbID, Name, Tm, Lev, {stat_cols} FROM {table} WHERE season = ?",
+                              conn, params=(int(season),))
+        except (sqlite3.OperationalError, pd.errors.DatabaseError):
+            continue
+        for row in df.itertuples():
+            for stat, thresholds in stats.items():
+                total = getattr(row, stat, None)
+                if total is None or pd.isna(total):
+                    continue
+                for milestone in thresholds:
+                    if total >= milestone and (row.mlbID, stat, milestone, season) not in existing_keys:
+                        new_rows.append({
+                            "mlbID": row.mlbID, "Name": row.Name, "Tm": row.Tm, "Lev": row.Lev,
+                            "Stat": stat, "Milestone": milestone, "season": season, "achieved_date": stamp,
+                        })
+    if new_rows:
+        pd.DataFrame(new_rows).to_sql("season_milestone_log", conn, if_exists="append", index=False)
+    return len(new_rows)
+
+
 def fetch_all_star_roster(season):
     """That season's All-Star Game roster (both leagues) from the MLB Stats
     API. There's no dedicated "All-Star roster" endpoint — instead, the ASG
@@ -1880,6 +1969,7 @@ def fetch_and_store():
 
         _store_season_table(conn, "batting", batting, CURRENT_SEASON)
         _store_season_table(conn, "pitching", pitching, CURRENT_SEASON)
+        new_season_milestones = record_season_milestone_log(conn, CURRENT_SEASON, recent_batting)
         _store_season_table(conn, "fielding", fielding, CURRENT_SEASON)
         if not pitch_arsenal.empty:
             _store_season_table(conn, "pitch_arsenal", pitch_arsenal, CURRENT_SEASON)
@@ -1934,7 +2024,8 @@ def fetch_and_store():
         f"{len(todays_games)} today's games, {len(standings)} standings rows, "
         f"{len(schedule)} schedule rows, "
         f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows, "
-        f"{new_achievements} new milestone achievements to {DB_PATH}"
+        f"{new_achievements} new milestone achievements, "
+        f"{new_season_milestones} new season milestones to {DB_PATH}"
     )
 
     # Per-day add-ons (umpire scorecards, WPA, ballparks) for every day

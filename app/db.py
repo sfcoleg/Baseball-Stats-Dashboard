@@ -438,16 +438,9 @@ def top_n_recent_pitchers(recent_pitching: pd.DataFrame, period: str, n: int = 5
     return qualified.sort_values("ERA", ascending=True).head(n)
 
 
-# Season home-run totals worth calling out when a player's most recent game
-# pushed them past one. Deliberately limited to "notable" round numbers
-# (not 20/25) so this doesn't fire constantly — the whole point is that it's
-# rare enough to be worth a special callout, not just another leaderboard.
-HR_MILESTONE_THRESHOLDS = [30, 40, 50, 60, 70]
-
-# Same idea, for pitchers: saves, strikeouts, innings pitched.
-SV_MILESTONE_THRESHOLDS = [40, 50]
-SO_MILESTONE_THRESHOLDS = [200]
-IP_MILESTONE_THRESHOLDS = [200]
+# The actual HR/SV/SO/IP threshold lists now live in
+# ingest/refresh_data.py's SEASON_MILESTONES — see get_milestones()'s
+# docstring for why detection moved into the ingest side entirely.
 
 # Sort priority for display when multiple milestones happen on the same day
 # (rarer first).
@@ -457,14 +450,36 @@ _MILESTONE_PRIORITY = {
 }
 
 
+_SEASON_MILESTONE_CATEGORY = {
+    "HR": ("HR Milestone", "Reached {n} home runs this season"),
+    "SV": ("SV Milestone", "Reached {n} saves this season"),
+    "SO": ("SO Milestone", "Reached {n} strikeouts this season"),
+    "IP": ("IP Milestone", "Reached {n} innings pitched this season"),
+}
+
+
 def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
-    """Detects notable single-day achievements from yesterday's games:
-    hitting for the cycle, throwing a no-hitter or perfect game, and crossing
-    a season home-run/save/strikeout/innings-pitched milestone. Built entirely
-    from data already fetched
-    daily (recent_batting/recent_pitching day-window rows + season totals) —
-    no extra network calls. Returns an empty list on a day with nothing
-    notable, which is the common case.
+    """Detects notable single-day achievements: hitting for the cycle,
+    throwing a no-hitter or perfect game (both from yesterday's day-window
+    box scores, still fetched fresh every run), and crossing a season home-
+    run/save/strikeout/innings-pitched milestone (read from
+    season_milestone_log, NOT recomputed here — see below for why). Returns
+    an empty list on a day with nothing notable, which is the common case.
+
+    HR/SV/SO/IP milestones used to be detected the same way as Cycle/
+    No-Hitter — comparing yesterday's day-window box score against the
+    season aggregate table (season_total - day_stat < threshold <=
+    season_total). That broke the day this site started tracking Pete
+    Alonso: his day-window row correctly showed a real Sep 25 game, but the
+    season `batting` table still reflected totals through Sep 23 (the two
+    tables are fetched from different Baseball-Reference pages that don't
+    always update in lockstep) — so the stale season total made it look
+    like he'd JUST crossed 40 HR on Sep 25, when he'd actually done it on
+    Sep 21. ingest/refresh_data.py's record_season_milestone_log() now logs
+    each threshold crossing exactly once, the first day OUR data shows it —
+    this just reads whatever it logged for the day data_as_of() says our
+    data covers, so a lagging table catching up late can't resurrect an old
+    crossing as new.
 
     Known limitations (documented rather than silently wrong):
     - Combined no-hitters/perfect games (multiple relief pitchers) aren't
@@ -472,18 +487,13 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
       that's what a single day-window row represents.
     - Perfect game detection checks 0 H / 0 BB / 0 HBP over 9+ IP, which
       doesn't rule out reaching base via a fielding error — the closest
-      approximation available from box-score-level stats.
-    - HR/SV/SO/IP milestones are season totals only, not career totals
-      (this app only caches the current season's cumulative stats)."""
+      approximation available from box-score-level stats."""
     recent_batting = load_recent_batting(season, db_mtime_val)
     recent_pitching = load_recent_pitching(season, db_mtime_val)
     milestones = []
 
     if not recent_batting.empty:
         day_batting = recent_batting[recent_batting["period"] == "day"]
-        season_batting = load_batting(season, db_mtime_val)[["mlbID", "HR"]].rename(columns={"HR": "season_HR"})
-        day_batting = day_batting.merge(season_batting, on="mlbID", how="left")
-
         for _, row in day_batting.iterrows():
             singles = row["H"] - row["2B"] - row["3B"] - row["HR"]
             if singles >= 1 and row["2B"] >= 1 and row["3B"] >= 1 and row["HR"] >= 1:
@@ -491,15 +501,6 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
                     "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
                     "category": "Cycle", "text": "Hit for the cycle",
                 })
-
-            if row["HR"] >= 1 and pd.notna(row.get("season_HR")):
-                before = row["season_HR"] - row["HR"]
-                for threshold in HR_MILESTONE_THRESHOLDS:
-                    if before < threshold <= row["season_HR"]:
-                        milestones.append({
-                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
-                            "category": "HR Milestone", "text": f"Reached {threshold} home runs this season",
-                        })
 
     if not recent_pitching.empty:
         # recent_pitching.mlbID is stored as text in SQLite (unlike every
@@ -515,38 +516,23 @@ def get_milestones(season: int, db_mtime_val: float) -> list[dict]:
                 "text": "Threw a perfect game" if is_perfect else "Threw a no-hitter",
             })
 
-        season_pitching = load_pitching(season, db_mtime_val)[["mlbID", "SV", "SO", "IP"]].rename(
-            columns={"SV": "season_SV", "SO": "season_SO", "IP": "season_IP"}
-        )
-        day_pitching = day_pitching.merge(season_pitching, on="mlbID", how="left")
-
-        for _, row in day_pitching.iterrows():
-            if row["SV"] >= 1 and pd.notna(row.get("season_SV")):
-                before = row["season_SV"] - row["SV"]
-                for threshold in SV_MILESTONE_THRESHOLDS:
-                    if before < threshold <= row["season_SV"]:
-                        milestones.append({
-                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
-                            "category": "SV Milestone", "text": f"Reached {threshold} saves this season",
-                        })
-
-            if row["SO"] >= 1 and pd.notna(row.get("season_SO")):
-                before = row["season_SO"] - row["SO"]
-                for threshold in SO_MILESTONE_THRESHOLDS:
-                    if before < threshold <= row["season_SO"]:
-                        milestones.append({
-                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
-                            "category": "SO Milestone", "text": f"Reached {threshold} strikeouts this season",
-                        })
-
-            if row["IP"] > 0 and pd.notna(row.get("season_IP")):
-                before = row["season_IP"] - row["IP"]
-                for threshold in IP_MILESTONE_THRESHOLDS:
-                    if before < threshold <= row["season_IP"]:
-                        milestones.append({
-                            "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
-                            "category": "IP Milestone", "text": f"Reached {threshold} innings pitched this season",
-                        })
+    as_of = data_as_of(db_mtime_val)
+    if as_of is not None:
+        try:
+            with sqlite3.connect(DB_PATH) as conn:
+                logged = pd.read_sql(
+                    "SELECT mlbID, Name, Tm, Lev, Stat, Milestone FROM season_milestone_log "
+                    "WHERE season = ? AND achieved_date = ?",
+                    conn, params=(int(season), as_of.isoformat()),
+                )
+        except (sqlite3.Error, pd.errors.DatabaseError):
+            logged = pd.DataFrame()
+        for _, row in logged.iterrows():
+            category, template = _SEASON_MILESTONE_CATEGORY.get(row["Stat"], (f"{row['Stat']} Milestone", "Reached {n} " + row["Stat"] + " this season"))
+            milestones.append({
+                "mlbID": row["mlbID"], "Name": row["Name"], "Tm": row["Tm"], "Lev": row.get("Lev"),
+                "category": category, "text": template.format(n=int(row["Milestone"])),
+            })
 
     milestones.sort(key=lambda m: _MILESTONE_PRIORITY.get(m["category"], 99))
     return milestones
