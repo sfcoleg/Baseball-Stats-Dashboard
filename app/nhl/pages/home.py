@@ -128,8 +128,13 @@ def _headliner_card(label, name, player_id, team_abbr, stat_line):
 
 
 # --- Daily milestones (yesterday's hat tricks, shutouts, milestones) ----
+# Gated the same way the Headliners section below is: get_daily_milestones
+# checks season-total thresholds against `season`'s own totals, so
+# browsing a past season would compare yesterday's real game log against
+# THAT season's goal/point totals instead of the current one — a bogus
+# "crossed 40 goals" reading, not just stale data.
 yesterday = ndb.today_pacific() - timedelta(days=1)
-daily_milestones = ndb.get_daily_milestones(yesterday.isoformat(), season, mtime)
+daily_milestones = ndb.get_daily_milestones(yesterday.isoformat(), season, mtime) if season == latest_season else []
 
 if daily_milestones:
     style.colored_header("Milestones", "headliners")

@@ -217,14 +217,26 @@ qualified_pitchers = pitching[pitching["IP"] >= db.QUALIFIED_MIN_IP].sort_values
 recent_batting = db.load_recent_batting(season, mtime)
 recent_pitching = db.load_recent_pitching(season, mtime)
 
-milestones = db.get_milestones(season, mtime)
+# Milestones are inherently about "yesterday" — showing them while
+# browsing a past season would silently surface that OLD season's last
+# tracked day dressed up as recent news (get_milestones/load_recent_*
+# are season-scoped, so a past-season selection returns THAT season's
+# final day-window row, not anything actually recent). Same guard the
+# Headliners section below already uses for the same reason.
+milestones = db.get_milestones(season, mtime) if season == today_pacific().year else []
 
 # Every "yesterday" below anchors on the day the data actually covers, not
 # on today_pacific() - 1 — see db.data_as_of() for why those differ.
 as_of = db.data_as_of(mtime)
 day_label = f"Hot {db.daily_label(as_of)}"
 if milestones:
-    style.colored_header("Milestones", "headliners")
+    # Named after the day the data actually covers (see data_as_of's
+    # docstring: a late or missed ingest run means "yesterday" can genuinely
+    # be two-plus days old) rather than a bare "Milestones" — otherwise a
+    # legitimately-stale-by-a-day-or-two achievement reads as if it just
+    # happened, with nothing telling the reader it's from Sep 24 while
+    # they're looking at the site on Sep 26.
+    style.colored_header(f"Milestones — {db.daily_label(as_of)}", "headliners")
     milestone_cols = st.columns(min(len(milestones), 3))
     for i, m in enumerate(milestones):
         with milestone_cols[i % 3]:
