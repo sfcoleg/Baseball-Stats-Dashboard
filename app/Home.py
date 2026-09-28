@@ -434,7 +434,7 @@ if "AL" in picture and "NL" in picture:
         return style.team_logo_for_season(abbr, team_id, season) if team_id else None
 
 
-    style.colored_header("Bracket" if bracket_series_lookup else "If the Season Ended Today", "headliners")
+    style.colored_header("Playoff Bracket", "headliners")
     st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
     st.markdown(
         "<div style='overflow-x:auto'>"

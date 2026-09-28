@@ -44,11 +44,10 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 standings = db.load_standings(mtime)
-playoff_odds = db.compute_playoff_odds(mtime)
 season = db.get_seasons("batting")[0]
 
-if standings.empty or playoff_odds.empty:
-    st.info("No standings/odds data yet — run the ingest script.")
+if standings.empty:
+    st.info("No standings data yet — run the ingest script.")
     st.stop()
 
 
@@ -57,7 +56,7 @@ def _team_logo(abbr):
     return style.team_logo_for_season(abbr, team_id, season) if team_id else None
 
 
-def _render_bracket_features(standings, playoff_odds, mtime):
+def _render_bracket_features(mtime):
     """The bracket + the interactive bracket predictor — split into a
     function (rather than inline top-level code) purely so the whole
     thing can be skipped with one `if SHOW_BRACKET_FEATURES:` guard
@@ -65,7 +64,7 @@ def _render_bracket_features(standings, playoff_odds, mtime):
     picture = db.current_playoff_picture(mtime)
     series_lookup = db.current_series_lookup(season, mtime)
     is_live = bool(series_lookup)
-    style.colored_header("Bracket" if is_live else "If the Season Ended Today", "headliners")
+    style.colored_header("Playoff Bracket", "headliners")
     st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
     if "AL" in picture and "NL" in picture:
         # Reseeded from whatever standings the nightly refresh last wrote —
@@ -239,27 +238,4 @@ def _render_bracket_predictor(picture):
 
 
 if SHOW_BRACKET_FEATURES:
-    _render_bracket_features(standings, playoff_odds, mtime)
-
-style.colored_header("Playoff & World Series Odds", "batting")
-merged = standings.merge(
-    playoff_odds[["team_abbr", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]],
-    on="team_abbr", how="left",
-)
-for league, header_color in (("AL", "batting"), ("NL", "pitching")):
-    league_df = merged[merged["league"] == league].sort_values(
-        ["playoff_pct", "ws_pct"], ascending=[False, False],
-    )
-    if league_df.empty:
-        continue
-    st.markdown(f"**{league} — {'American' if league == 'AL' else 'National'} League**")
-    display = league_df[["team_abbr", "wins", "losses", "playoff_pct", "division_pct", "wildcard_pct", "ws_pct"]].rename(
-        columns={
-            "team_abbr": "Team", "wins": "W", "losses": "L", "playoff_pct": "Playoff%",
-            "division_pct": "Division%", "wildcard_pct": "Wildcard%", "ws_pct": "WS%",
-        }
-    )
-    st.markdown(
-        "<div style='overflow-x:auto'>" + style.playoff_odds_table(display, teams.color_for_abbr) + "</div>",
-        unsafe_allow_html=True,
-    )
+    _render_bracket_features(mtime)
