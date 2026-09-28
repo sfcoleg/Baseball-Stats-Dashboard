@@ -1202,7 +1202,7 @@ def playoff_odds_table(df, team_color_fn) -> str:
 PLAYOFF_BRACKET_CSS = """
 <style>
 .bracket-row {
-  --br-chip:180px; --br-gap:24px; --br-slot-h:46px;
+  --br-chip:196px; --br-gap:24px; --br-slot-h:46px;
   /* nowrap + max-content: the whole bracket is one indivisible figure, so
      if it doesn't fit it scrolls inside its overflow-x:auto parent. Letting
      it wrap instead stacked the NL tree underneath the AL one and broke the
@@ -1242,12 +1242,16 @@ PLAYOFF_BRACKET_CSS = """
   display:flex; align-items:center; gap:8px; background-color:var(--dm-surface-mute); border-radius:8px;
   padding:8px 12px; white-space:nowrap; font-size:0.9rem; width:var(--br-chip); box-sizing:border-box;
 }
+.br-team.br-out { opacity:0.45; }
+.br-logo { width:20px; height:20px; object-fit:contain; flex-shrink:0; }
 .br-seed { color:var(--dm-dim); font-weight:700; font-size:0.85rem; min-width:0.9em; }
 .br-badge {
   background-color:var(--br-color) !important; color:var(--br-text) !important; padding:2px 9px; border-radius:6px;
   font-weight:700; text-decoration:none !important; font-size:0.9rem;
 }
 .br-rec { color:var(--dm-dim); font-size:0.85rem; }
+.br-series { color:var(--dm-amber); font-weight:700; font-size:0.8rem; }
+.br-series.br-won { color:var(--dm-green); }
 .br-tag { color:var(--dm-amber); font-size:0.75rem; font-weight:700; }
 .br-ws-box {
   display:flex; flex-direction:column; align-items:center; gap:8px; background-color:var(--dm-surface-mute);
@@ -1264,18 +1268,35 @@ PLAYOFF_BRACKET_CSS = """
 """
 
 
-def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = False) -> str:
-    """One league's "if the season ended today" bracket, drawn as an
-    actual bracket TREE (Wild Card -> Division Series -> Championship
-    Series, converging with connector lines) rather than a stacked list —
-    see PLAYOFF_BRACKET_CSS for how the nesting produces the shape.
-    Seeds 1-2 get a bye (shown starting one column in, at the same depth
-    their Division Series opponent — the Wild Card round's winner — will
-    join them); seed 3 vs 6 and seed 4 vs 5 play the Wild Card round.
-    `mirror=True` flips every connector to the left side, so the tree
-    grows right-to-left — for pairing an AL tree (normal) with an NL tree
-    (mirrored) around a centered World Series box, like the real bracket.
-    `seeded` needs seed/team_abbr/wins/losses, seed 1-6."""
+def _series_state(series_lookup: dict, abbr_a: str, abbr_b: str):
+    """(leader_abbr_or_None, "W-L"_or_None, is_final) for the series between
+    these two teams, from db.current_series_lookup — all None/False if the
+    two haven't played yet (series_lookup has nothing for this pair)."""
+    info = (series_lookup or {}).get(frozenset({abbr_a, abbr_b}))
+    if not info:
+        return None, None, False
+    wins = info["wins"]
+    text = f"{wins.get(abbr_a, 0)}-{wins.get(abbr_b, 0)}"
+    return info.get("leader"), text, bool(info.get("final"))
+
+
+def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, team_logo_fn=None, mirror: bool = False,
+                          series_lookup: dict | None = None) -> str:
+    """One league's postseason bracket, drawn as an actual bracket TREE
+    (Wild Card -> Division Series -> Championship Series, converging with
+    connector lines) rather than a stacked list — see PLAYOFF_BRACKET_CSS
+    for how the nesting produces the shape. Before the postseason starts
+    this is purely seeding ("if the season ended today"); once
+    `series_lookup` (db.current_series_lookup) has real games in it, each
+    matchup shows the live series score, an eliminated team dims, and a
+    decided Division Series round reseeds the bracket for real (the #1
+    seed plays the better-seeded Wild Card survivor, #2 plays the other —
+    same rule app/views/17_Playoffs.py's interactive predictor already
+    uses) instead of leaving seeds 1-2 sitting on a static "BYE" chip all
+    October. `mirror=True` flips every connector to the left side, so the
+    tree grows right-to-left — for pairing an AL tree (normal) with an NL
+    tree (mirrored) around a centered World Series box, like the real
+    bracket. `seeded` needs seed/team_abbr/wins/losses, seed 1-6."""
     by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
     if len(by_seed) < 6:
         return "<div style='color:var(--dm-dim)'>Not enough teams to seed a bracket yet.</div>"
@@ -1288,17 +1309,37 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
     theme_type = _session_theme()
     badge_text = "#EFF3F9" if theme_type == "dark" else "#0C1725"
 
-    def team_html(row, tag=None):
-        abbr = row["team_abbr"]
+    def team_html(abbr, seed=None, record=None, tag=None, series_text=None, eliminated=False, leading=False):
         tint = team_badge_tint(team_color_fn(abbr), theme_type)
         tag_html = f"<span class='br-tag'>{tag}</span>" if tag else ""
+        logo_html = f"<img class='br-logo' src='{team_logo_fn(abbr)}' alt=''>" if team_logo_fn else ""
+        seed_html = f"<span class='br-seed'>{seed}</span>" if seed is not None else ""
+        rec_html = f"<span class='br-rec'>{record}</span>" if record else ""
+        series_html = (
+            f"<span class='br-series{' br-won' if eliminated is False and leading else ''}'>{series_text}</span>"
+            if series_text else ""
+        )
         return (
-            "<div class='br-team'>"
-            f"<span class='br-seed'>{int(row['seed'])}</span>"
+            f"<div class='br-team{' br-out' if eliminated else ''}'>{seed_html}{logo_html}"
             f"<a href='?team={abbr}' target='_self' class='br-badge' "
             f"style='--br-color:{tint};--br-text:{badge_text}'>{abbr}</a>"
-            f"<span class='br-rec'>{int(row['wins'])}-{int(row['losses'])}</span>{tag_html}</div>"
+            f"{rec_html}{series_html}{tag_html}</div>"
         )
+
+    def team_chip(row, tag=None, opponent=None):
+        """A chip for a seeded team, with its live series record against
+        `opponent` (an abbr) if the two are currently/have already played."""
+        abbr = row["team_abbr"]
+        leader, series_text, is_final = (None, None, False) if opponent is None else _series_state(series_lookup, abbr, opponent)
+        eliminated = is_final and leader is not None and leader != abbr
+        return team_html(
+            abbr, seed=int(row["seed"]), record=f"{int(row['wins'])}-{int(row['losses'])}", tag=tag,
+            series_text=series_text, eliminated=eliminated, leading=(leader == abbr),
+        )
+
+    def tbd_chip(tag=None):
+        tag_html = f"<span class='br-tag'>{tag}</span>" if tag else ""
+        return f"<div class='br-team' style='color:var(--dm-dim)'>TBD{tag_html}</div>"
 
     def pair(left_html, right_html):
         return (
@@ -1313,12 +1354,46 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
         column to meet the bye team (see .br-lead in PLAYOFF_BRACKET_CSS)."""
         return (
             f"<div class='br-advance{mirror_cls}'>"
-            f"{pair(team_html(row_a), team_html(row_b))}"
+            f"{pair(team_chip(row_a, opponent=row_b['team_abbr']), team_chip(row_b, opponent=row_a['team_abbr']))}"
             f"<div class='br-lead'></div></div>"
         )
 
-    bye1 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[1], 'BYE')}</div>"
-    bye2 = f"<div class='br-bye-shift{mirror_cls}'>{team_html(by_seed[2], 'BYE')}</div>"
+    def wc_result(row_a, row_b):
+        """(winner_row_or_None) — whichever of the two has actually won the
+        Wild Card series, or None if it isn't decided (or hasn't started)
+        yet, so the Division Series slot below knows whether to show a
+        real reseeded opponent or keep waiting."""
+        leader, _, is_final = _series_state(series_lookup, row_a["team_abbr"], row_b["team_abbr"])
+        if is_final and leader is not None:
+            return row_a if row_a["team_abbr"] == leader else row_b
+        return None
+
+    wc_top_winner = wc_result(by_seed[3], by_seed[6])
+    wc_bottom_winner = wc_result(by_seed[4], by_seed[5])
+
+    # Real MLB reseeding: the #1 seed plays the BETTER-seeded surviving Wild
+    # Card team, #2 plays the other — same rule the interactive predictor in
+    # 17_Playoffs.py already uses (_predict_league), so the two stay
+    # consistent once the field settles.
+    if wc_top_winner is not None and wc_bottom_winner is not None:
+        survivors = sorted([wc_top_winner, wc_bottom_winner], key=lambda r: int(r["seed"]))
+        seed1_opp, seed2_opp = survivors[0], survivors[1]
+    else:
+        seed1_opp = seed2_opp = None
+
+    if seed1_opp is not None:
+        bye1_inner = team_chip(by_seed[1], opponent=seed1_opp["team_abbr"])
+    else:
+        bye1_inner = team_html(by_seed[1]["team_abbr"], seed=1,
+                               record=f"{int(by_seed[1]['wins'])}-{int(by_seed[1]['losses'])}", tag="BYE")
+    if seed2_opp is not None:
+        bye2_inner = team_chip(by_seed[2], opponent=seed2_opp["team_abbr"])
+    else:
+        bye2_inner = team_html(by_seed[2]["team_abbr"], seed=2,
+                               record=f"{int(by_seed[2]['wins'])}-{int(by_seed[2]['losses'])}", tag="BYE")
+
+    bye1 = f"<div class='br-bye-shift{mirror_cls}'>{bye1_inner}</div>"
+    bye2 = f"<div class='br-bye-shift{mirror_cls}'>{bye2_inner}</div>"
     wc_top = wild_card(by_seed[3], by_seed[6])
     wc_bottom = wild_card(by_seed[4], by_seed[5])
 
@@ -1326,19 +1401,61 @@ def playoff_bracket_tree(seeded: pd.DataFrame, team_color_fn, mirror: bool = Fal
     return f"<div class='bracket-tree'>{tree}</div>"
 
 
-def full_playoff_bracket_html(al_seeded: pd.DataFrame, nl_seeded: pd.DataFrame, team_color_fn) -> str:
+def _league_champion(seeded: pd.DataFrame, series_lookup: dict | None):
+    """The pennant winner, if the Championship Series has actually been
+    decided — resolved the same way the Division Series reseeding above
+    is: walk WC -> DS -> CS using series_lookup, returning None the moment
+    any round isn't final yet. Returns a `seeded` row, or None."""
+    by_seed = {int(r["seed"]): r for _, r in seeded.iterrows()}
+    if len(by_seed) < 6:
+        return None
+
+    def winner_of(row_a, row_b):
+        leader, _, is_final = _series_state(series_lookup, row_a["team_abbr"], row_b["team_abbr"])
+        if is_final and leader is not None:
+            return row_a if row_a["team_abbr"] == leader else row_b
+        return None
+
+    wc_top_winner = winner_of(by_seed[3], by_seed[6])
+    wc_bottom_winner = winner_of(by_seed[4], by_seed[5])
+    if wc_top_winner is None or wc_bottom_winner is None:
+        return None
+    survivors = sorted([wc_top_winner, wc_bottom_winner], key=lambda r: int(r["seed"]))
+    ds1_winner = winner_of(by_seed[1], survivors[0])
+    ds2_winner = winner_of(by_seed[2], survivors[1])
+    if ds1_winner is None or ds2_winner is None:
+        return None
+    return winner_of(ds1_winner, ds2_winner)
+
+
+def full_playoff_bracket_html(al_seeded: pd.DataFrame, nl_seeded: pd.DataFrame, team_color_fn,
+                               team_logo_fn=None, series_lookup: dict | None = None) -> str:
     """The complete postseason picture, both leagues at once: AL tree on
     the left (Wild Card -> Division Series -> Championship Series flowing
     left to right), NL tree on the right (same rounds, mirrored to flow
     right to left), meeting at a centered World Series box — the same
     shape as the real MLB bracket graphic, showing every round from Wild
-    Card through the World Series in one continuous connected path."""
-    al_html = playoff_bracket_tree(al_seeded, team_color_fn, mirror=False)
-    nl_html = playoff_bracket_tree(nl_seeded, team_color_fn, mirror=True)
-    ws_html = (
-        "<div class='br-ws-box'><span class='br-ws-title'>World Series</span>"
-        "<span>AL Champion (TBD)</span><span>vs.</span><span>NL Champion (TBD)</span></div>"
-    )
+    Card through the World Series in one continuous connected path. Once
+    `series_lookup` has both league championships decided, the World
+    Series box shows the real two teams (and their series score, once
+    that's started) instead of "(TBD)"."""
+    al_html = playoff_bracket_tree(al_seeded, team_color_fn, team_logo_fn, mirror=False, series_lookup=series_lookup)
+    nl_html = playoff_bracket_tree(nl_seeded, team_color_fn, team_logo_fn, mirror=True, series_lookup=series_lookup)
+
+    al_champ = _league_champion(al_seeded, series_lookup)
+    nl_champ = _league_champion(nl_seeded, series_lookup)
+    if al_champ is not None and nl_champ is not None:
+        _, ws_text, _ = _series_state(series_lookup, al_champ["team_abbr"], nl_champ["team_abbr"])
+        rec_html = f"<span class='br-series'>{ws_text}</span>" if ws_text else ""
+        ws_html = (
+            "<div class='br-ws-box'><span class='br-ws-title'>World Series</span>"
+            f"<span>{al_champ['team_abbr']}</span><span>vs.</span><span>{nl_champ['team_abbr']}</span>{rec_html}</div>"
+        )
+    else:
+        ws_html = (
+            "<div class='br-ws-box'><span class='br-ws-title'>World Series</span>"
+            "<span>AL Champion (TBD)</span><span>vs.</span><span>NL Champion (TBD)</span></div>"
+        )
     return f"<div class='bracket-row'>{al_html}{ws_html}{nl_html}</div>"
 
 

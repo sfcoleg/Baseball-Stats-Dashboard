@@ -419,6 +419,34 @@ else:
 
 st.divider()
 
+# --- Playoff bracket ---------------------------------------------------
+# Same widget the Playoffs page uses (style.full_playoff_bracket_html),
+# reseeded from live standings/series results on every load — shown here
+# too since the postseason picture is exactly the kind of thing people
+# land on Home wanting to see without an extra click once October starts.
+picture = db.current_playoff_picture(mtime)
+if "AL" in picture and "NL" in picture:
+    bracket_series_lookup = db.current_series_lookup(season, mtime)
+
+
+    def _bracket_team_logo(abbr):
+        team_id = teams.team_id_for_abbr(abbr)
+        return style.team_logo_for_season(abbr, team_id, season) if team_id else None
+
+
+    style.colored_header("Bracket" if bracket_series_lookup else "If the Season Ended Today", "headliners")
+    st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
+    st.markdown(
+        "<div style='overflow-x:auto'>"
+        + style.full_playoff_bracket_html(
+            picture["AL"], picture["NL"], teams.color_for_abbr, _bracket_team_logo, bracket_series_lookup,
+        )
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+    st.caption("See the Playoffs page for odds and to fill out your own bracket.")
+    st.divider()
+
 style.colored_header(f"Batting Leaders (min {db.QUALIFIED_MIN_PA} PA)", "batting")
 st.caption(f"Top 50 of {len(qualified_batters)} qualified batters by OPS — see the Batting page for the full filterable list.")
 batting_display = teams.add_team_abbr(qualified_batters.head(50))[

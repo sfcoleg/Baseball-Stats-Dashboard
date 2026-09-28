@@ -1905,6 +1905,26 @@ def fetch_postseason(season: int) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def update_current_postseason(conn, season: int) -> int:
+    """Top up ONE season's postseason games — the current one, called from
+    the daily refresh so the Playoffs bracket and Home page can show live
+    series records once October starts, without waiting for someone to
+    manually re-run --postseason. Unlike backfill_postseason (which
+    replaces the WHOLE archive across every season, because that command
+    is meant to run occasionally and is fine being slow), this only
+    touches `season`'s own rows: delete-then-insert the current season's
+    fresh fetch, leaving every other season's completed history untouched.
+    Returns the number of games now on file for the season."""
+    frame = fetch_postseason(season)
+    try:
+        conn.execute("DELETE FROM postseason_games WHERE season = ?", (int(season),))
+    except sqlite3.OperationalError:
+        pass  # table doesn't exist yet — to_sql below creates it
+    if not frame.empty:
+        frame.to_sql("postseason_games", conn, if_exists="append", index=False)
+    return len(frame)
+
+
 def backfill_postseason(first: int = POSTSEASON_FIRST_SEASON, last: int | None = None) -> None:
     """Build the whole postseason archive in one pass.
 
@@ -1993,6 +2013,7 @@ def fetch_and_store():
             new_achievements = record_milestone_achievements(conn, career_totals)
         else:
             new_achievements = 0
+        current_postseason_games = update_current_postseason(conn, CURRENT_SEASON)
         _store_recent(conn, "recent_batting", recent_batting)
         _store_recent(conn, "recent_pitching", recent_pitching)
         # always replace, even if empty (e.g. an off day with zero games) — an
@@ -2025,7 +2046,8 @@ def fetch_and_store():
         f"{len(schedule)} schedule rows, "
         f"{len(all_star_roster)} All-Star roster rows, {len(career_totals)} career-totals rows, "
         f"{new_achievements} new milestone achievements, "
-        f"{new_season_milestones} new season milestones to {DB_PATH}"
+        f"{new_season_milestones} new season milestones, "
+        f"{current_postseason_games} current-season postseason games to {DB_PATH}"
     )
 
     # Per-day add-ons (umpire scorecards, WPA, ballparks) for every day

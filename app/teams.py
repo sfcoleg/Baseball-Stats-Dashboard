@@ -56,6 +56,23 @@ _BY_CITY_LEAGUE = {
 _BY_NICKNAME = {info[1]: (info[0], info[2]) for info in _BY_CITY_LEAGUE.values()}
 _BY_NICKNAME["D-backs"] = _BY_NICKNAME["Diamondbacks"]
 
+# "City Nickname" -> abbreviation, for sources (the MLB Stats API's own
+# team.name field, used by ingest.fetch_postseason) that report a team's
+# full display name rather than a bare city or nickname. Built from the
+# same _BY_CITY_LEAGUE table, so it already covers every historical
+# city/nickname variant on file (e.g. both "Florida Marlins" and "Miami
+# Marlins" resolve to MIA) — no separate list to keep in sync.
+_FULL_NAME_TO_ABBR = {
+    (info[1] if city == "Athletics" else f"{city} {info[1]}"): info[0]
+    for (city, _league), info in _BY_CITY_LEAGUE.items()
+}
+
+
+def abbr_for_full_name(name: str) -> str | None:
+    """Resolve a team's full "City Nickname" display name (as the MLB Stats
+    API reports it) to our abbreviation. None if unrecognized."""
+    return _FULL_NAME_TO_ABBR.get(str(name).strip())
+
 # abbreviation -> primary color, used once a Tm column has been converted
 # to abbreviations (see add_team_abbr) so table styling doesn't need to
 # re-resolve the city/league ambiguity per cell.

@@ -883,6 +883,20 @@ def load_wp_model() -> dict | None:
         return None
 
 
+def load_wp_calibration() -> dict | None:
+    """The win-probability model's own holdout validation: predicted vs
+    actual win rate in each probability bin, computed by
+    ingest/train_wp_model.py against the holdout season (config.holdout_season)
+    — a season the model was never trained on — the last time it was
+    trained, plus log-loss/accuracy against a naive baseline. Returns None
+    if the model artifact predates this metrics block."""
+    model = load_wp_model()
+    if not model or "metrics" not in model:
+        return None
+    return {**model["metrics"], "holdout_season": model.get("config", {}).get("holdout_season"),
+            "train_seasons": model.get("config", {}).get("train_seasons")}
+
+
 def wp_lookup(model: dict, inning: int, half: int, outs: int, base: int, diff: int) -> tuple[float, float]:
     """(win probability for the HOME team, leverage index) for a game
     state. half: 0=top, 1=bottom. base: bitmask 1st=1/2nd=2/3rd=4.
@@ -4934,3 +4948,39 @@ def postseason_series(games: pd.DataFrame) -> pd.DataFrame:
         {name: i for i, name in enumerate(POSTSEASON_ROUND_ORDER)}
     ).fillna(99)
     return out.sort_values(["_order", "Started"]).drop(columns=["_order"]).reset_index(drop=True)
+
+
+# Games needed to WIN each round (not games needed to play) — Wild Card is
+# best-of-3, everything else is best-of-5 or best-of-7.
+_SERIES_WINS_NEEDED = {
+    "Wild Card": 2, "Division Series": 3, "Championship Series": 4, "World Series": 4,
+}
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=4)
+def current_series_lookup(season: int, db_mtime_val: float) -> dict:
+    """Live postseason series state for `season`, keyed by
+    frozenset({abbr_a, abbr_b}) — two specific teams can only meet once in
+    a season, so the round doesn't need to be part of the key. Each value
+    is {"wins": {abbr: int}, "leader": abbr | None, "final": bool} — the
+    bracket (style.playoff_bracket_tree) uses this to show a series score
+    and grey out an eliminated team instead of just a static seed pairing.
+    Empty dict before the postseason has any games on file yet."""
+    games = postseason_games(season, db_mtime_val)
+    if games.empty:
+        return {}
+    series = postseason_series(games)
+    lookup = {}
+    for _, row in series.iterrows():
+        winner_abbr = teams.abbr_for_full_name(row["Winner"])
+        loser_abbr = teams.abbr_for_full_name(row["Loser"])
+        if not winner_abbr or not loser_abbr:
+            continue
+        winner_wins, loser_wins = (int(x) for x in row["Result"].split("-"))
+        needed = _SERIES_WINS_NEEDED.get(row["Round"], 4)
+        lookup[frozenset({winner_abbr, loser_abbr})] = {
+            "wins": {winner_abbr: winner_wins, loser_abbr: loser_wins},
+            "leader": winner_abbr if winner_wins != loser_wins else None,
+            "final": winner_wins >= needed,
+        }
+    return lookup

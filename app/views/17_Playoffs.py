@@ -29,9 +29,9 @@ SHOW_BRACKET_FEATURES = True
 # Picking series winners only means something once the field is actually
 # set — until then the seeding it's built on still moves underneath the
 # picks, so a filled-in bracket half-invalidates itself overnight (see
-# _pick_row, which drops picks whose matchup no longer exists). Flip this
-# on when the postseason field is locked.
-SHOW_BRACKET_PREDICTOR = False
+# _pick_row, which drops picks whose matchup no longer exists). The
+# postseason field locked when the regular season ended, so this is on.
+SHOW_BRACKET_PREDICTOR = True
 
 if SHOW_BRACKET_FEATURES and SHOW_BRACKET_PREDICTOR:
     bracket_picks.bootstrap()
@@ -45,33 +45,45 @@ if not db.DB_PATH.exists():
 mtime = db.db_mtime()
 standings = db.load_standings(mtime)
 playoff_odds = db.compute_playoff_odds(mtime)
+season = db.get_seasons("batting")[0]
 
 if standings.empty or playoff_odds.empty:
     st.info("No standings/odds data yet — run the ingest script.")
     st.stop()
 
 
+def _team_logo(abbr):
+    team_id = teams.team_id_for_abbr(abbr)
+    return style.team_logo_for_season(abbr, team_id, season) if team_id else None
+
+
 def _render_bracket_features(standings, playoff_odds, mtime):
-    """The "if the season ended today" bracket + the interactive bracket
-    predictor — split into a function (rather than inline top-level code)
-    purely so the whole thing can be skipped with one `if
-    SHOW_BRACKET_FEATURES:` guard instead of re-indenting every line by
-    hand."""
-    style.colored_header("If the Season Ended Today", "headliners")
-    st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
+    """The bracket + the interactive bracket predictor — split into a
+    function (rather than inline top-level code) purely so the whole
+    thing can be skipped with one `if SHOW_BRACKET_FEATURES:` guard
+    instead of re-indenting every line by hand."""
     picture = db.current_playoff_picture(mtime)
+    series_lookup = db.current_series_lookup(season, mtime)
+    is_live = bool(series_lookup)
+    style.colored_header("Bracket" if is_live else "If the Season Ended Today", "headliners")
+    st.markdown(style.PLAYOFF_BRACKET_CSS, unsafe_allow_html=True)
     if "AL" in picture and "NL" in picture:
         # Reseeded from whatever standings the nightly refresh last wrote —
         # stamping the date makes it obvious the bracket is live rather than
         # a fixture someone drew once.
         as_of = datetime.fromtimestamp(mtime).strftime("%b %-d") if mtime else None
-        st.caption(
-            "Seeding is recomputed from the current standings every time this page loads"
-            + (f" — standings last refreshed {as_of}." if as_of else ".")
-        )
+        if is_live:
+            st.caption("Live series records" + (f" as of {as_of}." if as_of else "."))
+        else:
+            st.caption(
+                "Seeding is recomputed from the current standings every time this page loads"
+                + (f" — standings last refreshed {as_of}." if as_of else ".")
+            )
         st.markdown(
             "<div style='overflow-x:auto'>"
-            + style.full_playoff_bracket_html(picture["AL"], picture["NL"], teams.color_for_abbr)
+            + style.full_playoff_bracket_html(
+                picture["AL"], picture["NL"], teams.color_for_abbr, _team_logo, series_lookup,
+            )
             + "</div>",
             unsafe_allow_html=True,
         )
@@ -103,7 +115,6 @@ def _render_bracket_features(standings, playoff_odds, mtime):
         if team_a == team_b:
             st.caption("Pick two different teams.")
         else:
-            season = db.get_seasons("batting")[0]
             profile_a = db.team_strength_profile(team_a, season, mtime)
             profile_b = db.team_strength_profile(team_b, season, mtime)
             if profile_a and profile_b:
