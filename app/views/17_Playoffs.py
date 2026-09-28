@@ -93,12 +93,16 @@ def _render_bracket_features(mtime):
 
     if SHOW_BRACKET_PREDICTOR:
         style.colored_header("Predict the Bracket", "headliners")
-        st.caption(
-            "Pick a winner in each series, based on today's seeding — no account needed, your picks are saved "
-            "right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later rounds "
-            "unlock as you fill in the ones before them."
-        )
-        _render_bracket_predictor(picture)
+        if series_lookup:
+            st.caption("The postseason is underway, so your bracket is locked in and being scored below.")
+        else:
+            st.caption(
+                "Pick a winner in each series, based on today's seeding — no account needed, your picks are "
+                "saved right in this page's URL, so bookmarking or sharing the link keeps your bracket. Later "
+                "rounds unlock as you fill in the ones before them. Once the postseason starts, your bracket "
+                "locks and starts scoring against the real results."
+            )
+        _render_bracket_predictor(picture, series_lookup)
         st.divider()
 
     style.colored_header("Matchup Preview", "batting")
@@ -125,116 +129,204 @@ def _render_bracket_features(mtime):
 
 
 def _seed_lookup(seeded):
-    return {int(row.seed): row for row in seeded.itertuples()}
+    return {int(row["seed"]): row for _, row in seeded.iterrows()}
 
 
-def _pick_row(node_id, team_a, team_b):
-    """Two side-by-side buttons for one series; the currently-picked team
-    (if any) renders as a highlighted "primary" button. Picks live in the
-    page's own ?bracket= URL param (see bracket_picks.py), not an account —
-    the current pick set is written back to that param on every click, so
-    the URL itself stays a live link to this exact bracket."""
-    picks = st.session_state["bracket_picks"]
-    current = picks.get(node_id)
-    # Seeding is recomputed from live standings on every load, so a pick
-    # saved yesterday can name a team that has since fallen out of the
-    # bracket — and picks come from a ?bracket= URL param, so they can name
-    # anything at all. Either way the downstream seed lookups would raise a
-    # KeyError on a team that isn't in the current field, so drop any pick
-    # that isn't one of THIS series' two actual participants. Later rounds
-    # then simply stay locked until the earlier one is re-picked.
-    if current is not None and current not in (team_a["abbr"], team_b["abbr"]):
-        picks.pop(node_id, None)
-        current = None
-    cols = st.columns(2)
-    for col, team in zip(cols, (team_a, team_b)):
-        with col:
-            label = f"{team['seed']}. {team['abbr']} ({team['wins']}-{team['losses']})"
-            if st.button(
-                label, key=f"pick_{node_id}_{team['abbr']}",
-                type="primary" if current == team["abbr"] else "secondary",
-                use_container_width=True,
-            ):
-                picks[node_id] = team["abbr"]
-                bracket_picks.save()
-                st.rerun()
-    return current
+def _series_result(abbr_a, abbr_b, series_lookup):
+    info = (series_lookup or {}).get(frozenset({abbr_a, abbr_b}))
+    if not info:
+        return None, None, False
+    wins = info["wins"]
+    text = f"{wins.get(abbr_a, 0)}-{wins.get(abbr_b, 0)}"
+    return info.get("leader"), text, bool(info.get("final"))
 
 
-def _team_dict(row):
-    return {"seed": int(row.seed), "abbr": row.team_abbr, "wins": int(row.wins), "losses": int(row.losses)}
+def _make_node(node_id, row_a, row_b, picks, series_lookup):
+    """One series in a user's predicted bracket: which of the two teams
+    they picked, plus (once the real series has actually been played) its
+    live score and whether the pick was right. `row_a`/`row_b` are seed
+    rows — always the ORIGINAL seed 1-6 rows, threaded through every later
+    round via _advance(), so `int(row['seed'])`/wins/losses/team_abbr are
+    always present no matter how deep in the bracket this node sits."""
+    pick = picks.get(node_id)
+    # Seeding is recomputed from live standings on every load (pre-lock),
+    # and picks come from a ?bracket= URL param, so a stale/tampered pick
+    # could name a team that isn't one of this series' two participants —
+    # drop it rather than let a downstream lookup misbehave.
+    if pick not in (None, row_a["team_abbr"], row_b["team_abbr"]):
+        pick = None
+    leader, series_text, is_final = _series_result(row_a["team_abbr"], row_b["team_abbr"], series_lookup)
+    correct = (pick == leader) if is_final else None
+    return {
+        "id": node_id, "team_a": row_a, "team_b": row_b, "pick": pick,
+        "series_text": series_text, "final": is_final, "correct": correct,
+    }
 
 
-def _predict_league(league, seeded):
+def _advance(node):
+    """Which row the USER'S bracket sends to the next round — driven only
+    by their pick, never by the real result (that's what keeps a missed
+    early-round pick from silently "fixing itself" later)."""
+    if node is None or node["pick"] is None:
+        return None
+    return node["team_a"] if node["team_a"]["team_abbr"] == node["pick"] else node["team_b"]
+
+
+def _resolve_league(league, seeded, picks, series_lookup):
+    """Every series in one league's predicted bracket, keyed
+    wc_top/wc_bottom/ds1/ds2/cs — a later round is None until both of the
+    picks it depends on are made. Division Series reseeding follows the
+    real rule: the #1 seed plays the better-seeded Wild Card survivor, #2
+    plays the other."""
     lookup = _seed_lookup(seeded)
     if len(lookup) < 6:
-        st.caption(f"Not enough {league} seeding data yet.")
         return None
-
-    st.markdown(f"**{league} Wild Card**")
-    wc1 = _pick_row(f"{league}_wc_36", _team_dict(lookup[3]), _team_dict(lookup[6]))
-    wc2 = _pick_row(f"{league}_wc_45", _team_dict(lookup[4]), _team_dict(lookup[5]))
-
-    if not (wc1 and wc2):
-        st.caption("Pick both Wild Card series to unlock the Division Series.")
-        return None
-
-    # Reseeding: #1 seed plays the lower-numbered (stronger) surviving
-    # seed, #2 seed plays the other — same rule as the real bracket sim in
-    # db.compute_playoff_odds.
-    abbr_to_row = {lookup[s].team_abbr: lookup[s] for s in (3, 4, 5, 6)}
-    survivors = sorted([wc1, wc2], key=lambda a: int(abbr_to_row[a].seed))
-    st.markdown(f"**{league} Division Series**")
-    ds1 = _pick_row(f"{league}_ds1", _team_dict(lookup[1]), _team_dict(abbr_to_row[survivors[0]]))
-    ds2 = _pick_row(f"{league}_ds2", _team_dict(lookup[2]), _team_dict(abbr_to_row[survivors[1]]))
-
-    if not (ds1 and ds2):
-        st.caption("Pick both Division Series to unlock the Championship Series.")
-        return None
-
-    abbr_to_row.update({lookup[1].team_abbr: lookup[1], lookup[2].team_abbr: lookup[2]})
-    st.markdown(f"**{league} Championship Series**")
-    champ = _pick_row(f"{league}_cs", _team_dict(abbr_to_row[ds1]), _team_dict(abbr_to_row[ds2]))
-    return champ, (abbr_to_row[champ] if champ else None)
+    wc_top = _make_node(f"{league}_wc_36", lookup[3], lookup[6], picks, series_lookup)
+    wc_bottom = _make_node(f"{league}_wc_45", lookup[4], lookup[5], picks, series_lookup)
+    wc_top_adv, wc_bottom_adv = _advance(wc_top), _advance(wc_bottom)
+    ds1 = ds2 = None
+    if wc_top_adv is not None and wc_bottom_adv is not None:
+        survivors = sorted([wc_top_adv, wc_bottom_adv], key=lambda r: int(r["seed"]))
+        ds1 = _make_node(f"{league}_ds1", lookup[1], survivors[0], picks, series_lookup)
+        ds2 = _make_node(f"{league}_ds2", lookup[2], survivors[1], picks, series_lookup)
+    cs = None
+    ds1_adv, ds2_adv = _advance(ds1), _advance(ds2)
+    if ds1_adv is not None and ds2_adv is not None:
+        cs = _make_node(f"{league}_cs", ds1_adv, ds2_adv, picks, series_lookup)
+    return {"wc_top": wc_top, "wc_bottom": wc_bottom, "ds1": ds1, "ds2": ds2, "cs": cs}
 
 
-def _render_bracket_predictor(picture):
-    if "AL" in picture and "NL" in picture:
-        reset_col, _ = st.columns([1, 5])
-        with reset_col:
-            if st.button("Reset my picks"):
-                st.session_state["bracket_picks"] = {}
+# Points per correctly-picked round — later rounds (fewer series, harder to
+# call) are worth more, the standard shape for a bracket-pool scoring rule.
+ROUND_POINTS = {"wc_top": 1, "wc_bottom": 1, "ds1": 2, "ds2": 2, "cs": 4, "ws": 8}
+# Fixed regardless of how many picks are actually filled in — 2 leagues x
+# (2 Wild Card + 2 Division Series + 1 Championship Series) + 1 World
+# Series, at their point values above.
+FULL_POSSIBLE_POINTS = sum(ROUND_POINTS[k] for k in ("wc_top", "wc_bottom", "ds1", "ds2", "cs")) * 2 + ROUND_POINTS["ws"]
+
+
+def _score_bracket(al_nodes, nl_nodes, ws_node):
+    earned = 0
+    for nodes in (al_nodes, nl_nodes):
+        if not nodes:
+            continue
+        for key, node in nodes.items():
+            if node and node["correct"]:
+                earned += ROUND_POINTS[key]
+    if ws_node and ws_node["correct"]:
+        earned += ROUND_POINTS["ws"]
+    return earned, FULL_POSSIBLE_POINTS
+
+
+def _pick_button_row(node):
+    """Two side-by-side buttons for one series node; the currently-picked
+    team (if any) renders as a highlighted "primary" button. Picks live in
+    the page's own ?bracket= URL param (see bracket_picks.py), not an
+    account — the current pick set is written back to that param on every
+    click, so the URL itself stays a live link to this exact bracket."""
+    if node is None:
+        return
+    picks = st.session_state["bracket_picks"]
+    cols = st.columns(2)
+    for col, row in zip(cols, (node["team_a"], node["team_b"])):
+        with col:
+            abbr = row["team_abbr"]
+            label = f"{int(row['seed'])}. {abbr} ({int(row['wins'])}-{int(row['losses'])})"
+            if st.button(
+                label, key=f"pick_{node['id']}_{abbr}",
+                type="primary" if node["pick"] == abbr else "secondary",
+                use_container_width=True,
+            ):
+                picks[node["id"]] = abbr
                 bracket_picks.save()
                 st.rerun()
 
-        al_col, nl_col = st.columns(2)
-        with al_col:
-            al_result = _predict_league("AL", picture["AL"])
-        with nl_col:
-            nl_result = _predict_league("NL", picture["NL"])
 
-        al_champ = al_result[0] if al_result else None
-        nl_champ = nl_result[0] if nl_result else None
-        if al_champ and nl_champ:
-            al_row, nl_row = al_result[1], nl_result[1]
-            st.markdown("**World Series**")
-            ws_champ = _pick_row(
-                "WS",
-                {"seed": al_row.seed, "abbr": al_champ, "wins": int(al_row.wins), "losses": int(al_row.losses)},
-                {"seed": nl_row.seed, "abbr": nl_champ, "wins": int(nl_row.wins), "losses": int(nl_row.losses)},
-            )
-            if ws_champ:
-                color = teams.color_for_abbr(ws_champ)
-                st.markdown(
-                    f"<div style='margin-top:12px;padding:14px 18px;border-radius:10px;"
-                    f"background-color:{color}33;border:1px solid {color};font-size:1.1rem'>"
-                    f"Your predicted champion: <strong>{ws_champ}</strong> \U0001F3C6</div>",
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.caption("Finish both league championships to predict the World Series.")
-    else:
+def _render_league_picker(league, nodes):
+    st.markdown(f"**{league} Wild Card**")
+    _pick_button_row(nodes["wc_top"])
+    _pick_button_row(nodes["wc_bottom"])
+    if nodes["ds1"] is None:
+        st.caption("Pick both Wild Card series to unlock the Division Series.")
+        return
+    st.markdown(f"**{league} Division Series**")
+    _pick_button_row(nodes["ds1"])
+    _pick_button_row(nodes["ds2"])
+    if nodes["cs"] is None:
+        st.caption("Pick both Division Series to unlock the Championship Series.")
+        return
+    st.markdown(f"**{league} Championship Series**")
+    _pick_button_row(nodes["cs"])
+
+
+def _render_bracket_predictor(picture, series_lookup):
+    """The predictor gets its own bracket-shaped visual (style.
+    full_predictor_bracket_html) that fills in as picks are made, whether
+    or not the postseason has started. Once it has (series_lookup is
+    non-empty — the same signal the real bracket above uses to switch
+    into "live" mode), the pick buttons disappear and the bracket becomes
+    read-only: locked to whatever was picked, scored against the real
+    results as they come in."""
+    if "AL" not in picture or "NL" not in picture:
         st.caption("No seeding data yet.")
+        return
+
+    picks = st.session_state["bracket_picks"]
+    al_nodes = _resolve_league("AL", picture["AL"], picks, series_lookup)
+    nl_nodes = _resolve_league("NL", picture["NL"], picks, series_lookup)
+    if al_nodes is None or nl_nodes is None:
+        st.caption("Not enough seeding data yet.")
+        return
+    al_champ, nl_champ = _advance(al_nodes["cs"]), _advance(nl_nodes["cs"])
+    ws_node = (
+        _make_node("WS", al_champ, nl_champ, picks, series_lookup)
+        if al_champ is not None and nl_champ is not None else None
+    )
+
+    is_locked = bool(series_lookup)
+    if is_locked:
+        earned, possible = _score_bracket(al_nodes, nl_nodes, ws_node)
+        st.markdown(f"#### Your bracket: {earned} / {possible} points")
+
+    st.markdown(style.PREDICTOR_BRACKET_CSS, unsafe_allow_html=True)
+    st.markdown(
+        "<div style='overflow-x:auto'>"
+        + style.full_predictor_bracket_html(al_nodes, nl_nodes, ws_node, _team_logo)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+    if is_locked:
+        st.caption("The postseason has started, so this bracket is locked in and can't be changed.")
+        return
+
+    st.divider()
+    reset_col, _ = st.columns([1, 5])
+    with reset_col:
+        if st.button("Reset my picks"):
+            st.session_state["bracket_picks"] = {}
+            bracket_picks.save()
+            st.rerun()
+
+    al_col, nl_col = st.columns(2)
+    with al_col:
+        _render_league_picker("AL", al_nodes)
+    with nl_col:
+        _render_league_picker("NL", nl_nodes)
+
+    if ws_node is not None:
+        st.markdown("**World Series**")
+        _pick_button_row(ws_node)
+        if ws_node["pick"]:
+            color = teams.color_for_abbr(ws_node["pick"])
+            st.markdown(
+                f"<div style='margin-top:12px;padding:14px 18px;border-radius:10px;"
+                f"background-color:{color}33;border:1px solid {color};font-size:1.1rem'>"
+                f"Your predicted champion: <strong>{ws_node['pick']}</strong> \U0001F3C6</div>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.caption("Finish both league championships to predict the World Series.")
 
 
 if SHOW_BRACKET_FEATURES:

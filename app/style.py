@@ -1459,6 +1459,95 @@ def full_playoff_bracket_html(al_seeded: pd.DataFrame, nl_seeded: pd.DataFrame, 
     return f"<div class='bracket-row'>{al_html}{ws_html}{nl_html}</div>"
 
 
+# The predictor bracket (app/views/17_Playoffs.py's _resolve_league) is a
+# simple left-to-right column layout — Wild Card, Division Series,
+# Championship Series, World Series — rather than the real bracket's
+# connected-line tree. Each column can hold a series that hasn't been
+# picked yet (a "TBD" placeholder), so the connecting-line geometry the
+# real tree relies on (fixed slot heights meeting at exact midpoints)
+# doesn't hold here; a plain column grid stays legible with contents
+# appearing and disappearing as picks are made.
+PREDICTOR_BRACKET_CSS = """
+<style>
+.pbk-wrap { display:flex; gap:16px; align-items:flex-start; overflow-x:auto; padding-bottom:8px; }
+.pbk-col { display:flex; flex-direction:column; gap:12px; min-width:180px; flex:0 0 auto; }
+.pbk-col-title { font-family:'Archivo Narrow',sans-serif; font-weight:700; font-size:0.72rem;
+  letter-spacing:0.6px; text-transform:uppercase; color:var(--dm-dim); text-align:center; }
+.pbk-matchup { background:var(--dm-card); border:1px solid var(--dm-line); border-radius:10px;
+  padding:8px; display:flex; flex-direction:column; gap:3px; }
+.pbk-row { display:flex; align-items:center; gap:6px; padding:4px 6px; border-radius:6px; font-size:0.86rem; }
+.pbk-row.pbk-pick { background:var(--dm-blue-soft); font-weight:700; }
+.pbk-row.pbk-correct { background:var(--dm-green-soft); }
+.pbk-row.pbk-wrong { opacity:0.5; text-decoration:line-through; }
+.pbk-logo { width:18px; height:18px; object-fit:contain; flex-shrink:0; }
+.pbk-seed { color:var(--dm-dim); font-weight:700; font-size:0.8rem; min-width:0.8em; }
+.pbk-check { margin-left:auto; }
+.pbk-series-line { text-align:center; font-size:0.72rem; color:var(--dm-dim); font-weight:700; padding-top:2px; }
+.pbk-tbd { color:var(--dm-dim); font-style:italic; text-align:center; padding:14px 6px; font-size:0.86rem; }
+</style>
+"""
+
+
+def predictor_matchup_html(node: dict | None, team_logo_fn=None) -> str:
+    """One series card for the predictor bracket: both teams, the picked
+    one highlighted, green+check once it's confirmed right, faded+struck
+    once confirmed wrong, and the live series score underneath once
+    `node["series_text"]` has one. `node` is a dict from
+    app/views/17_Playoffs.py's _make_node — None renders a "TBD" card
+    (the matchup depends on an earlier round that isn't picked yet)."""
+    if node is None:
+        return "<div class='pbk-matchup'><div class='pbk-tbd'>TBD</div></div>"
+    rows = []
+    for row in (node["team_a"], node["team_b"]):
+        abbr = row["team_abbr"]
+        is_pick = node["pick"] == abbr
+        logo = team_logo_fn(abbr) if team_logo_fn else None
+        logo_html = f"<img class='pbk-logo' src='{logo}' alt=''>" if logo else ""
+        cls = "pbk-row"
+        check = ""
+        if is_pick:
+            cls += " pbk-pick"
+            if node["correct"] is True:
+                cls += " pbk-correct"
+                check = "<span class='pbk-check'>✅</span>"
+            elif node["correct"] is False:
+                cls += " pbk-wrong"
+                check = "<span class='pbk-check'>❌</span>"
+        rows.append(
+            f"<div class='{cls}'><span class='pbk-seed'>{int(row['seed'])}</span>{logo_html}"
+            f"<span>{abbr}</span>{check}</div>"
+        )
+    series_html = f"<div class='pbk-series-line'>{node['series_text']}</div>" if node["series_text"] else ""
+    return "<div class='pbk-matchup'>" + "".join(rows) + series_html + "</div>"
+
+
+def full_predictor_bracket_html(al_nodes: dict | None, nl_nodes: dict | None, ws_node: dict | None,
+                                 team_logo_fn=None) -> str:
+    """The whole predictor bracket, both leagues' Wild Card -> Division
+    Series -> Championship Series columns flanking a shared World Series
+    column — the visual home for a user's own picks (app/views/
+    17_Playoffs.py builds `al_nodes`/`nl_nodes`/`ws_node` via
+    _resolve_league), filling in as they pick and showing a score once
+    the postseason starts checking them against real results."""
+    def col(title, matchups):
+        return (
+            f"<div class='pbk-col'><div class='pbk-col-title'>{title}</div>"
+            + "".join(predictor_matchup_html(m, team_logo_fn) for m in matchups)
+            + "</div>"
+        )
+
+    def league_block(nodes, label):
+        n = nodes or {}
+        return (
+            col(f"{label} Wild Card", [n.get("wc_top"), n.get("wc_bottom")])
+            + col("Division Series", [n.get("ds1"), n.get("ds2")])
+            + col("Championship Series", [n.get("cs")])
+        )
+
+    ws_col = col("World Series", [ws_node])
+    return f"<div class='pbk-wrap'>{league_block(al_nodes, 'AL')}{ws_col}{league_block(nl_nodes, 'NL')}</div>"
+
+
 _SCHEDULE_STATUS_LABELS = {"Preview": "Scheduled", "Live": "Live"}
 
 
