@@ -1640,7 +1640,16 @@ def record_season_milestone_log(conn, season, recent_batting):
     if table_is_new:
         stamp = "1900-01-01"
     else:
-        day_dates = recent_batting.loc[recent_batting["period"] == "day", "Date"] if not recent_batting.empty else []
+        # "Date" only exists at all when the "day" window's own fetch
+        # succeeded (see fetch_recent_batting) — a day with no games (an
+        # off day between the regular season and the postseason, e.g.)
+        # makes Baseball-Reference's range page come back empty/malformed,
+        # that window gets skipped, and recent_batting can be non-empty
+        # (week/month still came through) with no "Date" column at all.
+        # `not recent_batting.empty` alone doesn't catch that — this
+        # crashed the whole ingest run with a KeyError on 2026-09-29.
+        has_day_date = not recent_batting.empty and "Date" in recent_batting.columns
+        day_dates = recent_batting.loc[recent_batting["period"] == "day", "Date"] if has_day_date else []
         raw = day_dates.iloc[0] if len(day_dates) else None
         try:
             stamp = datetime.strptime(str(raw).strip(), "%b %d, %Y").date().isoformat() if raw else _pacific_today().isoformat()
