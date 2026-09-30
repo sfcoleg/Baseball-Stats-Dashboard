@@ -117,7 +117,11 @@ def _render():
     if not started:
         p_home = ndb.game_win_prob(h_abbr, a_abbr)
         if p_home is not None:
-            st.caption(f"Our Elo model: {a_abbr} {100 * (1 - p_home):.0f}% — {h_abbr} {100 * p_home:.0f}%")
+            wcol1, wcol2 = st.columns(2)
+            with wcol1:
+                st.markdown(nstyle.win_prob_html((1 - p_home) * 100), unsafe_allow_html=True)
+            with wcol2:
+                st.markdown(nstyle.win_prob_html(p_home * 100), unsafe_allow_html=True)
         return
 
     summary = landing.get("summary") or {}
@@ -235,10 +239,38 @@ def _render():
         _components.iframe(nstyle.goal_clip_url(_pick[0]["highlightClip"]), height=430)
         st.caption("Clips play in the NHL's own player.")
 
+    # --- Win probability ---------------------------------------------------------
+    # The NHL equivalent of the MLB Game Center's Win Probability chart —
+    # same in-house score/clock model that powers the goal-swing tags
+    # above (goal_win_swings), just sampled into a full time series
+    # instead of one number per goal.
+    wp_df = ndb.live_win_probability(landing)
+    if not wp_df.empty:
+        style.colored_header("Win Probability", "batting")
+        st.plotly_chart(
+            nstyle.win_probability_chart(wp_df, a_abbr, h_abbr, a_color, h_color),
+            use_container_width=True, key="nhl_game_center_wp",
+        )
+        if len(wp_df) > 2:
+            goals = wp_df[wp_df["description"].notna() & (wp_df["description"] != "Final")]
+            if not goals.empty:
+                swings = wp_df["home_win_pct"].diff().abs()
+                top_idx = goals.index.intersection(swings.index)
+                if len(top_idx):
+                    best = swings.loc[top_idx].idxmax()
+                    swing_pct = swings.loc[best]
+                    st.markdown(
+                        f"<div style='background-color:var(--dm-surface-mute);border-left:4px solid var(--dm-blue);"
+                        f"padding:8px 14px;border-radius:6px;margin:4px 0'><span style='color:var(--dm-dim);font-size:0.85rem'>"
+                        f"Goal of the Game — {swing_pct:.0f}-point win-probability swing</span>"
+                        f"<div style='color:var(--dm-text)'>{wp_df.loc[best, 'description']}</div></div>",
+                        unsafe_allow_html=True,
+                    )
+
     # --- Shot map + shots by period -------------------------------------------------
     shots = ndb.load_game_shots(game_id)
     if not shots.empty:
-        style.colored_header("Shot Map", "chart")
+        style.colored_header("Live Shot Map", "chart")
         st.caption(f"Every attempt. {a_abbr} shoots left, {h_abbr} shoots right. Stars are goals; hover for the shooter.")
         fig = go.Figure()
         nstyle.rink_outline(fig)

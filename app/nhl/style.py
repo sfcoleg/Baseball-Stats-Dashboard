@@ -14,7 +14,9 @@ _sys.path.append(str(_Path(__file__).resolve().parent.parent))
 # pages can reach them through nstyle.* like everything else.
 from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
                    CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
-                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R)
+                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R, _hex_to_rgba,
+                   matchup_gradient)
+from db import moneyline_odds  # noqa: F401 — same fair-odds formula MLB uses
 
 _CLINCH_LABELS = {"p": "Presidents' Trophy", "z": "Clinched conference", "y": "Clinched division", "x": "Clinched playoff berth"}
 
@@ -294,6 +296,55 @@ def win_prob_bar_html(away_pct: float, home_pct: float, away_abbr: str, home_abb
         f"{home_abbr} {home_pct:.0f}%</div>"
         "</div>"
     )
+
+
+def win_prob_html(pct: float, moneyline: str | None = None) -> str:
+    """One team's pregame odds block, styled exactly like the MLB side's
+    Today's Games (a bold moneyline number over a muted "N% win
+    probability" line) — used in place of the old win_prob_bar so the two
+    sports read the same way. `pct` is 0-100."""
+    ml = moneyline if moneyline is not None else moneyline_odds(pct / 100)
+    return (
+        f"<div style='font-size:1.3rem;font-weight:700'>{ml}</div>"
+        f"<div style='color:var(--dm-dim)'>{pct:.0f}% win probability</div>"
+    )
+
+
+def win_probability_chart(wp_df: pd.DataFrame, away_abbr: str, home_abbr: str,
+                           away_color: str, home_color: str) -> "go.Figure":
+    """Home-team win probability across the game so far (see
+    nhl.db.live_win_probability) — the hockey twin of the MLB side's
+    style.win_probability_chart, same shape: a filled step line in the
+    home team's color, goals marked where the score actually changed."""
+    fig = go.Figure()
+    fig.add_hline(
+        y=50, line=dict(color=_hex_to_rgba(away_color, 0.5), width=1, dash="dot"),
+        annotation_text=f"{away_abbr} favored below", annotation_font_color=CHART_DIM, annotation_font_size=10,
+    )
+    fig.add_trace(go.Scatter(
+        x=wp_df["t"], y=wp_df["home_win_pct"], mode="lines",
+        line=dict(color=home_color, width=2.5, shape="hv"),
+        fill="tozeroy", fillcolor=_hex_to_rgba(home_color, 0.15),
+        hovertemplate=f"{home_abbr} %{{y:.0f}}%<extra></extra>",
+    ))
+    goals = wp_df[wp_df["description"].notna() & (wp_df["description"] != "Final")]
+    if not goals.empty:
+        for x in goals["t"]:
+            fig.add_vline(x=x, line=dict(color=_hex_to_rgba(CHART_TEXT, 0.5), width=1))
+        fig.add_trace(go.Scatter(
+            x=goals["t"], y=goals["home_win_pct"], mode="markers",
+            marker=dict(size=9, color=CHART_TEXT, line=dict(color=home_color, width=2)),
+            text=goals["description"], hovertemplate="%{text}<extra></extra>", showlegend=False,
+        ))
+    for x in (1200, 2400, 3600):
+        fig.add_vline(x=x, line=dict(color=_hex_to_rgba(CHART_GRID, 0.5), width=1, dash="dot"))
+    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba(CHART_GRID, 0.25), color=CHART_DIM, ticksuffix="%")
+    fig.update_xaxes(visible=False, range=[0, max(3600, wp_df["t"].max())])
+    fig.update_layout(
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
+        height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
+    )
+    return fig
 
 
 def glossary_link():

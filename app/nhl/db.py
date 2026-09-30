@@ -1002,3 +1002,73 @@ def goal_win_swings(periods: list) -> list[float | None]:
     except Exception:
         return [None] * sum(len(per.get("goals") or []) for per in periods)
     return out
+
+
+def live_win_probability(landing: dict) -> pd.DataFrame:
+    """Home-team win probability across the game so far, from the same
+    Skellam score/clock model as goal_win_swings — the NHL equivalent of
+    the MLB side's db.load_win_probability. One step per goal (the value
+    just before it, then just after, so the line jumps at the moment the
+    goal happened rather than sloping toward it) plus a leading point at
+    puck drop and a trailing point at the game's current state (now, if
+    live; the actual final score, if over). Empty frame if summary/scoring
+    isn't present yet (scheduled games)."""
+    summary = landing.get("summary") or {}
+    periods = summary.get("scoring") or []
+    rows = [{"t": 0, "home_win_pct": 50.0, "away_score": 0, "home_score": 0, "description": None}]
+    away = home = 0
+    try:
+        for per in periods:
+            pd_ = per.get("periodDescriptor") or {}
+            ptype = pd_.get("periodType")
+            pnum = int(pd_.get("number") or 0)
+            for g in per.get("goals") or []:
+                if ptype == "SO":
+                    continue
+                mm, ss = (g.get("timeInPeriod") or "0:00").split(":")
+                elapsed = (pnum - 1) * 1200 + int(mm) * 60 + int(ss)
+                seconds_left = max(3600 - elapsed, 0)
+                away_after = int(g.get("awayScore", 0))
+                home_after = int(g.get("homeScore", 0))
+                lead_before = home - away
+                p_before = _p_leader_wins(lead_before, 0 if (ptype == "OT" or seconds_left <= 0) else seconds_left)
+                rows.append({
+                    "t": max(elapsed - 1, rows[-1]["t"]), "home_win_pct": round(p_before * 100, 1),
+                    "away_score": away, "home_score": home, "description": None,
+                })
+                if ptype == "OT":
+                    p_after = 1.0 if home_after > away_after else 0.0
+                else:
+                    p_after = _p_leader_wins(home_after - away_after, seconds_left)
+                team = (g.get("teamAbbrev") or {}).get("default", "")
+                rows.append({
+                    "t": max(elapsed, rows[-1]["t"] + 1), "home_win_pct": round(p_after * 100, 1),
+                    "away_score": away_after, "home_score": home_after,
+                    "description": f"{team} goal — {away_after}–{home_after}",
+                })
+                away, home = away_after, home_after
+    except Exception:
+        pass
+
+    state = landing.get("gameState")
+    if state in ("OFF", "FINAL"):
+        final_p = 100.0 if home > away else (0.0 if away > home else 50.0)
+        rows.append({"t": 3600, "home_win_pct": final_p, "away_score": away, "home_score": home, "description": "Final"})
+    elif state in ("LIVE", "CRIT"):
+        pd_ = landing.get("periodDescriptor") or {}
+        ptype = pd_.get("periodType")
+        pnum = int(pd_.get("number") or 1)
+        clock = landing.get("clock") or {}
+        try:
+            mm, ss = (clock.get("timeRemaining") or "20:00").split(":")
+            remaining_in_period = int(mm) * 60 + int(ss)
+        except Exception:
+            remaining_in_period = 1200
+        elapsed = (pnum - 1) * 1200 + (1200 - remaining_in_period)
+        seconds_left = 0 if ptype == "OT" else max(3600 - elapsed, 0)
+        p_now = _p_leader_wins(home - away, seconds_left)
+        rows.append({
+            "t": max(elapsed, rows[-1]["t"] + 1), "home_win_pct": round(p_now * 100, 1),
+            "away_score": away, "home_score": home, "description": None,
+        })
+    return pd.DataFrame(rows)

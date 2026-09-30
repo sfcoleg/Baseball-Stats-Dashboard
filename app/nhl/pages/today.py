@@ -1,7 +1,9 @@
 """NHL Today's Games — live scores/schedule for a given date, straight from
 the NHL's own schedule API (see nhl/db.py's load_schedule_for_date). Card
-layout mirrors the MLB side's Today's Games: one row per game, team info
-on the outside, score/status/venue in the middle."""
+layout mirrors the MLB side's Today's Games exactly: a matchup-gradient
+background in each team's colors, logo/abbr/name on the outside, score/
+status in the middle, and odds + win probability text under each team
+(not a bar chart — see nstyle.win_prob_html)."""
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -10,12 +12,22 @@ from zoneinfo import ZoneInfo
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
+import prefs
+import style
 from nhl import db as ndb
 from nhl import style as nstyle
 from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Today's Games | Diamond Metrics", layout="wide")
 st.title("Today's Games")
+
+# Must go through prefs.resolve_theme() (an explicit Light/Dark choice in
+# Settings, not just whatever Streamlit's raw context reports) — same fix
+# as the MLB side's Today's Games, for the same reason: reading
+# st.context.theme.type directly here would let this page's matchup-
+# gradient colors disagree with the --dm-* CSS variables everywhere else.
+_detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
+_THEME = prefs.resolve_theme(_detected)
 
 if "nhl_games_date" not in st.session_state:
     st.session_state["nhl_games_date"] = ndb.today_pacific()
@@ -40,7 +52,11 @@ def _records() -> dict:
     if standings.empty:
         return {}
     return {
-        r["teamAbbrev"]: f"{int(r['wins'])}-{int(r['losses'])}-{int(r['otLosses'])}"
+        r["teamAbbrev"]: {
+            "record": f"{int(r['wins'])}-{int(r['losses'])}-{int(r['otLosses'])}",
+            "last10": f"{int(r['l10Wins'])}-{int(r['l10Losses'])}-{int(r['l10OtLosses'])}"
+            if "l10Wins" in r else None,
+        }
         for _, r in standings.iterrows()
     }
 
@@ -78,7 +94,15 @@ def _render_games(date_str: str):
         away_color, home_color = nteams.color_for_abbr(away["abbrev"]), nteams.color_for_abbr(home["abbrev"])
         p_home = None if started else ndb.game_win_prob(home["abbrev"], away["abbrev"])
 
-        with st.container(border=True):
+        # Same matchup-gradient card background as the MLB side — away
+        # color on the left, home on the right, meeting in a neutral band.
+        card_key = f"nhlgame{game['id']}"
+        st.markdown(
+            f"<style>.st-key-{card_key}{{background:"
+            f"{style.matchup_gradient(away_color, home_color, _THEME)} !important;}}</style>",
+            unsafe_allow_html=True,
+        )
+        with st.container(border=True, key=card_key):
             if live_now:
                 st.markdown(
                     "<div style='display:flex;justify-content:flex-end;margin:-4px 0 -6px 0'>"
@@ -88,7 +112,7 @@ def _render_games(date_str: str):
                 )
             acol, mid, hcol = st.columns([3, 2, 3])
 
-            def _team_col(team, color):
+            def _team_col(team, color, prob):
                 logo_html = (
                     f"<img src='{team.get('logo', '')}' style='height:32px;width:32px;object-fit:contain;"
                     f"vertical-align:middle;margin-right:6px'>" if team.get("logo") else ""
@@ -100,12 +124,16 @@ def _render_games(date_str: str):
                     f"<span style='font-weight:700;font-size:1.1rem'>{nteams.nickname_for_abbr(team['abbrev'])}</span></div>",
                     unsafe_allow_html=True,
                 )
-                record = records.get(team["abbrev"])
-                if record:
-                    st.caption(f"Record: {record}")
+                info = records.get(team["abbrev"], {})
+                if info.get("record"):
+                    st.caption(f"Record: {info['record']}")
+                if info.get("last10"):
+                    st.caption(f"Last 10: {info['last10']}")
+                if prob is not None:
+                    st.markdown(nstyle.win_prob_html(prob * 100), unsafe_allow_html=True)
 
             with acol:
-                _team_col(away, away_color)
+                _team_col(away, away_color, None if p_home is None else 1 - p_home)
 
             with mid:
                 if started:
@@ -126,13 +154,6 @@ def _render_games(date_str: str):
                 if venue:
                     st.markdown(f"<div style='text-align:center;color:var(--dm-dim);font-size:0.85rem'>{venue}</div>",
                                 unsafe_allow_html=True)
-                if not started and p_home is not None:
-                    st.plotly_chart(
-                        nstyle.win_prob_bar((1 - p_home) * 100, p_home * 100, away["abbrev"], home["abbrev"],
-                                            away_color, home_color),
-                        use_container_width=True, config={"displayModeBar": False},
-                        key=f"wp{game['id']}",
-                    )
                 if started:
                     if st.button("Game Center", key=f"gm{game['id']}", use_container_width=True):
                         st.session_state["nhl_selected_game"] = int(game["id"])
@@ -142,7 +163,10 @@ def _render_games(date_str: str):
                     st.switch_page("nhl/pages/team.py")
 
             with hcol:
-                _team_col(home, home_color)
+                _team_col(home, home_color, p_home)
+
+            if p_home is None and not started:
+                st.caption("Not enough season data yet to generate a prediction for this game.")
 
 
 _render_games(date_str)

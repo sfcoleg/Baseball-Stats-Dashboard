@@ -69,9 +69,14 @@ def _todays_games_strip():
         if not started:
             p_home = ndb.game_win_prob(home["abbrev"], away["abbrev"])
             if p_home is not None:
-                wp_html = nstyle.win_prob_bar_html(
-                    (1 - p_home) * 100, p_home * 100, away["abbrev"], home["abbrev"],
-                    nteams.color_for_abbr(away["abbrev"]), nteams.color_for_abbr(home["abbrev"]),
+                # Same "favored team + win probability" read as the MLB side's
+                # slate strip, in place of the old two-segment bar.
+                fav_abbr = home["abbrev"] if p_home >= 0.5 else away["abbrev"]
+                fav_pct = max(p_home, 1 - p_home) * 100
+                fav_color = nteams.color_for_abbr(fav_abbr)
+                wp_html = (
+                    f"<div style='margin-top:4px;font-size:0.78rem;color:{fav_color}'>"
+                    f"<b>{fav_abbr}</b> {fav_pct:.0f}% win probability</div>"
                 )
         card_html = (
             "<div style='flex:0 0 auto;width:160px;background-color:var(--dm-surface-mute);border-radius:10px;"
