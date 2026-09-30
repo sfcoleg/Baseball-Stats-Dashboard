@@ -11,12 +11,14 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 import requests
 import streamlit as st
 
 NHL_DB_PATH = Path(__file__).resolve().parent.parent.parent / "data" / "nhl.db"
 ELO_MODEL_PATH = Path(__file__).resolve().parent / "elo_model.json"
+WIN_MODEL_PATH = Path(__file__).resolve().parent / "win_model_params.json"
 _HEADERS = {"User-Agent": "Mozilla/5.0"}
 
 
@@ -596,7 +598,12 @@ def load_game_shots(game_id: int) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# Game-odds model (Elo, fit offline by ingest/nhl_elo.py -> elo_model.json).
+# Game-odds model. Elo (ingest/nhl_elo.py -> elo_model.json) is the base
+# rating signal; win_model_params.json (ingest/nhl_win_model.py) is a
+# logistic regression fit on top of it that adds rest/fatigue and each
+# team's last-10-game form — see that script's docstring for why Elo alone
+# isn't enough (its own holdout Brier is statistically indistinguishable
+# from always guessing 50%).
 # ---------------------------------------------------------------------------
 
 @st.cache_data(show_spinner=False, ttl=3600, max_entries=1)
@@ -606,16 +613,87 @@ def load_elo_model() -> dict | None:
     return json.loads(ELO_MODEL_PATH.read_text())
 
 
-def game_win_prob(home_abbr: str, away_abbr: str) -> float | None:
-    """Pregame P(home team wins), from the fitted Elo model — None if the
-    model hasn't been trained yet (see ingest/nhl_elo.py)."""
-    model = load_elo_model()
-    if not model:
+@st.cache_data(show_spinner=False, ttl=3600, max_entries=1)
+def load_win_model() -> dict | None:
+    if not WIN_MODEL_PATH.exists():
         return None
+    return json.loads(WIN_MODEL_PATH.read_text())
+
+
+def _elo_win_prob(home_abbr: str, away_abbr: str, model: dict) -> float:
     ratings = model["ratings"]
     elo_home = ratings.get(home_abbr, 1500.0)
     elo_away = ratings.get(away_abbr, 1500.0)
     return 1.0 / (1.0 + 10 ** ((elo_away - (elo_home + model["home_advantage"])) / 400))
+
+
+@st.cache_data(show_spinner=False, ttl=300, max_entries=32)
+def _team_recent_games(team_abbr: str) -> list[tuple]:
+    """A team's completed regular-season/playoff games this season so far,
+    oldest first, as (date, win, goal_diff) — same shape win_model's
+    training rows use. Excludes preseason (gameType 1), same filter
+    nhl_elo.py's season_results() applies, so live features line up with
+    how the model was trained."""
+    games = load_club_schedule(team_abbr)
+    out = []
+    for g in games:
+        if g.get("gameType") not in (2, 3) or g.get("gameState") not in ("OFF", "FINAL"):
+            continue
+        is_home = g.get("homeTeam", {}).get("abbrev") == team_abbr
+        mine, theirs = (g["homeTeam"], g["awayTeam"]) if is_home else (g["awayTeam"], g["homeTeam"])
+        if "score" not in mine or "score" not in theirs:
+            continue
+        out.append((g["gameDate"], mine["score"] > theirs["score"], mine["score"] - theirs["score"]))
+    out.sort(key=lambda r: r[0])
+    return out
+
+
+def _rest_and_form(team_abbr: str, params: dict) -> tuple[float, float, float]:
+    """(rest_days, shrunk_win_pct, shrunk_goal_diff_per_game) entering the
+    NEXT game, from this team's actual completed games so far — the same
+    features/shrinkage ingest/nhl_win_model.py computes at training time,
+    read from the params artifact so the two never drift apart."""
+    from datetime import date as _date
+    log = _team_recent_games(team_abbr)
+    if not log:
+        return params["default_rest"], 0.5, 0.0
+    last_date = _date.fromisoformat(log[-1][0])
+    rest = min((today_pacific() - last_date).days, params["rest_cap"])
+    window = log[-params["window"]:]
+    wins = sum(1 for _, w, _ in window if w)
+    gd = sum(gd for _, _, gd in window)
+    k = params["k_shrink"]
+    win_pct = (wins + 0.5 * k) / (len(window) + k)
+    gd_per_game = gd / (len(window) + k)
+    return float(rest), win_pct, gd_per_game
+
+
+def game_win_prob(home_abbr: str, away_abbr: str) -> float | None:
+    """Pregame P(home team wins). Uses the fitted win-probability model
+    (Elo + rest + recent form) when available, falling back to Elo alone
+    if win_model_params.json hasn't been generated yet — None if even Elo
+    isn't trained."""
+    elo_model = load_elo_model()
+    if not elo_model:
+        return None
+    p_elo = _elo_win_prob(home_abbr, away_abbr, elo_model)
+
+    params = load_win_model()
+    if not params:
+        return p_elo
+
+    ratings = elo_model["ratings"]
+    d_elo = (ratings.get(home_abbr, 1500.0) + elo_model["home_advantage"]) - ratings.get(away_abbr, 1500.0)
+    h_rest, h_win10, h_gd10 = _rest_and_form(home_abbr, params)
+    a_rest, a_win10, a_gd10 = _rest_and_form(away_abbr, params)
+
+    x = {
+        "d_elo": d_elo, "d_rest": h_rest - a_rest,
+        "d_win10": h_win10 - a_win10, "d_gd10": h_gd10 - a_gd10,
+    }
+    z = [(x[f] - m) / s for f, m, s in zip(params["features"], params["mean"], params["std"])]
+    logit = sum(zi * wi for zi, wi in zip(z, params["coef"])) + params["intercept"]
+    return 1.0 / (1.0 + np.exp(-logit))
 
 
 # Display labels for the raw API column names.
