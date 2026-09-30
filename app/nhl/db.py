@@ -1050,6 +1050,16 @@ def live_win_probability(landing: dict) -> pd.DataFrame:
     except Exception:
         pass
 
+    # The goal-by-goal reconstruction above is only as complete as
+    # summary.scoring — which can lag behind or be briefly empty even
+    # while the game itself has real goals on the board. The top-level
+    # score fields are the authoritative "what's the score right now",
+    # so the trailing point uses THOSE, not the (possibly stale) away/home
+    # tally built from goals — otherwise a missing/delayed scoring list
+    # silently reads as 0-0 and the whole graph sits pinned at 50%.
+    away = int((landing.get("awayTeam") or {}).get("score") or away)
+    home = int((landing.get("homeTeam") or {}).get("score") or home)
+
     state = landing.get("gameState")
     if state in ("OFF", "FINAL"):
         final_p = 100.0 if home > away else (0.0 if away > home else 50.0)

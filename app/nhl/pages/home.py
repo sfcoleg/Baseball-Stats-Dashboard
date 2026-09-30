@@ -65,26 +65,12 @@ def _todays_games_strip():
             status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Final</span>"
         else:
             status_html = "<span style='color:var(--dm-dim);font-size:0.72rem'>Scheduled</span>"
-        wp_html = ""
-        if not started:
-            p_home = ndb.game_win_prob(home["abbrev"], away["abbrev"])
-            if p_home is not None:
-                # Same "favored team + win probability" read as the MLB side's
-                # slate strip, in place of the old two-segment bar.
-                fav_abbr = home["abbrev"] if p_home >= 0.5 else away["abbrev"]
-                fav_pct = max(p_home, 1 - p_home) * 100
-                fav_color = nteams.color_for_abbr(fav_abbr)
-                wp_html = (
-                    f"<div style='margin-top:4px;font-size:0.78rem;color:{fav_color}'>"
-                    f"<b>{fav_abbr}</b> {fav_pct:.0f}% win probability</div>"
-                )
         card_html = (
             "<div style='flex:0 0 auto;width:160px;background-color:var(--dm-surface-mute);border-radius:10px;"
             "padding:10px 12px;margin-right:10px'>"
             f"<div style='margin-bottom:4px'>{status_html}</div>"
             + _team_row(away.get("logo"), away["abbrev"], away_txt)
             + _team_row(home.get("logo"), home["abbrev"], home_txt)
-            + wp_html
             + "</div>"
         )
         cards.append((0 if is_live else 1, card_html))

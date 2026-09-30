@@ -92,7 +92,10 @@ def _render_games(date_str: str):
         started = state not in ("FUT", "PRE")
         live_now = state in ("LIVE", "CRIT")
         away_color, home_color = nteams.color_for_abbr(away["abbrev"]), nteams.color_for_abbr(home["abbrev"])
-        p_home = None if started else ndb.game_win_prob(home["abbrev"], away["abbrev"])
+        # Pregame odds, computed regardless of whether the game has
+        # started — kept showing after puck drop (and after Final) rather
+        # than disappearing, same as the MLB side's Today's Games.
+        p_home = ndb.game_win_prob(home["abbrev"], away["abbrev"])
 
         # Same matchup-gradient card background as the MLB side — away
         # color on the left, home on the right, meeting in a neutral band.
@@ -114,8 +117,8 @@ def _render_games(date_str: str):
 
             def _team_col(team, color, prob):
                 logo_html = (
-                    f"<img src='{team.get('logo', '')}' style='height:32px;width:32px;object-fit:contain;"
-                    f"vertical-align:middle;margin-right:6px'>" if team.get("logo") else ""
+                    f"<img src='{team.get('logo', '')}' style='height:48px;width:48px;object-fit:contain;"
+                    f"vertical-align:middle;margin-right:8px'>" if team.get("logo") else ""
                 )
                 st.markdown(
                     f"<div style='display:flex;align-items:center'>{logo_html}"
@@ -165,7 +168,7 @@ def _render_games(date_str: str):
             with hcol:
                 _team_col(home, home_color, p_home)
 
-            if p_home is None and not started:
+            if p_home is None:
                 st.caption("Not enough season data yet to generate a prediction for this game.")
 
 

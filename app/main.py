@@ -505,6 +505,33 @@ st.markdown(
     # stat picker) are their own baseweb tag element, missed the same way.
     "[data-baseweb='tag']{background:var(--dm-blue-soft) !important;"
     "  color:var(--dm-text) !important;}"
+    # The date-input's OPEN calendar popover is a separate widget from the
+    # selectbox dropdown fixed above — React Aria's own Calendar component,
+    # rendered in its own popover with none of our theming applied. Left
+    # alone it follows Streamlit's OS-driven palette (not our resolved
+    # Light/Dark), which on a light OS with our dark-leaning page read as
+    # white text on a white panel — e.g. NHL Today's Games' date picker.
+    "[data-testid='stDateInputCalendar'],"
+    "[data-baseweb='popover']:has(.react-aria-Calendar),"
+    "[data-baseweb='popover']:has([data-baseweb='calendar']),"
+    "[data-baseweb='calendar']{background:var(--dm-field) !important;}"
+    ".react-aria-Calendar,.react-aria-CalendarGrid{background:transparent !important;}"
+    ".react-aria-CalendarGridHeader th,.react-aria-CalendarHeaderCell,"
+    ".react-aria-CalendarCell,[data-baseweb='calendar'] [role='gridcell'],"
+    "[data-baseweb='calendar'] [role='button'],[data-baseweb='calendar'] div{"
+    "  color:var(--dm-text) !important;}"
+    ".react-aria-CalendarCell[data-selected='true'],"
+    "[data-baseweb='calendar'] [aria-selected='true']{"
+    "  background:var(--dm-blue) !important;color:#FFFFFF !important;}"
+    ".react-aria-CalendarCell:hover{background:var(--dm-surface-mute) !important;}"
+    # st.caption() text everywhere else on the site — only the search box's
+    # own captions were themed before (see .st-key-dm_search rule above).
+    # Same root cause as the calendar/inputs above: Streamlit's native
+    # caption colour follows the OS theme, not our resolved Light/Dark
+    # setting, so a light-OS + our page read as near-invisible light-grey-
+    # on-light text (reported first on the NHL Shot Map's caption, but
+    # this is unscoped on purpose since nothing about it is page-specific).
+    "[data-testid='stCaptionContainer']{color:var(--dm-dim) !important;}"
     # --- tables ------------------------------------------------------------
     "[data-testid='stMain'] table{border-collapse:collapse;}"
     "[data-testid='stMain'] table th{font-family:'Archivo Narrow',sans-serif;"

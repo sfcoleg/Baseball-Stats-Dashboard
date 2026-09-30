@@ -310,6 +310,43 @@ def win_prob_html(pct: float, moneyline: str | None = None) -> str:
     )
 
 
+def period_sog_table(period_labels: list, away_sog: list, home_sog: list,
+                      away_abbr: str, home_abbr: str, away_color: str, home_color: str) -> str:
+    """Shots-on-goal by period as a real scoreboard — one row per team, one
+    column per period, the total set off with a heavier left border. Same
+    layout family as the MLB side's style.box_score_table(), traded in for
+    the plain dataframe this used to be, which read like a spreadsheet
+    dropped into the middle of the page rather than part of it."""
+    def team_row(abbr, color, sog):
+        cells = "".join(
+            f"<td style='padding:6px 14px;text-align:center;font-variant-numeric:tabular-nums'>{v}</td>"
+            for v in sog
+        )
+        return (
+            "<tr style='border-top:1px solid var(--dm-line)'>"
+            f"<td style='padding:6px 10px;white-space:nowrap'><span style='background-color:{color}66;"
+            f"color:var(--dm-text);padding:2px 9px;border-radius:6px;font-weight:700'>{abbr}</span></td>"
+            f"{cells}"
+            f"<td style='padding:6px 16px;text-align:center;font-weight:800;font-variant-numeric:tabular-nums;"
+            f"border-left:2px solid var(--dm-line)'>{sum(sog)}</td></tr>"
+        )
+
+    period_headers = "".join(
+        f"<th style='padding:6px 14px;text-align:center;color:var(--dm-dim);font-weight:600'>{p}</th>"
+        for p in period_labels
+    )
+    return (
+        "<table style='width:100%;border-collapse:collapse'>"
+        "<thead><tr><th></th>" + period_headers +
+        "<th style='padding:6px 16px;text-align:center;color:var(--dm-dim);font-weight:700;"
+        "border-left:2px solid var(--dm-line)'>SOG</th></tr></thead>"
+        "<tbody>"
+        + team_row(away_abbr, away_color, away_sog)
+        + team_row(home_abbr, home_color, home_sog)
+        + "</tbody></table>"
+    )
+
+
 def win_probability_chart(wp_df: pd.DataFrame, away_abbr: str, home_abbr: str,
                            away_color: str, home_color: str) -> "go.Figure":
     """Home-team win probability across the game so far (see

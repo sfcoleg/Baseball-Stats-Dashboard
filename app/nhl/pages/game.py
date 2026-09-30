@@ -271,7 +271,10 @@ def _render():
     shots = ndb.load_game_shots(game_id)
     if not shots.empty:
         style.colored_header("Live Shot Map", "chart")
-        st.caption(f"Every attempt. {a_abbr} shoots left, {h_abbr} shoots right. Stars are goals; hover for the shooter.")
+        st.caption(
+            f"Every shot attempt so far. {a_abbr} shoots toward the left goal, {h_abbr} toward the right. "
+            f"● on net, ○ missed, ✕ blocked, ★ goal — hover any marker for the shooter."
+        )
         fig = go.Figure()
         nstyle.rink_outline(fig)
         for is_home, abbr, color in ((False, a_abbr, a_color), (True, h_abbr, h_color)):
@@ -298,13 +301,16 @@ def _render():
         on_net = shots[shots["result"].isin(["goal", "shot-on-goal"])]
         by_period = on_net.groupby(["period", "is_home"]).size().unstack(fill_value=0)
         if not by_period.empty:
-            table = pd.DataFrame({
-                "Period": [{"4": "OT"}.get(str(p), str(p)) for p in by_period.index],
-                a_abbr: by_period.get(False, 0).values, h_abbr: by_period.get(True, 0).values,
-            })
-            total = pd.DataFrame({"Period": ["Total"], a_abbr: [table[a_abbr].sum()], h_abbr: [table[h_abbr].sum()]})
-            st.markdown("**Shots on goal by period**")
-            st.dataframe(style.plain_table(pd.concat([table, total], ignore_index=True)), hide_index=True, use_container_width=False)
+            period_labels = [{"4": "OT"}.get(str(p), str(p)) for p in by_period.index]
+            st.markdown("**Shots on Goal by Period**")
+            st.markdown(
+                nstyle.period_sog_table(
+                    period_labels,
+                    list(by_period.get(False, 0).values), list(by_period.get(True, 0).values),
+                    a_abbr, h_abbr, a_color, h_color,
+                ),
+                unsafe_allow_html=True,
+            )
 
     # --- Penalties ---------------------------------------------------------------------
     pens = [(per, p) for per in (summary.get("penalties") or []) for p in (per.get("penalties") or [])]
