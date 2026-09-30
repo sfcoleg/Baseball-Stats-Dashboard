@@ -91,11 +91,32 @@ goalies = ndb.load_goalies(season, mtime)
 skaters["Tm"] = skaters["teamAbbrevs"].map(nteams._primary)
 goalies["Tm"] = goalies["teamAbbrevs"].map(nteams._primary)
 
+# A handful of games in, "leaders" is really just "whoever got a hat trick
+# in game 1" — real signal takes a few weeks to show up, not a few games.
+# Below this many games played (by the league's most-played skater), the
+# season-leaderboard sections fall back to last season's FINAL numbers,
+# clearly labeled as such, rather than a misleadingly tiny-sample chart —
+# only on the current/latest season; browsing an old season directly
+# always shows that season's own (complete) numbers.
+MIN_GAMES_FOR_LEADERBOARD = 5
+season_gp = int(skaters["gamesPlayed"].max()) if not skaters.empty else 0
+season_is_young = season == latest_season and season_gp < MIN_GAMES_FOR_LEADERBOARD
+
+leaderboard_season = season
+leaderboard_skaters, leaderboard_goalies = skaters, goalies
+if season_is_young and len(seasons) > 1:
+    leaderboard_season = seasons[1]
+    leaderboard_skaters = ndb.load_skaters(leaderboard_season, mtime)
+    leaderboard_goalies = ndb.load_goalies(leaderboard_season, mtime)
+    leaderboard_skaters["Tm"] = leaderboard_skaters["teamAbbrevs"].map(nteams._primary)
+    leaderboard_goalies["Tm"] = leaderboard_goalies["teamAbbrevs"].map(nteams._primary)
+
 st.divider()
 
 
-def _headshot(player_id, team_abbr) -> str:
-    return f"https://assets.nhle.com/mugs/nhl/{season}{season + 1}/{team_abbr}/{int(player_id)}.png"
+def _headshot(player_id, team_abbr, for_season: int | None = None) -> str:
+    yr = for_season if for_season is not None else season
+    return f"https://assets.nhle.com/mugs/nhl/{yr}{yr + 1}/{team_abbr}/{int(player_id)}.png"
 
 
 def _headliner_card(label, name, player_id, team_abbr, stat_line):
@@ -194,7 +215,13 @@ if season == latest_season:
 
 # --- Top 10 goal scorers chart -------------------------------------------
 style.colored_header("Top 10 Goal Leaders", "chart")
-top10_goals = skaters.sort_values("goals", ascending=False).head(10).iloc[::-1]
+if season_is_young:
+    st.info(
+        f"The {ndb.season_label(season)} season just started ({season_gp} game"
+        f"{'s' if season_gp != 1 else ''} in so far) — not enough games yet for "
+        f"a meaningful leaderboard. Showing {ndb.season_label(leaderboard_season)}'s final numbers below."
+    )
+top10_goals = leaderboard_skaters.sort_values("goals", ascending=False).head(10).iloc[::-1]
 g_min, g_max = top10_goals["goals"].min(), top10_goals["goals"].max()
 color_floor = g_min - (g_max - g_min) * 0.6 - 1
 fig = px.bar(
@@ -202,8 +229,15 @@ fig = px.bar(
     color="goals", color_continuous_scale=nstyle.BLUE_SCALE, range_color=[color_floor, g_max], text="goals",
     labels={"goals": "Goals", "skaterFullName": ""},
 )
+# Plotly's default "inside" text placement picks its own contrast color
+# against each bar's fill — against the light end of BLUE_SCALE that
+# lands on a washed-out pale grey, unreadable on a light card. Forcing
+# the labels OUTSIDE the bar (onto the plain chart background) and
+# setting an explicit dark color sidesteps that entirely, regardless of
+# how light or dark any individual bar's own fill is.
+fig.update_traces(textposition="outside", textfont_color=nstyle.CHART_TEXT, cliponaxis=False)
 fig.update_layout(
-    showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=0, t=10, b=0),
+    showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=40, t=10, b=0),
     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
 )
 st.plotly_chart(fig, use_container_width=True)
@@ -212,10 +246,17 @@ st.divider()
 
 
 # --- Team snapshot ----------------------------------------------------
+# Same young-season fallback as Goal Leaders above, plus the 20+ GP
+# qualifier already does most of this gating naturally: a few games into
+# a new season almost nobody has 20 GP yet, so without the fallback these
+# charts would just render near-empty rather than showing anything useful.
 style.colored_header("Team Snapshot", "chart")
-qualified_skaters = skaters[skaters["gamesPlayed"] >= 20]
-team_cf = qualified_skaters.groupby("Tm", observed=True)["satPercentage"].mean().round(1).reset_index().sort_values("satPercentage", ascending=False)
-team_svpct = qualified_goalies.groupby("Tm", observed=True)["savePct"].mean().round(1).reset_index().sort_values("savePct", ascending=False)
+if season_is_young:
+    st.caption(f"Showing {ndb.season_label(leaderboard_season)}'s final team averages until this season has more games on the board.")
+snapshot_qualified_skaters = leaderboard_skaters[leaderboard_skaters["gamesPlayed"] >= 20]
+snapshot_qualified_goalies = leaderboard_goalies[leaderboard_goalies["gamesPlayed"] >= 20]
+team_cf = snapshot_qualified_skaters.groupby("Tm", observed=True)["satPercentage"].mean().round(1).reset_index().sort_values("satPercentage", ascending=False)
+team_svpct = snapshot_qualified_goalies.groupby("Tm", observed=True)["savePct"].mean().round(1).reset_index().sort_values("savePct", ascending=False)
 
 tcol1, tcol2 = st.columns(2)
 with tcol1:
@@ -269,8 +310,8 @@ if season == latest_season:
 
 
 # --- Points Leaders card grid --------------------------------------------
-style.colored_header(f"{ndb.season_label(season)} Points Leaders", "batting")
-top = skaters.sort_values("points", ascending=False).head(10)
+style.colored_header(f"{ndb.season_label(leaderboard_season)} Points Leaders", "batting")
+top = leaderboard_skaters.sort_values("points", ascending=False).head(10)
 cards = ""
 for i, (_, p) in enumerate(top.iterrows()):
     tm = p["Tm"]
@@ -284,7 +325,7 @@ for i, (_, p) in enumerate(top.iterrows()):
     # team colour as text is the mirror problem: gold on a white card came
     # out at 1.69. team_text_color resolves that per theme.
     points_color = style.team_text_color(color)
-    headshot = _headshot(p["playerId"], tm)
+    headshot = _headshot(p["playerId"], tm, for_season=leaderboard_season)
     cards += (
         f"<div style='position:relative;text-align:center;background:linear-gradient(180deg,{color}26,transparent);"
         f"border:1px solid {color}55;border-radius:12px;padding:14px 8px 10px'>"
@@ -294,7 +335,7 @@ for i, (_, p) in enumerate(top.iterrows()):
         f"<img src='{headshot}' style='width:72px;height:72px;border-radius:50%;object-fit:cover;"
         f"object-position:center 15%;border:2px solid {color};background:#1A1F2E' />"
         f"<div style='margin-top:8px;font-weight:700;font-size:0.92rem;line-height:1.2'>"
-        f"<a href='{nstyle.player_link(p['playerId'], season)}' target='_self' "
+        f"<a href='{nstyle.player_link(p['playerId'], leaderboard_season)}' target='_self' "
         f"style='color:var(--dm-text);text-decoration:none'>{p['skaterFullName']}</a></div>"
         f"<span style='display:inline-block;margin-top:4px;background-color:{color}66;color:var(--dm-text);"
         f"padding:1px 8px;border-radius:6px;font-size:0.75rem;font-weight:700'>{tm}</span>"
@@ -311,8 +352,9 @@ st.divider()
 
 
 # --- Full leader tables -------------------------------------------------
-style.colored_header("Skater Leaders (min 20 GP)", "batting")
-qualified = skaters[skaters["gamesPlayed"] >= 20].sort_values("points", ascending=False)
+season_tag = f" ({ndb.season_label(leaderboard_season)})" if season_is_young else ""
+style.colored_header(f"Skater Leaders (min 20 GP){season_tag}", "batting")
+qualified = leaderboard_skaters[leaderboard_skaters["gamesPlayed"] >= 20].sort_values("points", ascending=False)
 st.caption(f"Top 50 of {len(qualified)} qualified skaters by points — see the Skaters page for the full filterable list.")
 display = qualified.head(50)[["skaterFullName", "Tm", "positionCode", "gamesPlayed", "goals", "assists", "points", "plusMinus"]].reset_index(drop=True)
 st.dataframe(
@@ -324,8 +366,8 @@ st.dataframe(
     use_container_width=True, height=400,
 )
 
-style.colored_header("Goalie Leaders (min 20 GP)", "pitching")
-qualified_g = goalies[goalies["gamesPlayed"] >= 20].sort_values("wins", ascending=False)
+style.colored_header(f"Goalie Leaders (min 20 GP){season_tag}", "pitching")
+qualified_g = leaderboard_goalies[leaderboard_goalies["gamesPlayed"] >= 20].sort_values("wins", ascending=False)
 st.caption(f"Top of {len(qualified_g)} qualified goalies by wins — see the Goalies page for the full filterable list.")
 display_g = qualified_g[["goalieFullName", "Tm", "gamesPlayed", "wins", "losses", "otLosses", "goalsAgainstAverage", "savePct", "shutouts"]].reset_index(drop=True)
 st.dataframe(
