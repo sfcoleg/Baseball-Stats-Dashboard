@@ -108,7 +108,7 @@ else:
     fig.update_traces(marker_color=color)
     fig.update_layout(
         height=320, margin=dict(l=0, r=0, t=10, b=0), xaxis_title=None,
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(),
     )
     st.plotly_chart(fig, use_container_width=True)
 

@@ -61,7 +61,7 @@ if not protection.empty:
                        textposition="top center")
     fig.update_layout(
         showlegend=False, height=480, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.session_chart_text_color(),
     )
     st.plotly_chart(fig, use_container_width=True)
 

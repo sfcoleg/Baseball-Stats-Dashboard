@@ -8,10 +8,18 @@ import plotly.graph_objects as go
 
 _sys.path.append(str(_Path(__file__).resolve().parent.parent))
 # Chart colours live in the MLB-side style module; re-exported here so NBA
-# pages can reach them through nstyle.* like the NHL side does.
-from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
-                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
-                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R)
+# pages can reach them through nstyle.* like the NHL side does. CHART_TEXT/
+# CHART_DIM/CHART_GRID are NOT re-exported as plain values on purpose: they're
+# module globals apply_theme() overwrites per request, and `from style import
+# CHART_TEXT` would freeze whatever value was live the first time this module
+# got imported — on Streamlit Community Cloud that's effectively random
+# (whichever visitor's theme loaded first in this process), which is exactly
+# what put white chart text on the light theme (same bug, same fix, as
+# app/nhl/style.py). Use the session_chart_*_color() calls instead, resolved
+# fresh on every render.
+from style import (CHART_SURFACE, CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,  # noqa: F401
+                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R,
+                   session_chart_text_color, session_chart_dim_color, session_chart_grid_color)
 
 
 def player_link(player_id, season: str | None = None) -> str:
@@ -87,7 +95,7 @@ def court_layout(fig: "go.Figure", height: int = 480, **kwargs) -> "go.Figure":
     app/nhl/style.py's rink_layout()."""
     fig.update_layout(
         height=height, margin=dict(l=10, r=10, t=kwargs.pop("top", 10), b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=session_chart_text_color(),
         xaxis=dict(range=[-260, 260], visible=False, scaleanchor="y", scaleratio=1, constrain="domain"),
         yaxis=dict(range=[-60, 430], visible=False, constrain="domain"),
         **kwargs,

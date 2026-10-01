@@ -60,13 +60,13 @@ for conf in ("AFC", "NFC"):
     if (conf_sorted["seed"] == PLAYOFF_SEEDS).any():
         cutoff = conf_sorted.loc[conf_sorted["seed"] == PLAYOFF_SEEDS, "win_pct"].iloc[0]
         fig.add_vline(
-            x=cutoff, line=dict(color=fstyle.CHART_DIM, width=1, dash="dot"),
+            x=cutoff, line=dict(color=fstyle.session_chart_dim_color(), width=1, dash="dot"),
             annotation_text="Playoff cutoff (7 seeds)", annotation_position="top",
-            annotation_font_size=10, annotation_font_color=fstyle.CHART_DIM,
+            annotation_font_size=10, annotation_font_color=fstyle.session_chart_dim_color(),
         )
     fig.update_layout(
         showlegend=False, height=max(320, 26 * len(plot_df)), margin=dict(l=0, r=10, t=30, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.session_chart_text_color(),
         xaxis=dict(range=[0, 1]),
     )
     st.plotly_chart(fig, use_container_width=True)

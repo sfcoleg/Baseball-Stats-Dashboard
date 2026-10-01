@@ -10,10 +10,17 @@ sys.path.append(str(Path(__file__).resolve().parent.parent))
 import style
 # Chart colours live in the MLB-side style module; re-exported here so NFL
 # pages can reach them through fstyle.* like the NHL side already does
-# through nstyle.*.
-from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
-                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
-                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R)
+# through nstyle.*. CHART_TEXT/CHART_DIM/CHART_GRID are NOT re-exported as
+# plain values on purpose: they're module globals apply_theme() overwrites
+# per request, and `from style import CHART_TEXT` would freeze whatever
+# value was live the first time this module got imported — on Streamlit
+# Community Cloud that's effectively random (whichever visitor's theme
+# loaded first in this process), which is exactly what put white chart
+# text on the light theme (same bug, same fix, as app/nhl/style.py). Use
+# the session_chart_*_color() calls instead, resolved fresh on every render.
+from style import (CHART_SURFACE, CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,  # noqa: F401
+                   BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R,
+                   session_chart_text_color, session_chart_dim_color, session_chart_grid_color)
 
 # nflverse serves these from its own repo, the same place the team logos come
 # from, and all three are verified to resolve. There is no Super Bowl mark

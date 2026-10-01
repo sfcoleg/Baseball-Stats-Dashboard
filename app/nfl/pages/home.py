@@ -42,7 +42,7 @@ def _live_score_bar(g: dict, live: dict):
         barmode="stack", showlegend=False, height=54,
         margin=dict(l=0, r=0, t=0, b=0),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-        font_color=fstyle.CHART_TEXT,
+        font_color=fstyle.session_chart_text_color(),
         xaxis=dict(visible=False, range=[0, total]),
         yaxis=dict(visible=False),
     )

@@ -162,7 +162,7 @@ if weekly_seasons:
             fig.update_traces(marker_color=color)
             fig.update_layout(
                 height=320, margin=dict(l=0, r=0, t=10, b=0), bargap=0.25,
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.session_chart_text_color(),
                 xaxis=dict(dtick=1),
             )
             st.plotly_chart(fig, use_container_width=True)

@@ -56,7 +56,7 @@ for conf in sorted(standings["Conference"].dropna().unique()):
     fig.update_traces(marker=dict(opacity=opacities))
     fig.update_layout(
         showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(),
         yaxis_title=None, xaxis=dict(range=[0, 1]),
     )
     st.plotly_chart(fig, use_container_width=True)

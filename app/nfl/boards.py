@@ -92,7 +92,7 @@ def efficiency_scatter(pool, x_col, y_col, x_label, y_label, note):
     fig.update_traces(marker=dict(size=10, opacity=0.85, line=dict(width=1, color="rgba(255,255,255,0.4)")))
     fig.update_layout(
         showlegend=False, height=430, margin=dict(l=0, r=0, t=10, b=0),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=fstyle.session_chart_text_color(),
     )
     st.plotly_chart(fig, use_container_width=True)
 

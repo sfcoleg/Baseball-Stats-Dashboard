@@ -109,7 +109,7 @@ fig = px.bar(
 fig.update_traces(texttemplate="%{text:.1f}")
 fig.update_layout(
     showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=0, t=10, b=0),
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(),
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -128,7 +128,7 @@ with tcol1:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_pts["TEAM_ABBREVIATION"]},
                  labels={"PTS_PG": "PPG"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(), xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 with tcol2:
     st.caption(f"Average player FG% by team (min {ndb.MIN_GAMES} GP)")
@@ -136,7 +136,7 @@ with tcol2:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_fg["TEAM_ABBREVIATION"]},
                  labels={"FG_PCT": "FG%"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(), xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()
