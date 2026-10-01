@@ -43,7 +43,11 @@ display = pd.DataFrame({
         standings["l10Wins"].astype(int).astype(str) + "-" + standings["l10Losses"].astype(int).astype(str)
         + "-" + standings["l10OtLosses"].astype(int).astype(str)
     ),
-    "Clinch": standings["clinchIndicator"],
+    # Not present at all early in the season — the API only adds this
+    # column once a team has actually clinched something (nothing can
+    # clinch on opening night), so a plain standings["clinchIndicator"]
+    # KeyErrors until clinches start happening in the spring.
+    "Clinch": standings["clinchIndicator"] if "clinchIndicator" in standings.columns else "",
 })
 
 for conference in sorted(display["conference"].dropna().unique()):
