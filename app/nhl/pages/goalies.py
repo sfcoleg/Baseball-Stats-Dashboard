@@ -51,6 +51,9 @@ filtered = filtered.sort_values(sort_by, ascending=ascending).reset_index(drop=T
 st.caption(f"{len(filtered)} goalies match filters.")
 
 
+_HAND_LABEL = ndb.STAT_LABELS.get("shootsCatches", "shootsCatches")
+
+
 def _table(cols, higher_better=(), lower_better=(), precision=None, height=560):
     present = [c for c in cols if c in filtered.columns]
     display = filtered[present].rename(columns=ndb.STAT_LABELS)
@@ -63,6 +66,12 @@ def _table(cols, higher_better=(), lower_better=(), precision=None, height=560):
             precision={ndb.STAT_LABELS.get(k, k): v for k, v in (precision or {}).items()},
         ),
         use_container_width=True, height=height, hide_index=True,
+        # Room for a full name; the short columns (team, age and handedness)
+        # give up the width. Only columns actually in this tab are configured.
+        column_config={
+            label: st.column_config.Column(width=px_width)
+            for label, px_width in {"Name": 190, "Tm": 58, "Age": 52, _HAND_LABEL: 60}.items() if label in display.columns
+        },
     )
 
 

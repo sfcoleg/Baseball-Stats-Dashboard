@@ -78,6 +78,12 @@ def _table(cols, higher_better=(), lower_better=(), precision=None, height=600):
             precision={ndb.STAT_LABELS.get(k, k): v for k, v in (precision or {}).items()},
         ),
         use_container_width=True, height=height, hide_index=True,
+        # Room for a full name; the short columns (team, position and age)
+        # give up the width. Only columns actually in this tab are configured.
+        column_config={
+            label: st.column_config.Column(width=px_width)
+            for label, px_width in {"Name": 190, "Tm": 58, "Pos": 52, "Age": 52}.items() if label in display.columns
+        },
     )
 
 
