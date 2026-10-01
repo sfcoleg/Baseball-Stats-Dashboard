@@ -36,6 +36,51 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 sys.path.append(str(Path(__file__).resolve().parent))
+
+
+def _drop_stale_app_modules() -> None:
+    """Forget every already-imported module under app/ once any of their
+    files has changed on disk, so the imports below (and each page's own)
+    load the new code.
+
+    This file and the page scripts are re-read every run, but imported
+    modules (style, db, nhl.db, …) live in sys.modules for the life of the
+    server process, and the file watcher that would normally refresh them is
+    switched off in .streamlit/config.toml. After a deploy that left new
+    page code running against old helper modules for as long as the process
+    stayed up — once as a crash (a page calling a function its module didn't
+    have yet), once as a fix that silently never took effect. All of app/'s
+    modules are dropped together, not just the changed one, so nothing keeps
+    a `from x import y` reference into a superseded module.
+    """
+    import os
+    app_dir = str(Path(__file__).resolve().parent) + os.sep
+    # First time this code runs in a process that already has app modules
+    # loaded (i.e. the deploy that introduced it): there is no record of
+    # when they were imported, so assume they may be stale and drop once.
+    first_run = "_dm_module_mtimes" not in sys.__dict__
+    seen = sys.__dict__.setdefault("_dm_module_mtimes", {})
+    this_file = str(Path(__file__).resolve())
+    ours, changed = [], False
+    for name, mod in list(sys.modules.items()):
+        path = getattr(mod, "__file__", None)
+        # Never this script itself (Streamlit runs it as __main__).
+        if not path or not path.startswith(app_dir) or name == "__main__" or path == this_file:
+            continue
+        try:
+            mtime = os.path.getmtime(path)
+        except OSError:
+            continue
+        ours.append(name)
+        if seen.setdefault(path, mtime) != mtime:
+            seen[path] = mtime
+            changed = True
+    if changed or first_run:
+        for name in ours:
+            sys.modules.pop(name, None)
+
+
+_drop_stale_app_modules()
 import db
 import following
 import localstorage_bridge
