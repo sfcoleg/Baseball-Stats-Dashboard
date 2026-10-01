@@ -117,18 +117,59 @@ _theme_type = prefs.resolve_theme(_detected)
 style.apply_theme(_theme_type)
 
 # Every chart on the site goes through st.plotly_chart, so this is the one
-# place to pin this session's text colors onto a figure before it's drawn
-# (see style.pin_chart_colors for why the templates alone can't be trusted).
-# Patched once per process; the flag keeps reruns from stacking wrappers.
-if not getattr(st.plotly_chart, "_dm_pins_colors", False):
-    _st_plotly_chart = st.plotly_chart
+# place to pin this session's text colors onto a figure before it's drawn.
+# Anything a figure doesn't color itself (tick labels, axis titles, legends,
+# annotations) falls back to a template, and neither template tracks the
+# site's Light/Dark choice: ours is a process-wide global another visitor's
+# load can overwrite, and Streamlit's chart theme (#808495 ticks in light)
+# follows the browser/OS scheme. Colors set on the figure beat both.
+#
+# Deliberately self-contained in main.py and re-installed on every run:
+# this file is re-read from disk each run, but imported modules (style, …)
+# and an earlier run's wrapper can be stale after a deploy — calling into
+# them from here crashed every chart page once.
+def _pin_chart_colors(fig) -> None:
+    try:
+        dark = prefs.resolve_theme(getattr(getattr(st.context, "theme", None), "type", None)) == "dark"
+        text, dim = ("#EFF3F9", "#9AA8BD") if dark else ("#0C1725", "#0C1725")
+        lay = fig.layout
+        if lay.font.color is None:
+            lay.font.color = text
+        if lay.legend.font.color is None:
+            lay.legend.font.color = text
+        if lay.legend.title.font.color is None:
+            lay.legend.title.font.color = text
+        if lay.title.font.color is None:
+            lay.title.font.color = text
 
-    def _plotly_chart_pinned(figure_or_data, *args, **kwargs):
-        style.pin_chart_colors(figure_or_data)
-        return _st_plotly_chart(figure_or_data, *args, **kwargs)
+        def _ticks(ax):
+            if ax.tickfont.color is None:
+                ax.tickfont.color = dim
 
-    _plotly_chart_pinned._dm_pins_colors = True
-    st.plotly_chart = _plotly_chart_pinned
+        def _axis(ax):
+            _ticks(ax)
+            if ax.title.font.color is None:
+                ax.title.font.color = dim
+
+        fig.for_each_xaxis(_axis)
+        fig.for_each_yaxis(_axis)
+        # Polar angular axes have tick labels but no title.
+        fig.for_each_polar(lambda p: (_ticks(p.radialaxis), _ticks(p.angularaxis)))
+        _axis(lay.coloraxis.colorbar)
+        for ann in lay.annotations:
+            if ann.font.color is None:
+                ann.font.color = text
+    except Exception:  # noqa: BLE001 — never let a cosmetic pass break a chart
+        pass
+
+
+def _plotly_chart_pinned(figure_or_data, *args, **kwargs):
+    _pin_chart_colors(figure_or_data)
+    # st._main.plotly_chart is Streamlit's own, never a previous wrapper.
+    return st._main.plotly_chart(figure_or_data, *args, **kwargs)
+
+
+st.plotly_chart = _plotly_chart_pinned
 
 # Streamlit's own chrome follows the system scheme, which is what made the
 # page appear to flip on navigation: its inference could land on a different
