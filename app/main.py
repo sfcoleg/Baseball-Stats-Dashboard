@@ -116,6 +116,20 @@ _detected = getattr(_theme_obj, "type", None)
 _theme_type = prefs.resolve_theme(_detected)
 style.apply_theme(_theme_type)
 
+# Every chart on the site goes through st.plotly_chart, so this is the one
+# place to pin this session's text colors onto a figure before it's drawn
+# (see style.pin_chart_colors for why the templates alone can't be trusted).
+# Patched once per process; the flag keeps reruns from stacking wrappers.
+if not getattr(st.plotly_chart, "_dm_pins_colors", False):
+    _st_plotly_chart = st.plotly_chart
+
+    def _plotly_chart_pinned(figure_or_data, *args, **kwargs):
+        style.pin_chart_colors(figure_or_data)
+        return _st_plotly_chart(figure_or_data, *args, **kwargs)
+
+    _plotly_chart_pinned._dm_pins_colors = True
+    st.plotly_chart = _plotly_chart_pinned
+
 # Streamlit's own chrome follows the system scheme, which is what made the
 # page appear to flip on navigation: its inference could land on a different
 # answer than ours between runs. With an explicit Light/Dark choice we paint
