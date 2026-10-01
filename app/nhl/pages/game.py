@@ -295,7 +295,17 @@ def _render():
                     text=[f"{s.shooter} — P{s.period} {s.time} ({s.shotType or ''})" for s in r.itertuples()],
                     hoverinfo="text",
                 ))
-        nstyle.rink_layout(fig, height=460, legend=dict(orientation="h", yanchor="bottom", y=-0.08, x=0, font=dict(size=11)))
+        # legend.font.color isn't set, Plotly falls back to the shared
+        # "diamond" template's own legend default — a global Streamlit
+        # Community Cloud shares across every concurrent visitor's session,
+        # so a differently-themed visitor's page load can leave it on the
+        # wrong color (same race style.py's _session_theme() docstring
+        # describes). Setting it explicitly here, from THIS render's own
+        # resolved color, sidesteps the shared template entirely.
+        nstyle.rink_layout(fig, height=460, legend=dict(
+            orientation="h", yanchor="bottom", y=-0.08, x=0,
+            font=dict(size=11, color=nstyle.session_chart_text_color()),
+        ))
         st.plotly_chart(fig, use_container_width=True)
 
         on_net = shots[shots["result"].isin(["goal", "shot-on-goal"])]

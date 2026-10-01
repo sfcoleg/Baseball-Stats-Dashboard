@@ -1,11 +1,13 @@
-"""NHL Today's Games — live scores/schedule for a given date, straight from
-the NHL's own schedule API (see nhl/db.py's load_schedule_for_date). Card
-layout mirrors the MLB side's Today's Games exactly: a matchup-gradient
-background in each team's colors, logo/abbr/name on the outside, score/
-status in the middle, and odds + win probability text under each team
-(not a bar chart — see nstyle.win_prob_html)."""
+"""NHL Today's Games — live scores/schedule for TODAY ONLY, straight from
+the NHL's own schedule API (see nhl/db.py's load_schedule_for_date). No
+prev/next day nav or date picker — browsing other dates is
+nhl/pages/schedule.py's job, this page is deliberately just "what's on
+today." Card layout mirrors the MLB side's Today's Games exactly: a
+matchup-gradient background in each team's colors, logo/abbr/name on the
+outside, score/status in the middle, and odds + win probability text under
+each team (not a bar chart — see nstyle.win_prob_html)."""
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -29,22 +31,10 @@ st.title("Today's Games")
 _detected = getattr(getattr(getattr(st, "context", None), "theme", None), "type", None)
 _THEME = prefs.resolve_theme(_detected)
 
-if "nhl_games_date" not in st.session_state:
-    st.session_state["nhl_games_date"] = ndb.today_pacific()
-
-nav1, nav2, nav3 = st.columns([1, 2, 1])
-with nav1:
-    if st.button("← Previous day"):
-        st.session_state["nhl_games_date"] -= timedelta(days=1)
-with nav3:
-    if st.button("Next day →"):
-        st.session_state["nhl_games_date"] += timedelta(days=1)
-with nav2:
-    st.session_state["nhl_games_date"] = st.date_input(
-        "Date", st.session_state["nhl_games_date"], label_visibility="collapsed"
-    )
-
-date_str = st.session_state["nhl_games_date"].strftime("%Y-%m-%d")
+# Just today — no prev/next day nav or date picker, so this is always
+# literally "today's games," not a general-purpose schedule browser (that's
+# nhl/pages/schedule.py).
+date_str = ndb.today_pacific().strftime("%Y-%m-%d")
 
 
 def _records() -> dict:

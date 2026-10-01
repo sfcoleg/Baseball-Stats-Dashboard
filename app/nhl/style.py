@@ -250,7 +250,8 @@ def shot_map_chart(shots: pd.DataFrame, name: str) -> "go.Figure":
             hoverinfo="skip",
         ))
     rink_layout(fig, height=470, top=40, title=dict(text=name, x=0.5, xanchor="center"),
-                legend=dict(orientation="h", yanchor="bottom", y=-0.06, x=0))
+                legend=dict(orientation="h", yanchor="bottom", y=-0.06, x=0,
+                            font=dict(color=session_chart_text_color())))
     return fig
 
 

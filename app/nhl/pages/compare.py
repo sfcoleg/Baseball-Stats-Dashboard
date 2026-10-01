@@ -181,7 +181,7 @@ if role_a == "Skater" and role_b == "Skater":
         fig.update_layout(
             barmode="group", height=380, margin=dict(l=10, r=10, t=10, b=10),
             paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+            legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(color=style.session_chart_text_color())),
             yaxis=dict(gridcolor="rgba(74,82,102,0.25)"),
         )
         st.plotly_chart(fig, use_container_width=True)
@@ -208,7 +208,7 @@ if len(career_a) > 1 or len(career_b) > 1:
     layout = dict(
         height=380, margin=dict(l=10, r=10, t=10, b=10),
         paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=style.CHART_TEXT,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0, font=dict(color=style.session_chart_text_color())),
         xaxis=dict(gridcolor="rgba(74,82,102,0.25)"), yaxis=dict(gridcolor="rgba(74,82,102,0.25)"),
     )
     if role_a != role_b:
