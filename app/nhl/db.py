@@ -593,6 +593,10 @@ def load_game_shots(game_id: int) -> pd.DataFrame:
             "period": (p.get("periodDescriptor") or {}).get("number"), "time": p.get("timeInPeriod"),
             "result": kind, "x": x, "y": y, "is_home": is_home, "shotType": d.get("shotType"),
             "shooter": names.get(shooter, ""), "shooterId": shooter,
+            # Carried through for live_win_probability's strength-state
+            # adjustment (same 4-digit code ingest/nhl_xg.py parses for the
+            # xG model) — not used by the shot map itself.
+            "situationCode": p.get("situationCode"),
         })
     return pd.DataFrame(rows)
 
@@ -1039,6 +1043,76 @@ def _p_leader_wins(lead: int, seconds_left: float) -> float:
     return win + 0.5 * tie
 
 
+# Live-only adjustment to the "right now" point: the strength state (power
+# play/shorthanded/empty net) and each team's shot pace SO FAR are both
+# real signals about who's more likely to score NEXT, not just the score
+# and clock _p_leader_wins uses. Deliberately NOT folded into
+# goal_win_swings/the historical reconstruction — those stay the clean
+# score-only metric; only the live trailing point gets this adjustment, and
+# only when the data needed for it is actually available.
+LEAGUE_SHOTS_PER_TEAM_PER_60 = 30.0
+
+# Hand-set from league-wide PP/PK/empty-net scoring-rate ratios, not fit —
+# same honesty as the rest of this model: a crude but directionally right
+# adjustment, not a calibrated one. Keyed by (skaters_for - skaters_against).
+_STRENGTH_MULT = {2: 2.6, 1: 1.9, 0: 1.0, -1: 0.55, -2: 0.3}
+
+
+def _strength_mult(skaters_for: int, skaters_against: int, net_empty_against: bool) -> float:
+    if net_empty_against:
+        return 3.0
+    return _STRENGTH_MULT.get(skaters_for - skaters_against, 1.0)
+
+
+def _parse_situation_code(code, is_home: bool) -> tuple[int, int, bool]:
+    """situationCode -> (skaters_for, skaters_against, net_empty_against)
+    for the given side. Same 4-digit-from-home's-perspective convention
+    ingest/nhl_xg.py's _parse_situation() uses: [away goalie][away
+    skaters][home skaters][home goalie]."""
+    s = str(code).zfill(4)
+    if len(s) != 4 or not s.isdigit():
+        return 5, 5, False
+    away_goalie, away_skaters, home_skaters, home_goalie = (int(c) for c in s)
+    if is_home:
+        return home_skaters, away_skaters, away_goalie == 0
+    return away_skaters, home_skaters, home_goalie == 0
+
+
+def _shot_rate_mult(shots_for: int, minutes_elapsed: float) -> float:
+    """How hot/cold a team's shot pace has been so far, as a scoring-rate
+    multiplier — shrunk toward 1.0 early (3 shots in the first 2 minutes
+    means nothing) and capped well short of what a real goal or power
+    play would move it, so an early shot-generation edge nudges the live
+    number rather than dominating it."""
+    if minutes_elapsed < 3:
+        return 1.0
+    pace = shots_for / minutes_elapsed * 60.0
+    ratio = pace / LEAGUE_SHOTS_PER_TEAM_PER_60
+    weight = min(minutes_elapsed / 20.0, 1.0)
+    ratio = 1.0 + (ratio - 1.0) * weight
+    return max(0.7, min(ratio, 1.4))
+
+
+def _p_home_wins_adjusted(home_lead: int, seconds_left: float, home_mult: float, away_mult: float) -> float:
+    """Same Skellam-tail idea as _p_leader_wins, but home/away add goals at
+    DIFFERENT Poisson rates — lets the live "right now" point reflect a
+    power play or a shot-generation edge instead of treating both teams as
+    symmetric. mult=1.0 for both sides reproduces _p_leader_wins exactly."""
+    base = LEAGUE_GOALS_PER_TEAM_PER_60 * max(seconds_left, 0.0) / 3600.0
+    mu_home, mu_away = base * home_mult, base * away_mult
+    win = tie = 0.0
+    for a in range(13):
+        pa = _poisson_pmf(mu_home, a)
+        for b in range(13):
+            diff = home_lead + a - b
+            p = pa * _poisson_pmf(mu_away, b)
+            if diff > 0:
+                win += p
+            elif diff == 0:
+                tie += p
+    return win + 0.5 * tie
+
+
 def goal_win_swings(periods: list) -> list[float | None]:
     """One win-probability swing per goal in a landing payload's
     summary.scoring, chronological, aligned with the goals as a caller
@@ -1082,7 +1156,7 @@ def goal_win_swings(periods: list) -> list[float | None]:
     return out
 
 
-def live_win_probability(landing: dict) -> pd.DataFrame:
+def live_win_probability(landing: dict, shots: pd.DataFrame | None = None) -> pd.DataFrame:
     """Home-team win probability across the game so far, from the same
     Skellam score/clock model as goal_win_swings — the NHL equivalent of
     the MLB side's db.load_win_probability. One step per goal (the value
@@ -1090,7 +1164,16 @@ def live_win_probability(landing: dict) -> pd.DataFrame:
     goal happened rather than sloping toward it) plus a leading point at
     puck drop and a trailing point at the game's current state (now, if
     live; the actual final score, if over). Empty frame if summary/scoring
-    isn't present yet (scheduled games)."""
+    isn't present yet (scheduled games).
+
+    `shots` (optional, from load_game_shots — pass the same frame the shot
+    map already fetched so this doesn't double the network calls) lets the
+    LIVE trailing point only factor in the current strength state (power
+    play/shorthanded/empty net, from the most recent shot's situationCode)
+    and each team's shot pace so far — see _p_home_wins_adjusted. Every
+    other point (puck drop, each goal) stays the plain score/clock model;
+    only "right now" benefits from knowing what's happening on the ice
+    beyond the scoreboard."""
     summary = landing.get("summary") or {}
     periods = summary.get("scoring") or []
     rows = [{"t": 0, "home_win_pct": 50.0, "away_score": 0, "home_score": 0, "description": None}]
@@ -1154,7 +1237,23 @@ def live_win_probability(landing: dict) -> pd.DataFrame:
             remaining_in_period = 1200
         elapsed = (pnum - 1) * 1200 + (1200 - remaining_in_period)
         seconds_left = 0 if ptype == "OT" else max(3600 - elapsed, 0)
-        p_now = _p_leader_wins(home - away, seconds_left)
+
+        home_mult = away_mult = 1.0
+        if shots is not None and not shots.empty:
+            home_sog = int((landing.get("homeTeam") or {}).get("sog") or 0)
+            away_sog = int((landing.get("awayTeam") or {}).get("sog") or 0)
+            minutes_elapsed = max(elapsed / 60.0, 0.01)
+            home_mult = _shot_rate_mult(home_sog, minutes_elapsed)
+            away_mult = _shot_rate_mult(away_sog, minutes_elapsed)
+            last_code = shots.iloc[-1].get("situationCode")
+            if last_code:
+                h_for, h_against, h_en = _parse_situation_code(last_code, is_home=True)
+                a_for, a_against, a_en = _parse_situation_code(last_code, is_home=False)
+                home_mult *= _strength_mult(h_for, h_against, h_en)
+                away_mult *= _strength_mult(a_for, a_against, a_en)
+            home_mult = max(0.25, min(home_mult, 4.0))
+            away_mult = max(0.25, min(away_mult, 4.0))
+        p_now = _p_home_wins_adjusted(home - away, seconds_left, home_mult, away_mult)
         rows.append({
             "t": max(elapsed, rows[-1]["t"] + 1), "home_win_pct": round(p_now * 100, 1),
             "away_score": away, "home_score": home, "description": None,

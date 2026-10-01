@@ -244,7 +244,8 @@ def _render():
     # same in-house score/clock model that powers the goal-swing tags
     # above (goal_win_swings), just sampled into a full time series
     # instead of one number per goal.
-    wp_df = ndb.live_win_probability(landing)
+    shots = ndb.load_game_shots(game_id)
+    wp_df = ndb.live_win_probability(landing, shots)
     if not wp_df.empty:
         style.colored_header("Win Probability", "batting")
         st.plotly_chart(
@@ -268,7 +269,6 @@ def _render():
                     )
 
     # --- Shot map + shots by period -------------------------------------------------
-    shots = ndb.load_game_shots(game_id)
     if not shots.empty:
         style.colored_header("Live Shot Map", "chart")
         st.caption(
