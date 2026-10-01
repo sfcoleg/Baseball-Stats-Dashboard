@@ -9,6 +9,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 sys.path.append(str(Path(__file__).resolve().parent.parent.parent))
@@ -216,6 +217,42 @@ if season == latest_season:
 
     if has_recent_skaters or has_recent_goalies:
         st.divider()
+
+
+# --- Points leaders, split into goals and assists ------------------------
+# Always THIS season's own numbers, however few games in — unlike the goal
+# chart below it does not fall back to last season. Each bar is a stacked
+# pair (goals, then assists), so the split is the real ratio by construction.
+_pts = skaters.dropna(subset=["points"])
+_pts = _pts[_pts["points"] > 0].sort_values(["points", "goals"], ascending=False).head(10).iloc[::-1]
+if not _pts.empty:
+    style.colored_header(f"{ndb.season_label(season)} Points Leaders", "chart")
+    _goal_color, _assist_color = "#2E86DE", "#F2A33A"
+    _text = nstyle.session_chart_text_color()
+    fig = go.Figure()
+    for _col, _label, _color, _ink in (("goals", "Goals", _goal_color, "#FFFFFF"),
+                                       ("assists", "Assists", _assist_color, "#1A1200")):
+        _vals = _pts[_col].astype(int)
+        fig.add_trace(go.Bar(
+            x=_vals, y=_pts["skaterFullName"], orientation="h", name=_label, marker_color=_color,
+            text=[str(v) if v else "" for v in _vals], textposition="inside", insidetextanchor="middle",
+            textfont=dict(color=_ink, size=13), hovertemplate=f"%{{y}}: %{{x}} {_label.lower()}<extra></extra>",
+        ))
+    fig.add_trace(go.Scatter(
+        x=_pts["points"], y=_pts["skaterFullName"], mode="text", showlegend=False, hoverinfo="skip",
+        text=[f"  {int(v)} PTS" for v in _pts["points"]], textposition="middle right",
+        textfont=dict(color=_text, size=13), cliponaxis=False,
+    ))
+    fig.update_layout(
+        barmode="stack", height=420, margin=dict(l=0, r=70, t=10, b=0),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=_text,
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0, traceorder="normal", font=dict(color=_text)),
+        # Whole-number ticks while totals are tiny; auto once they aren't.
+        xaxis=dict(dtick=1 if _pts["points"].max() <= 10 else None, title=None, tickfont=dict(color=_text)),
+        yaxis=dict(title=None, tickfont=dict(color=_text)),
+    )
+    st.plotly_chart(fig, use_container_width=True)
+    st.divider()
 
 
 # --- Top 10 goal scorers chart -------------------------------------------
