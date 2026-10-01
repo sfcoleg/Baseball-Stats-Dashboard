@@ -44,7 +44,7 @@ def season_game_ids(start_year: int) -> list[int]:
     """Every regular-season game id (gameType 2) played between this
     season's Oct 1 and the following Jul 1, walking week by week."""
     ids, seen_dates = [], set()
-    cursor = f"{start_year}-10-01"
+    cursor = f"{start_year}-09-15"  # seasons can open in late September
     stop = f"{start_year + 1}-07-01"
     while cursor < stop:
         def _get():
@@ -142,8 +142,8 @@ def store_season(df: pd.DataFrame, start_year: int) -> None:
 
 
 def latest_season_start_year() -> int:
-    today = pacific_today()
-    return today.year if today.month >= 10 else today.year - 1
+    from _dates import nhl_season_start_year
+    return nhl_season_start_year()
 
 
 def update_latest() -> None:

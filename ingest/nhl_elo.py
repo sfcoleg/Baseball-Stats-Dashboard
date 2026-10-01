@@ -63,7 +63,9 @@ def season_results(start_year: int) -> list[dict]:
     """Every finished game (regular season + playoffs) for one season, in
     chronological order: {date, home, away, home_score, away_score}."""
     games, seen_dates = [], set()
-    cursor = f"{start_year}-10-01"
+    # Mid-September, not Oct 1: 2026-27 opened Sept 29. Preseason games in
+    # the window are dropped by the gameType filter below.
+    cursor = f"{start_year}-09-15"
     stop = f"{start_year + 1}-07-01"
     while cursor < stop:
         def _get():
@@ -231,8 +233,8 @@ def _store_history(history: list[dict]) -> None:
 
 
 def latest_season_start_year() -> int:
-    today = pacific_today()
-    return today.year if today.month >= 10 else today.year - 1
+    from _dates import nhl_season_start_year
+    return nhl_season_start_year()
 
 
 def advance_ratings() -> None:

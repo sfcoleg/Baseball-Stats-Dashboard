@@ -171,7 +171,9 @@ def load_shots(season: int, db_mtime_val: float) -> pd.DataFrame:
 
 GOAL_MILESTONE_THRESHOLDS = [20, 30, 40, 50, 60]
 POINT_MILESTONE_THRESHOLDS = [50, 75, 100, 125, 150]
-RECENT_MIN_GAMES = {"week": 3, "month": 8}
+# Share of shots on goal that score, league-wide — the baseline an average
+# goalie is measured against in top_recent_goalie.
+LEAGUE_AVG_SHOOTING_PCT = 0.095
 
 
 def _read_daily_log(table: str, where: str, params: tuple) -> pd.DataFrame:
@@ -226,9 +228,11 @@ def top_recent_skater(period: str, season: int, db_mtime_val: float, as_of: date
     if period == "day":
         df = load_daily_skater_log(end.isoformat())
     else:
+        # No games-played floor: the ranking is total points, a counting
+        # stat, so a one-game wonder can't outrank a real hot stretch once
+        # there are enough games for one — and in a season's first week a
+        # floor (it used to be 3 games / 8 games) just blanks the card.
         df = _window_skater_log(7 if period == "week" else 30, end)
-        min_games = RECENT_MIN_GAMES.get(period, 1)
-        df = df[df["games"] >= min_games] if not df.empty else df
     if df.empty:
         return None
     names = load_skaters(season, db_mtime_val)[["playerId", "skaterFullName"]]
@@ -237,31 +241,34 @@ def top_recent_skater(period: str, season: int, db_mtime_val: float, as_of: date
 
 
 def top_recent_goalie(period: str, season: int, db_mtime_val: float, as_of: date | None = None):
-    """Best goalie performance for 'day'/'week'/'month' — ranked by saves
-    for a single day (workload matters when everyone's SV% clusters near
-    1.000 on a light night), by SV% (min shots faced) for week/month."""
+    """Best goalie performance for 'day'/'week'/'month'.
+
+    Every window ranks by goals saved above an average goalie — shots faced
+    times the league-average scoring rate, minus goals actually allowed —
+    which rewards stopping a lot of shots AND not letting them in. Ranking a
+    single day by raw saves (the old rule) crowned whoever faced the most
+    rubber, including a goalie who allowed 7 in a 7-0 loss."""
     end = as_of or (today_pacific() - timedelta(days=1))
     if period == "day":
         df = load_daily_goalie_log(end.isoformat())
-        if df.empty:
-            return None
-        df = df[df["shotsAgainst"] >= 5]
-        if df.empty:
-            return None
-        df = df.assign(saves=df["shotsAgainst"] - df["goalsAgainst"])
-        rank_cols = ["saves"]
     else:
         df = _window_goalie_log(7 if period == "week" else 30, end)
-        if df.empty:
-            return None
-        min_shots = 30 if period == "week" else 100
-        df = df[df["shotsAgainst"] >= min_shots]
-        if df.empty:
-            return None
-        rank_cols = ["savePct"]
+    if df.empty:
+        return None
+    # A token floor only — goals saved above average is a counting stat, so
+    # a five-shot relief appearance can't outrank a real night's work, and
+    # the old 30/100-shot floors left one eligible goalie in opening week.
+    df = df[df["shotsAgainst"] >= 5]
+    if df.empty:
+        return None
+    df = df.assign(
+        saves=df["shotsAgainst"] - df["goalsAgainst"],
+        savePct=(1 - df["goalsAgainst"] / df["shotsAgainst"]) * 100,
+        saved_above_avg=df["shotsAgainst"] * LEAGUE_AVG_SHOOTING_PCT - df["goalsAgainst"],
+    )
     names = load_goalies(season, db_mtime_val)[["playerId", "goalieFullName"]]
     df = df.merge(names, on="playerId", how="left")
-    return df.sort_values(rank_cols, ascending=False).iloc[0]
+    return df.sort_values(["saved_above_avg", "saves"], ascending=False).iloc[0]
 
 
 def get_daily_milestones(date_str: str, season: int, db_mtime_val: float) -> list[dict]:

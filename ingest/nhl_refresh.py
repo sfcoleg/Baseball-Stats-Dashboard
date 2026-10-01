@@ -165,7 +165,11 @@ def fetch_moneypuck(start_year: int) -> pd.DataFrame:
         resp.raise_for_status()
         return pd.read_csv(io.StringIO(resp.text))
 
-    df = _with_retries(_get, f"moneypuck {start_year}")
+    try:
+        df = _with_retries(_get, f"moneypuck {start_year}")
+    except Exception as e:  # noqa: BLE001 — not published yet early in a season
+        print(f"  moneypuck {start_year} unavailable ({e!r}) — xG columns left empty", flush=True)
+        return pd.DataFrame(columns=["playerId"])
     if df.empty or "playerId" not in df.columns:
         return pd.DataFrame(columns=["playerId"])
     all_sit = df[df["situation"] == "all"][["playerId"] + list(MONEYPUCK_ALL)].rename(columns=MONEYPUCK_ALL)
@@ -202,7 +206,11 @@ def fetch_goalie_moneypuck(start_year: int) -> pd.DataFrame:
         resp.raise_for_status()
         return pd.read_csv(io.StringIO(resp.text))
 
-    df = _with_retries(_get, f"moneypuck goalies {start_year}")
+    try:
+        df = _with_retries(_get, f"moneypuck goalies {start_year}")
+    except Exception as e:  # noqa: BLE001 — not published yet early in a season
+        print(f"  moneypuck goalies {start_year} unavailable ({e!r}) — xGA columns left empty", flush=True)
+        return pd.DataFrame(columns=["playerId"])
     if df.empty or "playerId" not in df.columns:
         return pd.DataFrame(columns=["playerId"])
     all_sit = df[df["situation"] == "all"][["playerId"] + list(GOALIE_MONEYPUCK_ALL)].rename(columns=GOALIE_MONEYPUCK_ALL)
@@ -228,19 +236,33 @@ def build_goalie_season(start_year: int) -> pd.DataFrame:
     return merged
 
 
-def store_goalie_season(df: pd.DataFrame, start_year: int) -> None:
+
+def _store_one_season(table: str, df: pd.DataFrame, start_year: int) -> None:
+    """Replace one season's rows in `table`, keeping every other season.
+
+    The old version DROPPED the whole table whenever the new frame's columns
+    differed from the stored ones. That is fine for a full backfill and
+    catastrophic for a nightly run: a brand-new season whose MoneyPuck file
+    isn't published yet arrives without the xG columns, and one mismatch
+    would have wiped every prior season. Now the frame is fitted to the
+    table instead — missing columns are stored as NULL, genuinely new ones
+    are added with ALTER TABLE."""
     NHL_DB_PATH.parent.mkdir(exist_ok=True)
     with sqlite3.connect(NHL_DB_PATH) as conn:
-        try:
-            existing = {r[1] for r in conn.execute("PRAGMA table_info(goalies)")}
-            if existing and existing != set(df.columns):
-                conn.execute("DROP TABLE goalies")
-            else:
-                conn.execute("DELETE FROM goalies WHERE season = ?", (start_year,))
-        except sqlite3.OperationalError:
-            pass
-        df.to_sql("goalies", conn, if_exists="append", index=False)
+        existing = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+        if existing:
+            for col in df.columns:
+                if col not in existing:
+                    conn.execute(f'ALTER TABLE {table} ADD COLUMN "{col}"')
+                    existing.append(col)
+            df = df.reindex(columns=existing)
+            conn.execute(f"DELETE FROM {table} WHERE season = ?", (start_year,))
+        df.to_sql(table, conn, if_exists="append", index=False)
         conn.commit()
+
+
+def store_goalie_season(df: pd.DataFrame, start_year: int) -> None:
+    _store_one_season("goalies", df, start_year)
 
 
 def build_season(start_year: int) -> pd.DataFrame:
@@ -268,18 +290,7 @@ def build_season(start_year: int) -> pd.DataFrame:
 
 
 def store_season(df: pd.DataFrame, start_year: int) -> None:
-    NHL_DB_PATH.parent.mkdir(exist_ok=True)
-    with sqlite3.connect(NHL_DB_PATH) as conn:
-        try:
-            existing = {r[1] for r in conn.execute("PRAGMA table_info(skaters)")}
-            if existing and existing != set(df.columns):
-                conn.execute("DROP TABLE skaters")
-            else:
-                conn.execute("DELETE FROM skaters WHERE season = ?", (start_year,))
-        except sqlite3.OperationalError:
-            pass
-        df.to_sql("skaters", conn, if_exists="append", index=False)
-        conn.commit()
+    _store_one_season("skaters", df, start_year)
 
 
 def record_refresh() -> None:
@@ -308,18 +319,26 @@ def record_refresh() -> None:
 
 
 def latest_season_start_year() -> int:
-    """NHL seasons start in October; before October the latest complete
-    season is the one that started last year."""
-    today = pacific_today()
-    return today.year if today.month >= 10 else today.year - 1
+    """See _dates.nhl_season_start_year — September onward is the new season."""
+    from _dates import nhl_season_start_year
+    return nhl_season_start_year()
 
 
 def update_latest() -> None:
     yr = latest_season_start_year()
     print(f"=== NHL skaters {yr}-{yr + 1} ===")
-    store_season(build_season(yr), yr)
+    skaters = build_season(yr)
+    if skaters.empty:
+        # September before puck drop: the new season exists on the calendar
+        # but nobody has played. Storing it would make an empty season the
+        # site's "latest" one.
+        print("  no skater rows yet — season hasn't started, nothing stored")
+        return
+    store_season(skaters, yr)
     print(f"=== NHL goalies {yr}-{yr + 1} ===")
-    store_goalie_season(build_goalie_season(yr), yr)
+    goalies = build_goalie_season(yr)
+    if not goalies.empty:
+        store_goalie_season(goalies, yr)
 
 
 if __name__ == "__main__":

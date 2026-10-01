@@ -27,3 +27,15 @@ def pacific_today() -> date:
     """Today's date in Pacific time — the ingest side's single source of
     truth for the current day. Use this instead of `date.today()`."""
     return datetime.now(PACIFIC).date()
+
+
+def nhl_season_start_year() -> int:
+    """Start year of the NHL season the nightly jobs should be working on.
+
+    September counts as the NEW season: 2026-27 opened on Sept 29, and the
+    old "October onward" rule left that whole opening week un-ingested. In
+    the weeks of September before puck drop the new season simply has no
+    rows yet, which callers already tolerate (nhl_refresh.update_latest
+    skips an empty season rather than storing it)."""
+    today = pacific_today()
+    return today.year if today.month >= 9 else today.year - 1

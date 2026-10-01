@@ -111,7 +111,7 @@ def build_games_table(seasons: list[int]) -> pd.DataFrame:
     """
     rows = []
     for start_year in seasons:
-        cursor, stop, seen = f"{start_year}-10-01", f"{start_year + 1}-07-01", set()
+        cursor, stop, seen = f"{start_year}-09-15", f"{start_year + 1}-07-01", set()
         while cursor < stop:
             payload = _get_json(f"https://api-web.nhle.com/v1/schedule/{cursor}")
             if not payload:

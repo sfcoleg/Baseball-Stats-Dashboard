@@ -164,9 +164,26 @@ def update_date(date_str: str) -> None:
     print(f"  {len(skater_df)} skater lines, {len(goalie_df)} goalie lines", flush=True)
 
 
-def update_yesterday() -> None:
-    yesterday = (datetime.now(ZoneInfo("America/Los_Angeles")).date() - timedelta(days=1)).isoformat()
-    update_date(yesterday)
+def _logged_dates() -> set[str]:
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            return {r[0] for r in conn.execute("SELECT DISTINCT date FROM daily_skater_log")}
+    except sqlite3.Error:
+        return set()
+
+
+def update_yesterday(catch_up_days: int = 7) -> None:
+    """Yesterday's log, plus any of the previous `catch_up_days` days that
+    never got logged. A night the refresh didn't run (or ran before the
+    season's gate opened) used to be lost for good, leaving holes in the
+    Home page's week/month Headliners. Yesterday is always re-pulled; older
+    days only when missing, and a day with no games costs one request."""
+    today = datetime.now(ZoneInfo("America/Los_Angeles")).date()
+    have = _logged_dates()
+    for back in range(catch_up_days, 0, -1):
+        day = (today - timedelta(days=back)).isoformat()
+        if back == 1 or day not in have:
+            update_date(day)
 
 
 if __name__ == "__main__":

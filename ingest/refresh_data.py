@@ -2086,10 +2086,11 @@ def fetch_and_store():
     _record_refresh_run()
 
     # NHL skaters (see nhl_refresh.py) — refreshes the latest season into
-    # data/nhl.db, but only in-season: October through June. Over the
+    # data/nhl.db, but only in-season: September through June
+    # (2026-27 opened Sept 29; the old October gate missed opening week). Over the
     # summer the numbers are final and there's nothing to pull. Same
     # non-fatal guard; the MLB refresh never waits on it.
-    if _pacific_today().month >= 10 or _pacific_today().month <= 6:
+    if _pacific_today().month >= 9 or _pacific_today().month <= 6:
         try:
             from nhl_refresh import update_latest as nhl_update_latest
             nhl_update_latest()
@@ -2142,7 +2143,7 @@ def fetch_and_store():
         except Exception as e:
             print(f"nhl shots refresh failed (non-fatal): {e}")
     else:
-        print("nhl refresh skipped (offseason — resumes in October)")
+        print("nhl refresh skipped (offseason — resumes in September)")
 
     # P.R.O.P.+ pitch grades (see mlb_prop.py) — re-scored from the shipped
     # model artifact after the nightly pitch_arsenal refresh. Like the NHL's
