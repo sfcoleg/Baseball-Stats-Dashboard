@@ -235,10 +235,10 @@ fig = px.bar(
 # the labels OUTSIDE the bar (onto the plain chart background) and
 # setting an explicit dark color sidesteps that entirely, regardless of
 # how light or dark any individual bar's own fill is.
-fig.update_traces(textposition="outside", textfont_color=nstyle.CHART_TEXT, cliponaxis=False)
+fig.update_traces(textposition="outside", textfont_color=nstyle.session_chart_text_color(), cliponaxis=False)
 fig.update_layout(
     showlegend=False, coloraxis_showscale=False, height=400, margin=dict(l=0, r=40, t=10, b=0),
-    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT,
+    paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(),
 )
 st.plotly_chart(fig, use_container_width=True)
 
@@ -265,7 +265,7 @@ with tcol1:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_cf["Tm"]},
                  labels={"satPercentage": "CF%"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(), xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 with tcol2:
     st.caption("Average goalie SV% by team (20+ GP)")
@@ -273,7 +273,7 @@ with tcol2:
                  color_discrete_map={t: nteams.color_for_abbr(t) for t in team_svpct["Tm"]},
                  labels={"savePct": "SV%"})
     fig.update_layout(showlegend=False, height=380, margin=dict(l=0, r=0, t=10, b=0),
-                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.CHART_TEXT, xaxis_title=None)
+                       paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=nstyle.session_chart_text_color(), xaxis_title=None)
     st.plotly_chart(fig, use_container_width=True)
 
 st.divider()

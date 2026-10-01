@@ -2695,3 +2695,13 @@ def session_chart_text_color() -> str:
     axis labels need to be legible on their own (not just matching the
     template's usual look) should call this instead of CHART_TEXT."""
     return "#EFF3F9" if _session_theme() == "dark" else "#0C1725"
+
+
+def session_chart_dim_color() -> str:
+    """Same fix as session_chart_text_color(), for CHART_DIM."""
+    return "#9AA8BD" if _session_theme() == "dark" else "#0C1725"
+
+
+def session_chart_grid_color() -> str:
+    """Same fix as session_chart_text_color(), for CHART_GRID."""
+    return "#2E3B4E" if _session_theme() == "dark" else "#D8E1EE"

@@ -20,10 +20,6 @@ import teams
 
 st.set_page_config(page_title="Diamond Metrics Awards | Diamond Metrics", layout="wide")
 st.title("🏆 Diamond Metrics Awards")
-st.caption(
-    "Our own end-of-season awards, built entirely from stats that live only on this site — "
-    "not a projection of the real MVP or Cy Young race (see Awards Race for that)."
-)
 
 if not db.DB_PATH.exists():
     st.error("No data found yet. Run the ingest script first.")
@@ -31,7 +27,12 @@ if not db.DB_PATH.exists():
 
 mtime = db.db_mtime()
 seasons = db.get_seasons("batting")
-season = st.selectbox("Season", seasons, index=prefs.default_season_index(seasons))
+# No season picker: Eye/Contact/Power Score lean on bat-tracking/plate-
+# discipline Statcast pulls that, like the baserunning-runs leaderboard,
+# only ever serve the CURRENT season regardless of what year is requested —
+# a dropdown here would silently show this season's trophies under any
+# year you picked, so there's no real "other years" to switch to.
+season = seasons[prefs.default_season_index(seasons)]
 
 batting = db.load_batting(season, mtime)
 batting["HVS"] = db.hitting_value_score(batting)
@@ -62,7 +63,7 @@ if not wpa.empty:
 qualified = batting[batting["PA"] >= db.QUALIFIED_MIN_PA]
 
 
-def _trophy_card(icon: str, title: str, blurb: str, stat_col: str, stat_label: str, fmt: str):
+def _trophy_card(icon: str, title: str, stat_col: str, stat_label: str, fmt: str):
     """One award: winner's photo/name/team plus the stat that won it,
     reusing the site's own headshot/player-link helpers so a click goes
     straight to that player's real page."""
@@ -82,7 +83,6 @@ def _trophy_card(icon: str, title: str, blurb: str, stat_col: str, stat_label: s
             f"color:var(--dm-dim)'>{icon} {title}</div>",
             unsafe_allow_html=True,
         )
-        st.caption(blurb)
         st.markdown(
             f"<div style='display:flex;align-items:center;gap:14px;margin-top:6px'>"
             f"<img src='{style.headshot_url(int(winner['mlbID']), width=180)}' "
@@ -110,42 +110,15 @@ def _trophy_card(icon: str, title: str, blurb: str, stat_col: str, stat_label: s
 
 col1, col2 = st.columns(2)
 with col1:
-    _trophy_card(
-        "⭐", "Diamond MVP",
-        "Highest Hitting Value Score — our own blend of hard contact, power, bat-to-ball, plate eye "
-        "and playing time, deliberately excluding WAR/wRC+/OPS+ so it isn't just restating them.",
-        "HVS", "HVS", "{:.0f}",
-    )
+    _trophy_card("⭐", "Diamond MVP", "HVS", "HVS", "{:.0f}")
 with col2:
-    _trophy_card(
-        "🎯", "Best Eye",
-        "Highest Eye Score — swing decisions by Statcast attack zone, including the shadow-in/"
-        "shadow-out split no public leaderboard carries, weighted so protecting with two strikes "
-        "isn't judged like chasing on 3-0.",
-        "Eye Score", "Eye Score", "{:.0f}",
-    )
+    _trophy_card("🎯", "Best Eye", "Eye Score", "Eye Score", "{:.0f}")
 
 col3, col4 = st.columns(2)
 with col3:
-    _trophy_card(
-        "🤏", "Best Bat-to-Ball",
-        "Highest Contact Score — built specifically to predict strikeout rate without ever using "
-        "strikeout rate as an input. Correlates -0.89 with real K% on this season's data.",
-        "Contact Score", "Contact Score", "{:.0f}",
-    )
+    _trophy_card("🤏", "Best Bat-to-Ball", "Contact Score", "Contact Score", "{:.0f}")
 with col4:
-    _trophy_card(
-        "💥", "Most Raw Power",
-        "Highest Power Score — hard-hit rate, exit velocity, bat speed and sweet-spot rate. "
-        "Deliberately excludes ISO/HR/barrel%, since those are outcomes, not capacity.",
-        "Power Score", "Power Score", "{:.0f}",
-    )
+    _trophy_card("💥", "Most Raw Power", "Power Score", "Power Score", "{:.0f}")
 
 st.markdown("")
-_trophy_card(
-    "🔥", "Clutch Award",
-    "Highest Win Probability Added (WPA) — how much this player's own plate appearances moved his "
-    "team's championship-relevant chances, from our own trained win-probability model. A double in "
-    "the 9th with the game on the line counts for far more here than the same swing in the 3rd.",
-    "wpa", "WPA", "{:+.2f}",
-)
+_trophy_card("🔥", "Clutch Award", "wpa", "WPA", "{:+.2f}")

@@ -11,11 +11,18 @@ import sys as _sys
 from pathlib import Path as _Path
 _sys.path.append(str(_Path(__file__).resolve().parent.parent))
 # Chart colours live in the MLB-side style module; re-exported here so NHL
-# pages can reach them through nstyle.* like everything else.
-from style import (CHART_TEXT, CHART_DIM, CHART_GRID, CHART_SURFACE,  # noqa: F401
-                   CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,
+# pages can reach them through nstyle.* like everything else. CHART_TEXT/
+# CHART_DIM/CHART_GRID are NOT re-exported as plain values on purpose: they're
+# module globals apply_theme() overwrites per request, and `from style import
+# CHART_TEXT` would freeze whatever value was live the first time this module
+# got imported — on Streamlit Community Cloud that's effectively random
+# (whichever visitor's theme loaded first in this process), which is exactly
+# what put white chart text on the light theme. Use the session_chart_*_color()
+# calls below instead, resolved fresh on every render.
+from style import (CHART_SURFACE, CHART_BLUE, CHART_AMBER, CHART_RED, CHART_GREEN,  # noqa: F401
                    BLUE_SCALE, HEAT_SCALE, HEAT_SCALE_R, _hex_to_rgba,
-                   matchup_gradient)
+                   matchup_gradient, session_chart_text_color, session_chart_dim_color,
+                   session_chart_grid_color)
 from db import moneyline_odds  # noqa: F401 — same fair-odds formula MLB uses
 
 _CLINCH_LABELS = {"p": "Presidents' Trophy", "z": "Clinched conference", "y": "Clinched division", "x": "Clinched playoff berth"}
@@ -214,7 +221,7 @@ def rink_layout(fig: "go.Figure", height: int = 460, **kwargs) -> "go.Figure":
     """Axes/aspect settings every rink chart shares."""
     fig.update_layout(
         height=height, margin=dict(l=10, r=10, t=kwargs.pop("top", 10), b=10),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=session_chart_text_color(),
         # constrain="domain" is what keeps this robust: with the default
         # (constrain="range"), plotly satisfies the 1:1 scaleanchor by
         # EXPANDING an axis range, and on Streamlit's first layout pass (when
@@ -356,7 +363,7 @@ def win_probability_chart(wp_df: pd.DataFrame, away_abbr: str, home_abbr: str,
     fig = go.Figure()
     fig.add_hline(
         y=50, line=dict(color=_hex_to_rgba(away_color, 0.5), width=1, dash="dot"),
-        annotation_text=f"{away_abbr} favored below", annotation_font_color=CHART_DIM, annotation_font_size=10,
+        annotation_text=f"{away_abbr} favored below", annotation_font_color=session_chart_dim_color(), annotation_font_size=10,
     )
     fig.add_trace(go.Scatter(
         x=wp_df["t"], y=wp_df["home_win_pct"], mode="lines",
@@ -367,18 +374,18 @@ def win_probability_chart(wp_df: pd.DataFrame, away_abbr: str, home_abbr: str,
     goals = wp_df[wp_df["description"].notna() & (wp_df["description"] != "Final")]
     if not goals.empty:
         for x in goals["t"]:
-            fig.add_vline(x=x, line=dict(color=_hex_to_rgba(CHART_TEXT, 0.5), width=1))
+            fig.add_vline(x=x, line=dict(color=_hex_to_rgba(session_chart_text_color(), 0.5), width=1))
         fig.add_trace(go.Scatter(
             x=goals["t"], y=goals["home_win_pct"], mode="markers",
-            marker=dict(size=9, color=CHART_TEXT, line=dict(color=home_color, width=2)),
+            marker=dict(size=9, color=session_chart_text_color(), line=dict(color=home_color, width=2)),
             text=goals["description"], hovertemplate="%{text}<extra></extra>", showlegend=False,
         ))
     for x in (1200, 2400, 3600):
-        fig.add_vline(x=x, line=dict(color=_hex_to_rgba(CHART_GRID, 0.5), width=1, dash="dot"))
-    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba(CHART_GRID, 0.25), color=CHART_DIM, ticksuffix="%")
+        fig.add_vline(x=x, line=dict(color=_hex_to_rgba(session_chart_grid_color(), 0.5), width=1, dash="dot"))
+    fig.update_yaxes(range=[0, 100], gridcolor=_hex_to_rgba(session_chart_grid_color(), 0.25), color=session_chart_dim_color(), ticksuffix="%")
     fig.update_xaxes(visible=False, range=[0, max(3600, wp_df["t"].max())])
     fig.update_layout(
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=CHART_TEXT,
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)", font_color=session_chart_text_color(),
         height=220, margin=dict(l=10, r=10, t=10, b=10), showlegend=False,
     )
     return fig
