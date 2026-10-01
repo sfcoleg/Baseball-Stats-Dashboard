@@ -202,11 +202,16 @@ if season == latest_season:
                     if top is None:
                         st.caption(label)
                         st.markdown("Not enough games yet")
-                    elif period == "day":
-                        stat_line = f"{int(top['saves'])} saves, {int(top['goalsAgainst'])} GA"
-                        _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
                     else:
-                        stat_line = f"{top['savePct']:.1f} SV% in {int(top['games'])} GP"
+                        # Saves computed here from the two raw columns every
+                        # window carries, rather than read off a derived one.
+                        saves = int(top["shotsAgainst"]) - int(top["goalsAgainst"])
+                        if period == "day":
+                            stat_line = f"{saves} saves, {int(top['goalsAgainst'])} GA"
+                        elif period == "week":
+                            stat_line = f"{saves} saves, {int(top['goalsAgainst'])} GA in {int(top['games'])} GP"
+                        else:
+                            stat_line = f"{top['savePct']:.1f} SV% in {int(top['games'])} GP"
                         _headliner_card(label, top["goalieFullName"], top["playerId"], top["Tm"], stat_line)
 
     if has_recent_skaters or has_recent_goalies:
