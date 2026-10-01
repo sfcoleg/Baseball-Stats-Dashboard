@@ -22,7 +22,10 @@ from nhl import teams as nteams
 
 st.set_page_config(page_title="NHL Game Center | Diamond Metrics", layout="wide")
 
-if "nhl_selected_game" not in st.session_state and "game" in st.query_params:
+# ?game= wins over a game remembered from earlier in the session — the
+# Today's Games / Digest links pass it, and a stale session value must not
+# override the game the visitor just clicked.
+if "game" in st.query_params:
     try:
         st.session_state["nhl_selected_game"] = int(st.query_params["game"])
     except (TypeError, ValueError):

@@ -118,9 +118,8 @@ else:
                         + (" · " + " · ".join(notes) if notes else "") + "</div>",
                         unsafe_allow_html=True,
                     )
-                    if st.button("Game Center", key=f"gc{g['id']}", use_container_width=True):
-                        st.session_state["nhl_selected_game"] = int(g["id"])
-                        st.switch_page("nhl/pages/game.py")
+                    st.page_link("nhl/pages/game.py", label="Game Center",
+                                 query_params={"game": str(g["id"])}, use_container_width=True)
 
 # --- Milestones --------------------------------------------------------------
 milestones = ndb.get_daily_milestones(day_str, season, mtime)

@@ -20,6 +20,9 @@ st.title("Team")
 clicked_team = st.query_params.get("team")
 if clicked_team:
     st.session_state["nhl_team_page_selected_team"] = clicked_team
+    # Consumed once — left in the URL it would snap the selectbox back to
+    # this team on every rerun.
+    del st.query_params["team"]
 
 team_options = nteams.all_teams()
 labels = [f"{abbr} — {nickname}" for abbr, nickname in team_options]

@@ -148,12 +148,14 @@ def _render_games(date_str: str):
                     st.markdown(f"<div style='text-align:center;color:var(--dm-dim);font-size:0.85rem'>{venue}</div>",
                                 unsafe_allow_html=True)
                 if started:
-                    if st.button("Game Center", key=f"gm{game['id']}", use_container_width=True):
-                        st.session_state["nhl_selected_game"] = int(game["id"])
-                        st.switch_page("nhl/pages/game.py")
-                elif st.button("Team pages", key=f"gm{game['id']}", use_container_width=True):
-                    st.session_state["nhl_team_page_selected_team"] = home["abbrev"]
-                    st.switch_page("nhl/pages/team.py")
+                    # A link, not a button + st.switch_page: this card lives
+                    # in a run_every fragment, and switching pages from a
+                    # button click inside it did nothing. game.py reads ?game=.
+                    st.page_link("nhl/pages/game.py", label="Game Center",
+                                 query_params={"game": str(game["id"])}, use_container_width=True)
+                else:
+                    st.page_link("nhl/pages/team.py", label="Team pages",
+                                 query_params={"team": home["abbrev"]}, use_container_width=True)
 
             with hcol:
                 _team_col(home, home_color, p_home)
