@@ -933,6 +933,9 @@ if SHOW_FREE_AGENCY:
 # placeholder home; the real page set slots in here as it's built.
 NHL_PAGES = [
     st.Page("nhl/pages/home.py", title="NHL Home", url_path="nhl"),
+    # Yesterday in one page — the NHL twin of MLB's Clubhouse Report, second
+    # in the nav for the same reason. url_path kept as nhl-digest so old links work.
+    st.Page("nhl/pages/digest.py", title="NHL Morning Skate", url_path="nhl-digest"),
     st.Page("nhl/pages/skaters.py", title="NHL Skaters", url_path="nhl-skaters"),
     st.Page("nhl/pages/goalies.py", title="NHL Goalies", url_path="nhl-goalies"),
     st.Page("nhl/pages/team.py", title="NHL Team", url_path="nhl-team"),
@@ -945,7 +948,6 @@ NHL_PAGES = [
     st.Page("nhl/pages/awards.py", title="NHL Awards Race", url_path="nhl-awards"),
     st.Page("nhl/pages/shots.py", title="NHL Shot Maps", url_path="nhl-shots"),
     st.Page("nhl/pages/map.py", title="NHL Birthplace Map", url_path="nhl-map"),
-    st.Page("nhl/pages/digest.py", title="NHL Daily Digest", url_path="nhl-digest"),
     st.Page("nhl/pages/game.py", title="NHL Game Center", url_path="nhl-game"),  # reached from Today's Games / Digest, not the nav
     st.Page("nhl/pages/player.py", title="NHL Player", url_path="nhl-player"),  # deep-link only, not in nav loop
     st.Page("nhl/pages/glossary.py", title="NHL Glossary", url_path="nhl-glossary"),  # linked from the stat pages, not the nav
@@ -1012,11 +1014,12 @@ _MLB_NAV_HIDDEN = (
     "Injury Report", "Transactions", "Awards Race", "Diamond Awards", "Minor Leagues",
     "Box Score Search", "Free Agency", "Research",
 )
-# Daily Digest stays registered (so /nhl-digest resolves for previews) but off
-# the nav until the season starts — every section is empty over the summer.
-SHOW_NHL_DIGEST = False
+# Morning Skate (the daily recap) can be pulled off the nav for the summer,
+# when every section of it is empty; it stays registered either way so
+# /nhl-digest still resolves.
+SHOW_NHL_DIGEST = True
 _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
-    set() if SHOW_NHL_DIGEST else {"NHL Daily Digest"}
+    set() if SHOW_NHL_DIGEST else {"NHL Morning Skate"}
 )
 
 # Navigation renders twice, and CSS picks one: a full-width bar across the top

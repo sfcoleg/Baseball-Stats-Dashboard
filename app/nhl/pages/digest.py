@@ -1,12 +1,11 @@
-"""NHL Daily Digest — yesterday in one page: every final score, the
+"""NHL Morning Skate (the daily digest) — yesterday in one page: every final score, the
 milestones (hat tricks, shutouts, season marks crossed), the top skater
 and goalie lines, and who's on a streak. The hockey analog of the MLB
 Daily Digest, built from the schedule API plus the nightly per-game log
 (ingest/nhl_daily_log.py).
 
-Registered in main.py but kept out of the sidebar until the season
-starts (SHOW_NHL_DIGEST) — in the offseason every section would be empty.
-Reachable directly at /nhl-digest for previewing."""
+In the nav while the season is on (main.py's SHOW_NHL_DIGEST) — in the
+offseason every section would be empty. Always reachable at /nhl-digest."""
 import sys
 from datetime import timedelta
 from pathlib import Path
@@ -36,9 +35,9 @@ _LINK_BUTTON_CSS = """<style>
   margin:0;text-align:center;}
 </style>"""
 
-st.set_page_config(page_title="NHL Daily Digest | Diamond Metrics", layout="wide")
+st.set_page_config(page_title="NHL Morning Skate | Diamond Metrics", layout="wide")
 st.markdown(_LINK_BUTTON_CSS, unsafe_allow_html=True)
-st.title("Daily Digest")
+st.title("Morning Skate")
 
 mtime = ndb.nhl_db_mtime()
 seasons = ndb.skater_seasons(mtime)
@@ -56,7 +55,7 @@ try:
 except (ValueError, TypeError):
     day = today - timedelta(days=1)
 day_str = day.isoformat()
-st.caption(f"Everything that happened on {day.strftime('%A, %B %-d, %Y')}.")
+st.caption(day.strftime("%A, %B %-d, %Y"))
 
 
 def _headshot(player_id, team_abbr) -> str:
