@@ -134,12 +134,15 @@ with st.spinner("Loading Statcast highlights..."):
 
     # Each entry's highlight clip is its own network round trip — fired off
     # together via a thread pool rather than one at a time, same reasoning
-    # as the Milestones section below. "fastest_pitch" is skipped entirely —
-    # MLB Film Room's search for it keeps matching the wrong pitch, so a
-    # clip is worse than none rather than just unnecessary.
+    # as the Milestones section below. "fastest_pitch" and "hardest_hit" are
+    # skipped entirely — MLB Film Room's search for them keeps matching the
+    # wrong play, so a clip is worse than none rather than just unnecessary.
+    # Only the longest home run (a single, easy-to-identify play) keeps one.
+    _NO_CLIP = {"fastest_pitch", "hardest_hit"}
+
     def _find_clip(args):
         key = args[3]
-        return db.find_statcast_highlight(*args) if key != "fastest_pitch" else None
+        return db.find_statcast_highlight(*args) if key not in _NO_CLIP else None
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         clip_urls = list(pool.map(
