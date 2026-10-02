@@ -235,8 +235,7 @@ def _render():
         if _pick[1] is not None and _pick == _clipped[_default]:
             st.caption(
                 f"Goal of the game: swung the scoring team's win probability by "
-                f"{_pick[1] * 100:.0f} points — our own score-and-clock model, "
-                f"which is why a late tying goal outranks an early opener."
+                f"{_pick[1] * 100:.0f} points."
             )
         import streamlit.components.v1 as _components
         _components.iframe(nstyle.goal_clip_url(_pick[0]["highlightClip"]), height=430)

@@ -51,8 +51,27 @@ def _records() -> dict:
     }
 
 
+
+# st.page_link renders as a bare left-aligned text link. These rules give the
+# card's Game Center / Team pages link the same look the st.button it
+# replaced had: full width, centered label, visible outline.
+_LINK_BUTTON_CSS = """<style>
+[class*="st-key-nhlgame"] [data-testid="stElementContainer"]:has([data-testid="stPageLink"]),
+[class*="st-key-nhlgame"] [data-testid="stPageLink"],
+[class*="st-key-nhlgame"] [data-testid="stPageLink"] > div{width:100% !important;}
+[class*="st-key-nhlgame"] [data-testid="stPageLink"] a{display:flex !important;width:100% !important;
+  box-sizing:border-box;justify-content:center !important;align-items:center;padding:6px 12px !important;
+  border:1px solid var(--dm-line) !important;border-radius:8px !important;
+  background:var(--dm-surface) !important;text-decoration:none !important;}
+[class*="st-key-nhlgame"] [data-testid="stPageLink"] a:hover{background:var(--dm-surface-mute) !important;}
+[class*="st-key-nhlgame"] [data-testid="stPageLink"] a p{color:var(--dm-text) !important;font-weight:600;
+  margin:0;text-align:center;}
+</style>"""
+
+
 @st.fragment(run_every=20)
 def _render_games(date_str: str):
+    st.markdown(_LINK_BUTTON_CSS, unsafe_allow_html=True)
     games = ndb.load_schedule_for_date(date_str)
     if not games:
         st.info("No games scheduled for this date.")
