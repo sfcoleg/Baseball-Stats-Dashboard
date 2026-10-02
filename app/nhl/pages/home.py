@@ -123,7 +123,8 @@ def _headshot(player_id, team_abbr, for_season: int | None = None) -> str:
 def _headliner_card(label, name, player_id, team_abbr, stat_line):
     color = nteams.color_for_abbr(team_abbr)
     st.markdown(
-        f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+        # Bottom padding so the stat pill never sits against the card's edge.
+        f"<div style='display:flex;align-items:flex-start;gap:12px;padding:2px 0 12px'>"
         f"<img src='{_headshot(player_id, team_abbr)}' style='width:64px;height:64px;border-radius:10px;"
         f"object-fit:cover;object-position:center 15%;flex-shrink:0;background:#1A1F2E' />"
         f"<div style='flex:1;min-width:0'>"

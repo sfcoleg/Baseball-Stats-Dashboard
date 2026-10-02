@@ -65,7 +65,8 @@ def _headshot(player_id, team_abbr) -> str:
 def _player_card(label, name, player_id, team_abbr, stat_line):
     color = nteams.color_for_abbr(team_abbr)
     st.markdown(
-        f"<div style='display:flex;align-items:flex-start;gap:12px'>"
+        # Bottom padding so the stat pill never sits against the card's edge.
+        f"<div style='display:flex;align-items:flex-start;gap:12px;padding:2px 0 12px'>"
         f"<img src='{_headshot(player_id, team_abbr)}' style='width:64px;height:64px;border-radius:10px;"
         f"object-fit:cover;object-position:center 15%;flex-shrink:0;background:#1A1F2E' />"
         f"<div style='flex:1;min-width:0'>"
@@ -151,27 +152,27 @@ goalie_log = ndb.load_daily_goalie_log(day_str)
 if not skater_log.empty:
     names = ndb.load_skaters(season, mtime)[["playerId", "skaterFullName"]]
     top = (skater_log.merge(names, on="playerId", how="left")
-           .sort_values(["points", "goals"], ascending=False).head(8))
+           .sort_values(["points", "goals"], ascending=False).head(5))
     style.colored_header("Top Skater Performances", "batting")
     _cards([
         (f"#{i + 1}", r["skaterFullName"], r["playerId"], r["Tm"],
          f"{int(r['goals'])} G, {int(r['assists'])} A, {int(r['points'])} PTS")
         for i, (_, r) in enumerate(top.iterrows())
-    ])
+    ], per_row=5)
 
 if not goalie_log.empty:
     names = ndb.load_goalies(season, mtime)[["playerId", "goalieFullName"]]
     g = goalie_log.merge(names, on="playerId", how="left")
     g = g[g["shotsAgainst"] >= 10].assign(saves=lambda d: d["shotsAgainst"] - d["goalsAgainst"])
     g["sv_pct"] = g["saves"] / g["shotsAgainst"] * 100
-    top_g = g.sort_values(["shutout", "sv_pct", "saves"], ascending=False).head(4)
+    top_g = g.sort_values(["shutout", "sv_pct", "saves"], ascending=False).head(5)
     if not top_g.empty:
         style.colored_header("Top Goalie Performances", "pitching")
         _cards([
             ("Shutout" if r["shutout"] else f"#{i + 1}", r["goalieFullName"], r["playerId"], r["Tm"],
-             f"{int(r['saves'])} saves on {int(r['shotsAgainst'])} shots ({r['sv_pct']:.1f}%)")
+             f"{int(r['saves'])} saves \u00b7 {r['sv_pct']:.1f}%")
             for i, (_, r) in enumerate(top_g.iterrows())
-        ])
+        ], per_row=5)
 
 if skater_log.empty and goalie_log.empty and games:
     st.caption("Per-game lines for this date haven't been ingested yet (they land with the nightly refresh).")
