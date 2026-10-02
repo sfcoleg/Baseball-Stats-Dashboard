@@ -3,7 +3,7 @@ goal-by-goal scoring summary, a shot map of every attempt by both teams
 on one rink, shots by period, penalties, and full box scores. Live games
 refresh every 20 seconds (the underlying loaders have a 20s TTL).
 
-Reached from Today's Games and Morning Skate (st.switch_page with
+Reached from Today's Games and Rink Report (st.switch_page with
 nhl_selected_game set), or directly via ?game=<gameId>. Not in the nav."""
 import sys
 from datetime import datetime
@@ -32,7 +32,7 @@ if "game" in st.query_params:
         pass
 if "nhl_selected_game" not in st.session_state:
     st.title("Game Center")
-    st.info("Open a game from Today's Games or Morning Skate.")
+    st.info("Open a game from Today's Games or Rink Report.")
     st.stop()
 game_id = int(st.session_state["nhl_selected_game"])
 if st.query_params.get("game") != str(game_id):

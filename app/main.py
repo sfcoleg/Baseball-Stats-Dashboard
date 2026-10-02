@@ -935,7 +935,7 @@ NHL_PAGES = [
     st.Page("nhl/pages/home.py", title="NHL Home", url_path="nhl"),
     # Yesterday in one page — the NHL twin of MLB's Clubhouse Report, second
     # in the nav for the same reason. url_path kept as nhl-digest so old links work.
-    st.Page("nhl/pages/digest.py", title="NHL Morning Skate", url_path="nhl-digest"),
+    st.Page("nhl/pages/digest.py", title="NHL Rink Report", url_path="nhl-digest"),
     st.Page("nhl/pages/skaters.py", title="NHL Skaters", url_path="nhl-skaters"),
     st.Page("nhl/pages/goalies.py", title="NHL Goalies", url_path="nhl-goalies"),
     st.Page("nhl/pages/team.py", title="NHL Team", url_path="nhl-team"),
@@ -1014,12 +1014,12 @@ _MLB_NAV_HIDDEN = (
     "Injury Report", "Transactions", "Awards Race", "Diamond Awards", "Minor Leagues",
     "Box Score Search", "Free Agency", "Research",
 )
-# Morning Skate (the daily recap) can be pulled off the nav for the summer,
+# Rink Report (the daily recap) can be pulled off the nav for the summer,
 # when every section of it is empty; it stays registered either way so
 # /nhl-digest still resolves.
 SHOW_NHL_DIGEST = True
 _NHL_NAV_HIDDEN = {"NHL Player", "NHL Game Center", "NHL Glossary"} | (
-    set() if SHOW_NHL_DIGEST else {"NHL Morning Skate"}
+    set() if SHOW_NHL_DIGEST else {"NHL Rink Report"}
 )
 
 # Navigation renders twice, and CSS picks one: a full-width bar across the top

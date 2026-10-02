@@ -1,4 +1,4 @@
-"""NHL Morning Skate (the daily digest) — yesterday in one page: every final score, the
+"""NHL Rink Report (the daily digest) — yesterday in one page: every final score, the
 milestones (hat tricks, shutouts, season marks crossed), the top skater
 and goalie lines, and who's on a streak. The hockey analog of the MLB
 Daily Digest, built from the schedule API plus the nightly per-game log
@@ -35,9 +35,9 @@ _LINK_BUTTON_CSS = """<style>
   margin:0;text-align:center;}
 </style>"""
 
-st.set_page_config(page_title="NHL Morning Skate | Diamond Metrics", layout="wide")
+st.set_page_config(page_title="NHL Rink Report | Diamond Metrics", layout="wide")
 st.markdown(_LINK_BUTTON_CSS, unsafe_allow_html=True)
-st.title("Morning Skate")
+st.title("Rink Report")
 
 mtime = ndb.nhl_db_mtime()
 seasons = ndb.skater_seasons(mtime)
