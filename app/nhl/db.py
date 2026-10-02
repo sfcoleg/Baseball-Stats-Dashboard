@@ -1050,14 +1050,11 @@ def _p_leader_wins(lead: int, seconds_left: float) -> float:
     return win + 0.5 * tie
 
 
-# Live-only adjustment to the "right now" point: the strength state (power
-# play/shorthanded/empty net) and each team's shot pace SO FAR are both
-# real signals about who's more likely to score NEXT, not just the score
-# and clock _p_leader_wins uses. Deliberately NOT folded into
-# goal_win_swings/the historical reconstruction — those stay the clean
-# score-only metric; only the live trailing point gets this adjustment, and
-# only when the data needed for it is actually available.
-LEAGUE_SHOTS_PER_TEAM_PER_60 = 30.0
+# In-game adjustments to the win-probability line (see live_win_probability):
+# the strength state (power play/shorthanded/empty net) and recent shot
+# pressure are real signals about who scores next. goal_win_swings — the
+# "+17% WP" tag on each goal — deliberately stays the clean score-and-clock
+# number, so a goal's swing doesn't depend on who happened to be shooting.
 
 # Hand-set from league-wide PP/PK/empty-net scoring-rate ratios, not fit —
 # same honesty as the rest of this model: a crude but directionally right
@@ -1083,21 +1080,6 @@ def _parse_situation_code(code, is_home: bool) -> tuple[int, int, bool]:
     if is_home:
         return home_skaters, away_skaters, away_goalie == 0
     return away_skaters, home_skaters, home_goalie == 0
-
-
-def _shot_rate_mult(shots_for: int, minutes_elapsed: float) -> float:
-    """How hot/cold a team's shot pace has been so far, as a scoring-rate
-    multiplier — shrunk toward 1.0 early (3 shots in the first 2 minutes
-    means nothing) and capped well short of what a real goal or power
-    play would move it, so an early shot-generation edge nudges the live
-    number rather than dominating it."""
-    if minutes_elapsed < 3:
-        return 1.0
-    pace = shots_for / minutes_elapsed * 60.0
-    ratio = pace / LEAGUE_SHOTS_PER_TEAM_PER_60
-    weight = min(minutes_elapsed / 20.0, 1.0)
-    ratio = 1.0 + (ratio - 1.0) * weight
-    return max(0.7, min(ratio, 1.4))
 
 
 def _p_home_wins_adjusted(home_lead: int, seconds_left: float, home_mult: float, away_mult: float) -> float:
@@ -1163,106 +1145,160 @@ def goal_win_swings(periods: list) -> list[float | None]:
     return out
 
 
-def live_win_probability(landing: dict, shots: pd.DataFrame | None = None) -> pd.DataFrame:
-    """Home-team win probability across the game so far, from the same
-    Skellam score/clock model as goal_win_swings — the NHL equivalent of
-    the MLB side's db.load_win_probability. One step per goal (the value
-    just before it, then just after, so the line jumps at the moment the
-    goal happened rather than sloping toward it) plus a leading point at
-    puck drop and a trailing point at the game's current state (now, if
-    live; the actual final score, if over). Empty frame if summary/scoring
-    isn't present yet (scheduled games).
+# How far the two in-game signals are allowed to move a team's scoring rate.
+# Both are deliberately small: the score and the clock stay in charge, and
+# these only tilt the line between goals.
+WP_SAMPLE_SECONDS = 20          # one point on the graph per this much game time
+WP_PRESSURE_HALF_LIFE = 300     # a shot attempt's weight halves every 5 minutes
+WP_PRESSURE_MAX = 0.12          # a team taking EVERY recent shot scores at most 12% faster
+WP_POWER_PLAY_SECONDS = 75      # typical time left on an advantage when we see one
 
-    `shots` (optional, from load_game_shots — pass the same frame the shot
-    map already fetched so this doesn't double the network calls) lets the
-    LIVE trailing point only factor in the current strength state (power
-    play/shorthanded/empty net, from the most recent shot's situationCode)
-    and each team's shot pace so far — see _p_home_wins_adjusted. Every
-    other point (puck drop, each goal) stays the plain score/clock model;
-    only "right now" benefits from knowing what's happening on the ice
-    beyond the scoreboard."""
-    summary = landing.get("summary") or {}
-    periods = summary.get("scoring") or []
-    rows = [{"t": 0, "home_win_pct": 50.0, "away_score": 0, "home_score": 0, "description": None}]
-    away = home = 0
+
+def _event_seconds(period, clock) -> float | None:
+    """Game seconds elapsed for a play-by-play (period, "MM:SS") stamp;
+    None for shootout attempts or anything unparseable."""
     try:
-        for per in periods:
-            pd_ = per.get("periodDescriptor") or {}
-            ptype = pd_.get("periodType")
-            pnum = int(pd_.get("number") or 0)
-            for g in per.get("goals") or []:
-                if ptype == "SO":
-                    continue
-                mm, ss = (g.get("timeInPeriod") or "0:00").split(":")
-                elapsed = (pnum - 1) * 1200 + int(mm) * 60 + int(ss)
-                seconds_left = max(3600 - elapsed, 0)
-                away_after = int(g.get("awayScore", 0))
-                home_after = int(g.get("homeScore", 0))
-                lead_before = home - away
-                p_before = _p_leader_wins(lead_before, 0 if (ptype == "OT" or seconds_left <= 0) else seconds_left)
-                rows.append({
-                    "t": max(elapsed - 1, rows[-1]["t"]), "home_win_pct": round(p_before * 100, 1),
-                    "away_score": away, "home_score": home, "description": None,
-                })
-                if ptype == "OT":
-                    p_after = 1.0 if home_after > away_after else 0.0
-                else:
-                    p_after = _p_leader_wins(home_after - away_after, seconds_left)
-                team = (g.get("teamAbbrev") or {}).get("default", "")
-                rows.append({
-                    "t": max(elapsed, rows[-1]["t"] + 1), "home_win_pct": round(p_after * 100, 1),
-                    "away_score": away_after, "home_score": home_after,
-                    "description": f"{team} goal — {away_after}–{home_after}",
-                })
-                away, home = away_after, home_after
-    except Exception:
-        pass
+        period = int(period)
+        if period >= 5:  # regular-season shootout
+            return None
+        mm, ss = str(clock).split(":")
+        return (period - 1) * 1200 + int(mm) * 60 + int(ss)
+    except (TypeError, ValueError):
+        return None
 
-    # The goal-by-goal reconstruction above is only as complete as
-    # summary.scoring — which can lag behind or be briefly empty even
-    # while the game itself has real goals on the board. The top-level
-    # score fields are the authoritative "what's the score right now",
-    # so the trailing point uses THOSE, not the (possibly stale) away/home
-    # tally built from goals — otherwise a missing/delayed scoring list
-    # silently reads as 0-0 and the whole graph sits pinned at 50%.
-    away = int((landing.get("awayTeam") or {}).get("score") or away)
-    home = int((landing.get("homeTeam") or {}).get("score") or home)
 
+def live_win_probability(landing: dict, shots: pd.DataFrame | None = None) -> pd.DataFrame:
+    """Home-team win probability across the game, one point every
+    WP_SAMPLE_SECONDS of game time plus one either side of every goal — the
+    NHL twin of the MLB side's db.load_win_probability, and like it a line
+    that keeps moving rather than a staircase that only steps on a score.
+
+    Three things move it, in order of weight:
+      1. Score and clock (the Skellam model behind goal_win_swings). The
+         clock matters on its own: a two-goal lead is worth far more with
+         30 seconds left than at puck drop, so a lead's line climbs steadily
+         toward 100% even while nobody scores.
+      2. Shot pressure — each team's share of recent unblocked attempts
+         (older ones fade out) nudges its scoring rate by at most
+         WP_PRESSURE_MAX either way.
+      3. Strength state — a power play, penalty kill or empty net (read off
+         the most recent shot attempt's situationCode) changes the scoring
+         rate only for the WP_POWER_PLAY_SECONDS it's expected to last,
+         spread over the time remaining. Early in a game that is a sliver;
+         in the final minute it is most of what's left, which is right.
+
+    `shots` is load_game_shots' frame (pass the one the shot map already
+    fetched). Without it the line is score-and-clock only. Empty frame for a
+    game that hasn't started."""
     state = landing.get("gameState")
-    if state in ("OFF", "FINAL"):
-        final_p = 100.0 if home > away else (0.0 if away > home else 50.0)
-        rows.append({"t": 3600, "home_win_pct": final_p, "away_score": away, "home_score": home, "description": "Final"})
-    elif state in ("LIVE", "CRIT"):
-        pd_ = landing.get("periodDescriptor") or {}
-        ptype = pd_.get("periodType")
-        pnum = int(pd_.get("number") or 1)
-        clock = landing.get("clock") or {}
-        try:
-            mm, ss = (clock.get("timeRemaining") or "20:00").split(":")
-            remaining_in_period = int(mm) * 60 + int(ss)
-        except Exception:
-            remaining_in_period = 1200
-        elapsed = (pnum - 1) * 1200 + (1200 - remaining_in_period)
-        seconds_left = 0 if ptype == "OT" else max(3600 - elapsed, 0)
+    is_final = state in ("OFF", "FINAL")
+    is_live = state in ("LIVE", "CRIT")
+    if not (is_final or is_live):
+        return pd.DataFrame()
 
+    # --- goals, in game seconds -------------------------------------------
+    goals = []  # (t, away_after, home_after, team_abbr, is_overtime)
+    for per in (landing.get("summary") or {}).get("scoring") or []:
+        pd_ = per.get("periodDescriptor") or {}
+        ptype = pd_.get("periodType")
+        if ptype == "SO":
+            continue
+        for g in per.get("goals") or []:
+            t = _event_seconds(pd_.get("number"), g.get("timeInPeriod") or "0:00")
+            if t is None:
+                continue
+            goals.append((t, int(g.get("awayScore", 0)), int(g.get("homeScore", 0)),
+                          (g.get("teamAbbrev") or {}).get("default", ""), ptype == "OT"))
+    goals.sort(key=lambda g: g[0])
+
+    # The top-level score is authoritative; summary.scoring can lag it.
+    away_now = int((landing.get("awayTeam") or {}).get("score") or (goals[-1][1] if goals else 0))
+    home_now = int((landing.get("homeTeam") or {}).get("score") or (goals[-1][2] if goals else 0))
+
+    # --- where the line ends -------------------------------------------------
+    if is_final:
+        end_t = max(3600, goals[-1][0] if goals else 3600)
+    else:
+        pd_ = landing.get("periodDescriptor") or {}
+        try:
+            mm, ss = ((landing.get("clock") or {}).get("timeRemaining") or "20:00").split(":")
+            remaining = int(mm) * 60 + int(ss)
+        except (TypeError, ValueError):
+            remaining = 1200
+        pnum = int(pd_.get("number") or 1)
+        period_len = 300 if pd_.get("periodType") == "OT" else 1200
+        end_t = min(pnum - 1, 3) * 1200 + max(period_len - remaining, 0)
+        end_t = max(end_t, goals[-1][0] if goals else 0)
+
+    # --- shot attempts, for pressure and strength state -----------------------
+    shot_t = shot_home = shot_code = None
+    press_t = press_home = None
+    if shots is not None and not shots.empty and {"period", "time", "is_home"} <= set(shots.columns):
+        ev = shots.assign(_t=[_event_seconds(p, c) for p, c in zip(shots["period"], shots["time"])])
+        ev = ev.dropna(subset=["_t"]).sort_values("_t")
+        shot_t = ev["_t"].to_numpy(dtype=float)
+        shot_home = ev["is_home"].to_numpy(dtype=bool)
+        shot_code = ev["situationCode"].tolist() if "situationCode" in ev.columns else [None] * len(ev)
+        unblocked = (ev["result"] != "blocked-shot").to_numpy() if "result" in ev.columns else np.ones(len(ev), bool)
+        press_t, press_home = shot_t[unblocked], shot_home[unblocked]
+
+    def _multipliers(t: float, seconds_left: float) -> tuple[float, float]:
         home_mult = away_mult = 1.0
-        if shots is not None and not shots.empty:
-            home_sog = int((landing.get("homeTeam") or {}).get("sog") or 0)
-            away_sog = int((landing.get("awayTeam") or {}).get("sog") or 0)
-            minutes_elapsed = max(elapsed / 60.0, 0.01)
-            home_mult = _shot_rate_mult(home_sog, minutes_elapsed)
-            away_mult = _shot_rate_mult(away_sog, minutes_elapsed)
-            last_code = shots.iloc[-1].get("situationCode")
-            if last_code:
-                h_for, h_against, h_en = _parse_situation_code(last_code, is_home=True)
-                a_for, a_against, a_en = _parse_situation_code(last_code, is_home=False)
-                home_mult *= _strength_mult(h_for, h_against, h_en)
-                away_mult *= _strength_mult(a_for, a_against, a_en)
-            home_mult = max(0.25, min(home_mult, 4.0))
-            away_mult = max(0.25, min(away_mult, 4.0))
-        p_now = _p_home_wins_adjusted(home - away, seconds_left, home_mult, away_mult)
-        rows.append({
-            "t": max(elapsed, rows[-1]["t"] + 1), "home_win_pct": round(p_now * 100, 1),
-            "away_score": away, "home_score": home, "description": None,
-        })
+        if press_t is not None and len(press_t):
+            # Every attempt so far counts, fading with age (half its weight
+            # every WP_PRESSURE_HALF_LIFE seconds), so the signal moves a
+            # little on every sample instead of jumping when a shot enters
+            # or leaves a fixed window.
+            past = press_t <= t
+            w = 0.5 ** ((t - press_t[past]) / WP_PRESSURE_HALF_LIFE)
+            h = float(w[press_home[past]].sum())
+            a = float(w.sum()) - h
+            # The +1/+2 pulls a quiet stretch back toward an even split.
+            tilt = ((h + 1) / (h + a + 2) - 0.5) * 2
+            home_mult += WP_PRESSURE_MAX * tilt
+            away_mult -= WP_PRESSURE_MAX * tilt
+        if shot_t is not None and len(shot_t):
+            idx = int(np.searchsorted(shot_t, t, side="right")) - 1
+            if idx >= 0 and t - shot_t[idx] <= 90 and shot_code[idx]:
+                weight = min(WP_POWER_PLAY_SECONDS, seconds_left) / seconds_left if seconds_left > 0 else 1.0
+                h_for, h_against, h_en = _parse_situation_code(shot_code[idx], is_home=True)
+                a_for, a_against, a_en = _parse_situation_code(shot_code[idx], is_home=False)
+                home_mult *= 1 + (_strength_mult(h_for, h_against, h_en) - 1) * weight
+                away_mult *= 1 + (_strength_mult(a_for, a_against, a_en) - 1) * weight
+        return home_mult, away_mult
+
+    def _prob(t: float, away: int, home: int) -> float:
+        if t >= 3600:
+            # Past regulation it's sudden death: whoever scores next wins,
+            # so the odds are just each side's share of the scoring rate.
+            if home != away:
+                return 1.0 if home > away else 0.0
+            hm, am = _multipliers(t, 0)
+            return hm / (hm + am)
+        seconds_left = 3600 - t
+        hm, am = _multipliers(t, seconds_left)
+        return _p_home_wins_adjusted(home - away, seconds_left, hm, am)
+
+    # --- sample times: an even grid, plus the instant before and of each goal --
+    times = set(range(0, int(end_t) + 1, WP_SAMPLE_SECONDS)) | {int(end_t)}
+    goal_at = {}
+    for t, away_after, home_after, team, is_ot in goals:
+        times.update({max(int(t) - 1, 0), int(t)})
+        goal_at[int(t)] = (away_after, home_after, team)
+
+    rows = []
+    for t in sorted(times):
+        scored = [g for g in goals if int(g[0]) <= t]
+        away, home = (scored[-1][1], scored[-1][2]) if scored else (0, 0)
+        p = 0.5 if t == 0 else _prob(t, away, home)
+        desc = None
+        if t in goal_at and t > 0:
+            desc = f"{goal_at[t][2]} goal — {goal_at[t][0]}–{goal_at[t][1]}"
+        rows.append({"t": t, "home_win_pct": round(p * 100, 1), "away_score": away,
+                     "home_score": home, "description": desc})
+
+    if is_final:
+        final_p = 100.0 if home_now > away_now else (0.0 if away_now > home_now else 50.0)
+        rows.append({"t": rows[-1]["t"] + 1, "home_win_pct": final_p, "away_score": away_now,
+                     "home_score": home_now, "description": "Final"})
     return pd.DataFrame(rows)

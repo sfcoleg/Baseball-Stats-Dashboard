@@ -368,7 +368,7 @@ def win_probability_chart(wp_df: pd.DataFrame, away_abbr: str, home_abbr: str,
     )
     fig.add_trace(go.Scatter(
         x=wp_df["t"], y=wp_df["home_win_pct"], mode="lines",
-        line=dict(color=home_color, width=2.5, shape="hv"),
+        line=dict(color=home_color, width=2.5),  # sampled every few seconds, so plain segments
         fill="tozeroy", fillcolor=_hex_to_rgba(home_color, 0.15),
         hovertemplate=f"{home_abbr} %{{y:.0f}}%<extra></extra>",
     ))

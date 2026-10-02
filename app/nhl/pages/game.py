@@ -243,9 +243,9 @@ def _render():
 
     # --- Win probability ---------------------------------------------------------
     # The NHL equivalent of the MLB Game Center's Win Probability chart —
-    # same in-house score/clock model that powers the goal-swing tags
-    # above (goal_win_swings), just sampled into a full time series
-    # instead of one number per goal.
+    # the score/clock model behind the goal-swing tags above, sampled every
+    # few seconds and nudged by shot pressure and power plays (see
+    # ndb.live_win_probability).
     shots = ndb.load_game_shots(game_id)
     wp_df = ndb.live_win_probability(landing, shots)
     if not wp_df.empty:
