@@ -134,11 +134,28 @@ def _render():
     if stars:
         style.colored_header("Three Stars", "headliners")
         cols = st.columns(3)
+        # The three-stars payload carries a goalie's save % and GAA but NOT
+        # his goals against — reading a missing field printed "0 GA" for a
+        # goalie who had allowed one. The box score has the real line.
+        _box_goalies = {}
+        try:
+            _pbs = (ndb.load_game_boxscore(game_id) or {}).get("playerByGameStats") or {}
+            for _side in ("awayTeam", "homeTeam"):
+                for _g in (_pbs.get(_side) or {}).get("goalies") or []:
+                    _box_goalies[_g.get("playerId")] = _g
+        except Exception:
+            pass
         for col, s in zip(cols, stars):
             tm = s.get("teamAbbrev", "")
             color = nteams.color_for_abbr(tm)
             if s.get("position") == "G":
-                line = f"{s.get('savePctg', 0) * 100:.1f} SV%, {s.get('goalsAgainst', 0)} GA" if "savePctg" in s else "Goalie"
+                _bg = _box_goalies.get(s.get("playerId"))
+                if _bg and _bg.get("shotsAgainst"):
+                    line = f"{int(_bg.get('saves', 0))} saves, {int(_bg.get('goalsAgainst', 0))} GA"
+                elif "savePctg" in s:
+                    line = f"{s['savePctg'] * 100:.1f} SV%"
+                else:
+                    line = "Goalie"
             else:
                 line = f"{s.get('goals', 0)} G, {s.get('assists', 0)} A"
             with col:
