@@ -343,11 +343,127 @@ def _play_of_the_day():
             "date": str(game_date)[:10]}
 
 
+# --- Goal of the Day (NHL) ---------------------------------------------------
+# The hockey half of the card: the previous day's goal that moved its team's
+# win probability the most (ndb.goal_win_swings — score and clock, so a late
+# tying goal or an overtime winner outranks an early opener). Cached for half
+# an hour: it costs one request per game played that day, and yesterday's
+# answer doesn't change.
+@st.cache_data(ttl=1800, show_spinner=False)
+def _nhl_goal_of_the_day(today_iso: str):
+    if ndb is None:
+        return None
+    today = date.fromisoformat(today_iso)
+    for back in (1, 2, 3):  # an off day falls back to the last day with games
+        day = (today - timedelta(days=back)).isoformat()
+        best = None
+        try:
+            for g in ndb.load_schedule_for_date(day):
+                if g.get("gameType") not in (2, 3) or g.get("gameState") not in ("OFF", "FINAL"):
+                    continue
+                landing = ndb.load_game_landing(int(g["id"]))
+                periods = (landing.get("summary") or {}).get("scoring") or []
+                swings = ndb.goal_win_swings(periods)
+                flat = [(per, goal) for per in periods for goal in per.get("goals") or []]
+                away, home = landing["awayTeam"]["abbrev"], landing["homeTeam"]["abbrev"]
+                for (per, goal), swing in zip(flat, swings):
+                    if swing is None or not goal.get("highlightClip"):
+                        continue
+                    if best is None or swing > best["swing"]:
+                        pd_ = per.get("periodDescriptor") or {}
+                        best = {
+                            "swing": float(swing), "date": day, "clip": int(goal["highlightClip"]),
+                            "name": f"{(goal.get('firstName') or {}).get('default', '')} "
+                                    f"{(goal.get('lastName') or {}).get('default', '')}".strip(),
+                            "abbr": (goal.get("teamAbbrev") or {}).get("default", ""),
+                            "headshot": goal.get("headshot"),
+                            "overtime": pd_.get("periodType") == "OT",
+                            "period": pd_.get("number"), "time": goal.get("timeInPeriod", ""),
+                            "strength": goal.get("strength", ""),
+                            "score": f"{away} {goal.get('awayScore', '')}\u2013{goal.get('homeScore', '')} {home}",
+                        }
+        except Exception:
+            best = None
+        if best:
+            return best
+    return None
+
+
+def _highlight_info(color, headshot_url, name, abbr, stats, des):
+    """The headshot / name / team chip / stat line block under each clip."""
+    headshot = (
+        f"<img src='{headshot_url}' style='width:72px;height:72px;border-radius:50%;object-fit:cover;"
+        f"object-position:center 20%;border:2.5px solid {color}' />" if headshot_url else ""
+    )
+    chip = (
+        f"<span style='background-color:{color}66;color:var(--dm-text);padding:2px 9px;"
+        f"border-radius:8px;font-size:0.6em;vertical-align:middle;font-weight:600'>{abbr}</span>"
+        if abbr else ""
+    )
+    stat_line = (
+        f"<div style='color:{style.team_text_color(color)};font-family:\"Archivo Narrow\",sans-serif;"
+        f"font-weight:700;font-size:1.05rem;margin-top:2px'>{stats}</div>" if stats else ""
+    )
+    st.markdown(
+        f"<div style='display:flex;align-items:center;gap:14px;padding:10px 4px;"
+        f"border-left:4px solid {color};padding-left:14px'>{headshot}"
+        f"<div><div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:800;"
+        f"font-size:1.35rem;color:var(--dm-text)'>{name} {chip}</div>"
+        f"{stat_line}</div></div>"
+        f"<p style='color:var(--dm-dim);font-size:0.86rem;margin:8px 0 0 18px'>{des}</p>",
+        unsafe_allow_html=True,
+    )
+
+
+def _potd_info(potd):
+    # Headshot and team chip are both optional: a hand-picked play (see
+    # FEATURED_PLAY) has no batter and no team behind it, and a blank
+    # headshot frame or an empty colour pill reads as broken.
+    _highlight_info(
+        potd["color"],
+        style.headshot_url(potd["mlbID"], width=180) if potd.get("mlbID") else None,
+        potd["name"], potd.get("abbr"), potd.get("stats"), potd["des"],
+    )
+
+
+def _goal_card(goal):
+    import streamlit.components.v1 as _components
+    # The NHL's own Brightcove player (see nhl/style.py's goal_clip_url).
+    _components.iframe(
+        f"https://players.brightcove.net/6415718365001/default_default/index.html?videoId={goal['clip']}",
+        height=300,
+    )
+    when = "Overtime" if goal["overtime"] else f"Period {goal['period']}"
+    strength = {"pp": "Power play", "sh": "Shorthanded", "en": "Empty net"}.get(str(goal["strength"]).lower(), "")
+    _highlight_info(
+        nteams.color_for_abbr(goal["abbr"]), goal.get("headshot"), goal["name"], goal["abbr"],
+        f"Win probability +{goal['swing']:.0%}",
+        " \u00b7 ".join(p for p in (f"{when}, {goal['time']}", strength, goal["score"]) if p),
+    )
+
+
 _latest_day = _latest_data_day()
 _potd = (_featured_play(_latest_day)
          or _wpa_play_of_the_day(_latest_day)
          or _play_of_the_day())
-if _potd:
+try:
+    _gotd = _nhl_goal_of_the_day(TODAY.isoformat())
+except Exception:
+    _gotd = None
+
+if _potd and _gotd:
+    # Both sports have something: split the row, baseball left, hockey right.
+    mlb_col, nhl_col = st.columns(2)
+    with mlb_col:
+        style.colored_header(f"Play of {db.daily_label(date.fromisoformat(_potd['date']), TODAY)}", "headliners")
+        with st.container(border=True):
+            st.video(_potd["clip"])
+            _potd_info(_potd)
+    with nhl_col:
+        style.colored_header(f"Goal of {db.daily_label(date.fromisoformat(_gotd['date']), TODAY)}", "headliners")
+        with st.container(border=True):
+            _goal_card(_gotd)
+elif _potd:
     play_date = date.fromisoformat(_potd["date"])
     style.colored_header(f"Play of {db.daily_label(play_date, TODAY)}", "headliners")
     with st.container(border=True):
@@ -360,36 +476,13 @@ if _potd:
                 fig.update_layout(height=300, margin=dict(l=0, r=0, t=6, b=0))
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
         with info_col:
-            c = _potd["color"]
-            # Headshot and team chip are both optional: a hand-picked play
-            # (see FEATURED_PLAY) has no batter and no team behind it, and a
-            # blank headshot frame or an empty colour pill reads as broken.
-            headshot = (
-                f"<img src='{style.headshot_url(_potd['mlbID'], width=180)}' "
-                f"style='width:72px;height:72px;border-radius:50%;object-fit:cover;"
-                f"object-position:center 20%;border:2.5px solid {c}' />"
-                if _potd.get("mlbID") else ""
-            )
-            chip = (
-                f"<span style='background-color:{c}66;color:var(--dm-text);padding:2px 9px;"
-                f"border-radius:8px;font-size:0.6em;vertical-align:middle;font-weight:600'>"
-                f"{_potd['abbr']}</span>"
-                if _potd.get("abbr") else ""
-            )
-            stat_line = (
-                f"<div style='color:{style.team_text_color(c)};font-family:\"Archivo Narrow\",sans-serif;"
-                f"font-weight:700;font-size:1.05rem;margin-top:2px'>{_potd['stats']}</div>"
-                if _potd.get("stats") else ""
-            )
-            st.markdown(
-                f"<div style='display:flex;align-items:center;gap:14px;padding:10px 4px;"
-                f"border-left:4px solid {c};padding-left:14px'>{headshot}"
-                f"<div><div style='font-family:\"Archivo Narrow\",sans-serif;font-weight:800;"
-                f"font-size:1.35rem;color:var(--dm-text)'>{_potd['name']} {chip}</div>"
-                f"{stat_line}</div></div>"
-                f"<p style='color:var(--dm-dim);font-size:0.86rem;margin:8px 0 0 18px'>{_potd['des']}</p>",
-                unsafe_allow_html=True,
-            )
+            _potd_info(_potd)
+elif _gotd:
+    style.colored_header(f"Goal of {db.daily_label(date.fromisoformat(_gotd['date']), TODAY)}", "headliners")
+    with st.container(border=True):
+        vid_col, info_col = st.columns([3, 2])
+        with vid_col:
+            _goal_card(_gotd)
 
 
 def _fmt_time(raw) -> str:
