@@ -126,14 +126,21 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
+          # app/nhl/elo_model.json is rewritten nightly by nhl_elo.py's
+          # advance_ratings() — the same trap as widget_feed.json above: from
+          # 2026-10-01 (first in-season NHL night) it was left modified but
+          # unstaged whenever the ratings moved, `git pull --rebase` refused
+          # the dirty tree, and every push attempt failed. Staged explicitly,
+          # and --autostash below keeps any future stray output from ever
+          # blocking the pull again.
+          git add data/ app/nhl/elo_model.json
           if git diff --cached --quiet; then
             echo "no data changes to commit"
             exit 0
           fi
           git commit -m "Daily data refresh $(date -u +%Y-%m-%d)"
           for attempt in 1 2 3 4 5; do
-            if git pull --rebase origin main && git push; then
+            if git pull --rebase --autostash origin main && git push; then
               echo "pushed on attempt $attempt"
               exit 0
             fi
