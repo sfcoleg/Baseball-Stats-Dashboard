@@ -220,11 +220,30 @@ def _window_goalie_log(days: int, end_date: date) -> pd.DataFrame:
     return agg
 
 
+def last_logged_day() -> date | None:
+    """Newest day the per-game log (daily_skater_log) actually holds, but
+    never later than yesterday. The Headliners used to be pinned to
+    "yesterday" itself, so whenever the nightly refresh was late or a run was
+    dropped the whole row vanished — it now ends at the newest day we have."""
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            row = conn.execute("SELECT MAX(date) FROM daily_skater_log").fetchone()
+    except sqlite3.Error:
+        return None
+    if not row or not row[0]:
+        return None
+    return min(date.fromisoformat(str(row[0])[:10]), today_pacific() - timedelta(days=1))
+
+
+def _recent_end() -> date:
+    return last_logged_day() or (today_pacific() - timedelta(days=1))
+
+
 def top_recent_skater(period: str, season: int, db_mtime_val: float, as_of: date | None = None):
     """Best skater performance for 'day'/'week'/'month', ending at `as_of`
-    (default: yesterday Pacific) — a pd.Series with name/Tm/playerId/stat
+    (default: the newest logged day, at most yesterday) — a pd.Series with name/Tm/playerId/stat
     line, or None if nothing qualifies (e.g. offseason)."""
-    end = as_of or (today_pacific() - timedelta(days=1))
+    end = as_of or _recent_end()
     if period == "day":
         df = load_daily_skater_log(end.isoformat())
     else:
@@ -248,7 +267,7 @@ def top_recent_goalie(period: str, season: int, db_mtime_val: float, as_of: date
     which rewards stopping a lot of shots AND not letting them in. Ranking a
     single day by raw saves (the old rule) crowned whoever faced the most
     rubber, including a goalie who allowed 7 in a 7-0 loss."""
-    end = as_of or (today_pacific() - timedelta(days=1))
+    end = as_of or _recent_end()
     if period == "day":
         df = load_daily_goalie_log(end.isoformat())
     else:

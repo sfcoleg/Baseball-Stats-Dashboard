@@ -148,7 +148,13 @@ def _headliner_card(label, name, player_id, team_abbr, stat_line):
 # THAT season's goal/point totals instead of the current one — a bogus
 # "crossed 40 goals" reading, not just stale data.
 yesterday = ndb.today_pacific() - timedelta(days=1)
-daily_milestones = ndb.get_daily_milestones(yesterday.isoformat(), season, mtime) if season == latest_season else []
+# Newest day we have game logs for — normally yesterday. When the nightly
+# refresh is late it is older, and the sections below still show it (labelled
+# with its date) instead of disappearing. getattr: this page can be re-read
+# before an updated nhl/db.py has been.
+log_day = (getattr(ndb, "last_logged_day", lambda: None)() or yesterday)
+day_word = "Yesterday" if log_day >= yesterday else log_day.strftime("%b %-d")
+daily_milestones = ndb.get_daily_milestones(log_day.isoformat(), season, mtime) if season == latest_season else []
 
 if daily_milestones:
     style.colored_header("Milestones", "headliners")
@@ -180,7 +186,7 @@ if season == latest_season:
     if has_recent_skaters:
         style.colored_header("Skater Headliners", "batting")
         h1, h2, h3 = st.columns(3)
-        for col, period, label in [(h1, "day", "Hot Yesterday"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
+        for col, period, label in [(h1, "day", f"Hot {day_word}"), (h2, "week", "Hot This Week"), (h3, "month", "Hot This Month")]:
             with col:
                 with st.container(border=True):
                     top = ndb.top_recent_skater(period, season, mtime)
@@ -197,7 +203,7 @@ if season == latest_season:
     if has_recent_goalies:
         style.colored_header("Goalie Headliners", "pitching")
         g1, g2, g3 = st.columns(3)
-        for col, period, label in [(g1, "day", "Hot Yesterday"), (g2, "week", "Hot This Week"), (g3, "month", "Hot This Month")]:
+        for col, period, label in [(g1, "day", f"Hot {day_word}"), (g2, "week", "Hot This Week"), (g3, "month", "Hot This Month")]:
             with col:
                 with st.container(border=True):
                     top = ndb.top_recent_goalie(period, season, mtime)
