@@ -107,7 +107,6 @@ def _min_gp(df, cap: int = 20) -> int:
     return max(1, min(cap, (most + 1) // 2))
 
 
-leaderboard_season = season
 leaderboard_skaters, leaderboard_goalies = skaters, goalies
 
 st.divider()
@@ -346,48 +345,6 @@ if season == latest_season:
                 )
         st.caption("See the Standings page for points, streaks, and the full picture.")
         st.divider()
-
-
-# --- Points Leaders card grid --------------------------------------------
-style.colored_header("Top 10 by Points", "batting")
-top = leaderboard_skaters.sort_values("points", ascending=False).head(10)
-cards = ""
-for i, (_, p) in enumerate(top.iterrows()):
-    tm = p["Tm"]
-    color = nteams.color_for_abbr(tm)
-    # The rank badge is filled with the team's own colour, which ranges from
-    # Nashville gold to Toronto navy — so its text has to be chosen against
-    # that fill, not hardcoded. It was pinned to #0E1117, which vanished on
-    # every dark team (black on navy measured 1.14).
-    badge_text = style.readable_text_color(color)
-    # The points figure sits on the CARD, not on the team colour, so a light
-    # team colour as text is the mirror problem: gold on a white card came
-    # out at 1.69. team_text_color resolves that per theme.
-    points_color = style.team_text_color(color)
-    headshot = _headshot(p["playerId"], tm, for_season=leaderboard_season)
-    cards += (
-        f"<div style='position:relative;text-align:center;background:linear-gradient(180deg,{color}26,transparent);"
-        f"border:1px solid {color}55;border-radius:12px;padding:14px 8px 10px'>"
-        f"<div style='position:absolute;top:6px;left:8px;background:{color};color:{badge_text};"
-        f"font-weight:800;font-size:0.75rem;width:20px;height:20px;border-radius:50%;"
-        f"display:flex;align-items:center;justify-content:center'>{i + 1}</div>"
-        f"<img src='{headshot}' style='width:72px;height:72px;border-radius:50%;object-fit:cover;"
-        f"object-position:center 15%;border:2px solid {color};background:#1A1F2E' />"
-        f"<div style='margin-top:8px;font-weight:700;font-size:0.92rem;line-height:1.2'>"
-        f"<a href='{nstyle.player_link(p['playerId'], leaderboard_season)}' target='_self' "
-        f"style='color:var(--dm-text);text-decoration:none'>{p['skaterFullName']}</a></div>"
-        f"<span style='display:inline-block;margin-top:4px;background-color:{color}66;color:var(--dm-text);"
-        f"padding:1px 8px;border-radius:6px;font-size:0.75rem;font-weight:700'>{tm}</span>"
-        f"<div style='margin-top:6px;font-size:1.4rem;font-weight:800;color:{points_color}'>{int(p['points'])}"
-        f"<span style='font-size:0.7rem;font-weight:600;color:var(--dm-dim)'> PTS</span></div>"
-        "</div>"
-    )
-st.markdown(
-    "<div style='display:grid;grid-template-columns:repeat(auto-fit, minmax(120px, 1fr));gap:12px'>" + cards + "</div>",
-    unsafe_allow_html=True,
-)
-
-st.divider()
 
 
 # --- Full leader tables -------------------------------------------------
