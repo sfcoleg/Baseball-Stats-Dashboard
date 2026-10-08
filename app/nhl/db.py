@@ -69,15 +69,92 @@ def skater_seasons(db_mtime_val: float) -> list[int]:
     return [r[0] for r in rows]
 
 
-@st.cache_data(show_spinner=False, max_entries=4)
+# --- Live freshness ----------------------------------------------------------
+# The stored tables (data/nhl.db) are refreshed by a nightly GitHub Actions
+# job — and GitHub routinely skips scheduled runs (the whole morning's slots
+# for three days running in October 2026), leaving the site a day behind until
+# some later run happened to fire. Everything below reads the SAME public NHL
+# endpoints the nightly job reads, so when the stored copy is behind the app
+# simply fetches the difference itself (cached 15-30 min) instead of waiting.
+# When the nightly job has run, the stored data is current, nothing here is
+# used, and it costs nothing.
+_SKATER_SUMMARY_COLS = [
+    "playerId", "skaterFullName", "teamAbbrevs", "positionCode", "shootsCatches", "gamesPlayed", "goals",
+    "assists", "points", "pointsPerGame", "plusMinus", "penaltyMinutes", "evGoals", "evPoints", "ppGoals",
+    "ppPoints", "shGoals", "shPoints", "gameWinningGoals", "otGoals", "shots", "shootingPct",
+    "timeOnIcePerGame", "faceoffWinPct",
+]
+_GOALIE_SUMMARY_COLS = [
+    "playerId", "goalieFullName", "teamAbbrevs", "shootsCatches", "gamesPlayed", "gamesStarted", "wins",
+    "losses", "otLosses", "goalsAgainst", "goalsAgainstAverage", "shotsAgainst", "saves", "savePct",
+    "shutouts", "timeOnIce",
+]
+
+
+def _current_season_start_year() -> int:
+    t = today_pacific()
+    return t.year if t.month >= 9 else t.year - 1
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=4)
+def _live_season_summary(kind: str, season: int) -> pd.DataFrame:
+    """This season's per-player totals straight from the NHL stats API
+    (`kind` is "skater" or "goalie"). Empty frame on any failure."""
+    try:
+        resp = requests.get(
+            f"https://api.nhle.com/stats/rest/en/{kind}/summary",
+            params={"cayenneExp": f"seasonId={season}{season + 1} and gameTypeId=2", "limit": -1},
+            timeout=20, headers=_HEADERS,
+        )
+        resp.raise_for_status()
+        df = pd.DataFrame(resp.json().get("data", []))
+    except Exception:
+        return pd.DataFrame()
+    if df.empty or "playerId" not in df.columns:
+        return pd.DataFrame()
+    # The API sends these as 0-1 fractions; the stored tables hold 0-100.
+    for c in (("shootingPct", "faceoffWinPct") if kind == "skater" else ("savePct",)):
+        if c in df.columns:
+            df[c] = pd.to_numeric(df[c], errors="coerce") * 100
+    cols = _SKATER_SUMMARY_COLS if kind == "skater" else _GOALIE_SUMMARY_COLS
+    return df[[c for c in cols if c in df.columns]].drop_duplicates("playerId")
+
+
+def _with_live_totals(df: pd.DataFrame, kind: str, season: int) -> pd.DataFrame:
+    """Stored season table with the live summary columns laid over it, for the
+    current season only. Players the stored table doesn't have yet (call-ups)
+    are appended with just the summary columns."""
+    if season != _current_season_start_year():
+        return df
+    live = _live_season_summary(kind, season)
+    if live.empty:
+        return df
+    if df.empty:
+        out = live.copy()
+        out["season"] = season
+        return out
+    base = df.set_index("playerId")
+    lv = live.set_index("playerId")
+    both = lv.index.intersection(base.index)
+    common = [c for c in lv.columns if c in base.columns]
+    base.loc[both, common] = lv.loc[both, common]
+    new = lv.loc[lv.index.difference(base.index)].copy()
+    if not new.empty:
+        new["season"] = season
+        base = pd.concat([base, new])
+    return base.reset_index()
+
+
+@st.cache_data(show_spinner=False, ttl=900, max_entries=4)
 def load_skaters(season: int, db_mtime_val: float) -> pd.DataFrame:
     if not NHL_DB_PATH.exists():
         return pd.DataFrame()
     with sqlite3.connect(NHL_DB_PATH) as conn:
         try:
-            return pd.read_sql("SELECT * FROM skaters WHERE season = ?", conn, params=(season,))
+            df = pd.read_sql("SELECT * FROM skaters WHERE season = ?", conn, params=(season,))
         except pd.errors.DatabaseError:
-            return pd.DataFrame()
+            df = pd.DataFrame()
+    return _with_live_totals(df, "skater", season)
 
 
 @st.cache_data(show_spinner=False, max_entries=2)
@@ -92,15 +169,16 @@ def goalie_seasons(db_mtime_val: float) -> list[int]:
     return [r[0] for r in rows]
 
 
-@st.cache_data(show_spinner=False, max_entries=4)
+@st.cache_data(show_spinner=False, ttl=900, max_entries=4)
 def load_goalies(season: int, db_mtime_val: float) -> pd.DataFrame:
     if not NHL_DB_PATH.exists():
         return pd.DataFrame()
     with sqlite3.connect(NHL_DB_PATH) as conn:
         try:
-            return pd.read_sql("SELECT * FROM goalies WHERE season = ?", conn, params=(season,))
+            df = pd.read_sql("SELECT * FROM goalies WHERE season = ?", conn, params=(season,))
         except pd.errors.DatabaseError:
-            return pd.DataFrame()
+            df = pd.DataFrame()
+    return _with_live_totals(df, "goalie", season)
 
 
 @st.cache_data(show_spinner=False, max_entries=8)
@@ -186,17 +264,80 @@ def _read_daily_log(table: str, where: str, params: tuple) -> pd.DataFrame:
             return pd.DataFrame()
 
 
+_INGEST_DIR = Path(__file__).resolve().parent.parent.parent / "ingest"
+
+
+def _db_last_logged() -> str | None:
+    try:
+        with sqlite3.connect(NHL_DB_PATH) as conn:
+            row = conn.execute("SELECT MAX(date) FROM daily_skater_log").fetchone()
+    except sqlite3.Error:
+        return None
+    return str(row[0])[:10] if row and row[0] else None
+
+
+@st.cache_data(show_spinner=False, ttl=1800, max_entries=4)
+def _live_daily_logs(last_stored: str, through: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Per-game skater and goalie lines for every day after `last_stored` up
+    to `through`, built from the NHL's play-by-play by the SAME code the
+    nightly job uses (ingest/nhl_daily_log.build_day). At most a week."""
+    import sys
+    if str(_INGEST_DIR) not in sys.path:
+        sys.path.append(str(_INGEST_DIR))
+    import nhl_daily_log
+    sk, gl = [], []
+    day = date.fromisoformat(last_stored) + timedelta(days=1)
+    end = date.fromisoformat(through)
+    for _ in range(7):
+        if day > end:
+            break
+        s_df, g_df = nhl_daily_log.build_day(day.isoformat())
+        if not s_df.empty:
+            sk.append(s_df)
+        if not g_df.empty:
+            gl.append(g_df)
+        day += timedelta(days=1)
+    return (pd.concat(sk, ignore_index=True) if sk else pd.DataFrame(),
+            pd.concat(gl, ignore_index=True) if gl else pd.DataFrame())
+
+
+def _live_log_rows(kind: str, start: str, end: str) -> pd.DataFrame:
+    """Live-built log rows ("skater" / "goalie") dated start..end, for days
+    the stored log doesn't hold yet. Empty when the stored log is current."""
+    through = (today_pacific() - timedelta(days=1)).isoformat()
+    last = _db_last_logged()
+    if not last or last >= through:
+        return pd.DataFrame()
+    try:
+        sk, gl = _live_daily_logs(last, through)
+    except Exception:
+        return pd.DataFrame()
+    df = sk if kind == "skater" else gl
+    if df.empty or "date" not in df.columns:
+        return pd.DataFrame()
+    return df[(df["date"] >= start) & (df["date"] <= end)]
+
+
+def _with_live_rows(df: pd.DataFrame, kind: str, start: str, end: str) -> pd.DataFrame:
+    extra = _live_log_rows(kind, start, end)
+    if extra.empty:
+        return df
+    return extra.copy() if df.empty else pd.concat([df, extra], ignore_index=True)
+
+
 def load_daily_skater_log(date_str: str) -> pd.DataFrame:
-    return _read_daily_log("daily_skater_log", "date = ?", (date_str,))
+    return _with_live_rows(_read_daily_log("daily_skater_log", "date = ?", (date_str,)), "skater", date_str, date_str)
 
 
 def load_daily_goalie_log(date_str: str) -> pd.DataFrame:
-    return _read_daily_log("daily_goalie_log", "date = ?", (date_str,))
+    return _with_live_rows(_read_daily_log("daily_goalie_log", "date = ?", (date_str,)), "goalie", date_str, date_str)
 
 
 def _window_skater_log(days: int, end_date: date) -> pd.DataFrame:
     start = (end_date - timedelta(days=days - 1)).isoformat()
-    df = _read_daily_log("daily_skater_log", "date >= ? AND date <= ?", (start, end_date.isoformat()))
+    df = _with_live_rows(
+        _read_daily_log("daily_skater_log", "date >= ? AND date <= ?", (start, end_date.isoformat())),
+        "skater", start, end_date.isoformat())
     if df.empty:
         return df
     agg = df.groupby("playerId").agg(
@@ -208,7 +349,9 @@ def _window_skater_log(days: int, end_date: date) -> pd.DataFrame:
 
 def _window_goalie_log(days: int, end_date: date) -> pd.DataFrame:
     start = (end_date - timedelta(days=days - 1)).isoformat()
-    df = _read_daily_log("daily_goalie_log", "date >= ? AND date <= ?", (start, end_date.isoformat()))
+    df = _with_live_rows(
+        _read_daily_log("daily_goalie_log", "date >= ? AND date <= ?", (start, end_date.isoformat())),
+        "goalie", start, end_date.isoformat())
     if df.empty:
         return df
     agg = df.groupby("playerId").agg(
@@ -221,18 +364,20 @@ def _window_goalie_log(days: int, end_date: date) -> pd.DataFrame:
 
 
 def last_logged_day() -> date | None:
-    """Newest day the per-game log (daily_skater_log) actually holds, but
-    never later than yesterday. The Headliners used to be pinned to
-    "yesterday" itself, so whenever the nightly refresh was late or a run was
-    dropped the whole row vanished — it now ends at the newest day we have."""
-    try:
-        with sqlite3.connect(NHL_DB_PATH) as conn:
-            row = conn.execute("SELECT MAX(date) FROM daily_skater_log").fetchone()
-    except sqlite3.Error:
+    """Newest day we have per-game lines for — stored or live-built — but
+    never later than yesterday. The Headliners end here, so a late refresh
+    shows the newest day available (labelled with its date) instead of an
+    empty row."""
+    yesterday = today_pacific() - timedelta(days=1)
+    last = _db_last_logged()
+    if not last:
         return None
-    if not row or not row[0]:
-        return None
-    return min(date.fromisoformat(str(row[0])[:10]), today_pacific() - timedelta(days=1))
+    day = date.fromisoformat(last)
+    if day < yesterday:
+        live = _live_log_rows("skater", (day + timedelta(days=1)).isoformat(), yesterday.isoformat())
+        if not live.empty:
+            day = max(day, date.fromisoformat(str(live["date"].max())[:10]))
+    return min(day, yesterday)
 
 
 def _recent_end() -> date:
